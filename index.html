@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finpepe · Finanzas personales</title>
+<meta name="description" content="Ordená tus finanzas personales: ingresos, gastos, tarjetas, ahorros y presupuestos, en pesos y dólares.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='17' font-weight='700' fill='%23fff' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">F</span>
+      <span class="brand-text">
+        <span class="brand-name">Finpepe</span>
+        <span class="brand-sub">finanzas personales</span>
+      </span>
+    </div>
+    <div class="topbar-actions">
+      <button id="rate-chip" class="rate-chip" type="button" title="Cotización usada para convertir. Clic para actualizar."></button>
+      <div class="seg" role="group" aria-label="Moneda de visualización">
+        <button type="button" data-cur="ARS" class="seg-btn">$ ARS</button>
+        <button type="button" data-cur="USD" class="seg-btn">US$ USD</button>
+      </div>
+      <button id="btn-new-tx" class="btn btn-primary" type="button">+ Movimiento</button>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="Secciones">
+    <button type="button" data-view="resumen">Resumen</button>
+    <button type="button" data-view="movimientos">Movimientos</button>
+    <button type="button" data-view="tarjetas">Tarjetas y medios</button>
+    <button type="button" data-view="ahorros">Ahorros</button>
+    <button type="button" data-view="plan">Planificar</button>
+    <button type="button" data-view="ajustes">Ajustes</button>
+  </nav>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<main id="view" class="view"></main>
+
+<footer class="footer">
+  Tus datos se guardan únicamente en este navegador. Hacé copias de seguridad desde
+  <a href="#" id="footer-backup">Ajustes → Datos</a>.
+</footer>
+
+<dialog id="dialog" class="dialog"></dialog>
+
+<script src="js/store.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
