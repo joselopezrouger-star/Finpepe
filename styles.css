@@ -34,7 +34,7 @@
   --danger-ink: #8c1f30;
   --radius: 10px;
   --radius-s: 7px;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: 'Plus Jakarta Sans', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 /* Tema oscuro: mismo azul marino, ahora como superficie de fondo, con un
@@ -742,6 +742,17 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   font-weight: 700;
   letter-spacing: -0.02em;
   margin: 2px 0 14px;
+}
+/* Entero grande + centavos chicos "flotando" arriba, como un saldo de
+   billetera/homebanking — nunca tabular-nums acá, se ve suelto en tamaños
+   grandes (ver marks-and-anatomy). */
+.hero-amount-sym { font-size: 0.55em; font-weight: 600; margin-right: 5px; }
+.hero-amount-int { font-weight: 800; }
+.hero-amount-dec {
+  font-size: 0.42em;
+  font-weight: 700;
+  vertical-align: super;
+  margin-left: 2px;
 }
 .hero-split {
   display: flex;

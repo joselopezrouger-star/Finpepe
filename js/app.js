@@ -50,12 +50,25 @@
   const nfARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
   const nfUSD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtMoney = (n, cur) => (cur === 'USD' ? nfUSD : nfARS).format(n);
+  const nfHero = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const disp = () => S().settings.displayCurrency;
   const rate = () => FX.currentRate(S());
   const toDisp = (amount, cur) => FX.convert(amount, cur, disp(), rate() ? rate().value : null);
   const fmtDisp = (n) => (n == null || !isFinite(n)) ? '—' : fmtMoney(n, disp());
   const convOrNull = (amount, cur) => toDisp(amount, cur);
+
+  // Número protagonista (ej. Patrimonio neto): parte entera grande + centavos
+  // chicos en superíndice, como el saldo de una billetera/homebanking.
+  function heroMoneyHTML(n, cur) {
+    if (n == null || !isFinite(n)) return '—';
+    const symbol = cur === 'USD' ? 'US$' : '$';
+    const sign = n < 0 ? '−' : '';
+    const [intPart, decPart] = nfHero.format(Math.abs(n)).split(',');
+    return `<span class="hero-amount">
+      <span class="hero-amount-sym">${symbol}</span>${sign}<span class="hero-amount-int">${esc(intPart)}</span><sup class="hero-amount-dec">${esc(decPart)}</sup>
+    </span>`;
+  }
 
   /* Suma una lista de transacciones en la moneda de visualización.
      Las que no se pueden convertir (sin cotización) se omiten. */
@@ -598,7 +611,7 @@
     el.innerHTML = `
       <div class="hero">
         <div class="hero-label">◇ Patrimonio neto</div>
-        <div class="hero-value">${fmtDisp(neto)}</div>
+        <div class="hero-value">${heroMoneyHTML(neto, disp())}</div>
         <div class="hero-split">
           <div><div class="k">Activos (ahorros)</div><div class="v">${fmtDisp(activos)}</div></div>
           <div><div class="k">Deudas (tarjetas)</div><div class="v">${fmtDisp(deudas)}</div></div>
