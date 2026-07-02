@@ -270,9 +270,16 @@ a { color: var(--accent-down); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
 }
 .card-title .link-btn { text-transform: none; letter-spacing: 0; }
+
+/* Sin esto, un hijo con contenido que no se puede achicar (como el
+   interruptor de "Subcategorías" al lado del título) puede forzar a la
+   tarjeta a ser más ancha que la pantalla, y de ahí toda la página:
+   min-width:auto es el default en flex/grid, esto lo pisa. */
+.card, .entity { min-width: 0; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .grid-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -868,6 +875,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 }
 .subcats-toggle input { width: 32px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 
+.cat-type-grid { display: grid; gap: 16px; }
+.cat-type-grid > div { min-width: 0; }
 .cat-group-list { display: grid; gap: 6px; }
 .cat-group-row {
   display: flex;
@@ -878,6 +887,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   border-radius: var(--radius-s);
   padding: 9px 12px;
   background: var(--surface);
+  min-width: 0;
 }
 .cat-group-main { min-width: 0; }
 .cat-group-main .cell-sub {
