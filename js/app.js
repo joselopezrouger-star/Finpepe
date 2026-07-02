@@ -1794,7 +1794,7 @@
               <input type="checkbox" id="set-subcats" ${useSubcats() ? 'checked' : ''}>
             </label>
           </h2>
-          <div style="display:grid;gap:16px">
+          <div class="cat-type-grid">
             ${['gasto', 'ingreso'].map((type) => `
               <div>
                 <div class="hint" style="margin-bottom:6px">${type === 'gasto' ? 'De gastos' : 'De ingresos'}</div>
