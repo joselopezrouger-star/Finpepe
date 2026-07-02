@@ -44,39 +44,43 @@ una base de datos **Supabase**.
 - **Respaldo**: exportar/importar todos los datos en JSON y exportar
   movimientos a CSV (compatible con Excel).
 
-## Base de datos con Supabase (opcional)
+## Base de datos con Supabase
 
-La app anda perfecta sin base de datos (todo en el navegador). Si querés
-sincronizar entre el teléfono y la computadora, conectá tu proyecto de Supabase
-(el plan gratis alcanza de sobra):
+La app anda perfecta sin base de datos (todo en el navegador). Para
+sincronizar entre el teléfono y la computadora (y usar gastos compartidos),
+ya viene conectada a un proyecto de Supabase (el plan gratis alcanza de
+sobra) — no hace falta pegar nada:
 
-1. Creá un proyecto en [supabase.com](https://supabase.com).
-2. En **SQL Editor**, pegá y ejecutá el contenido de
-   [`supabase-schema.sql`](supabase-schema.sql). Crea una tabla `finance_state`
-   con **Row Level Security**: cada usuario solo ve y edita sus propios datos.
-3. Copiá la **Project URL** y la **Publishable key** (antes llamada "anon
-   key") tocando el botón verde **"Connect"** arriba a la derecha del
-   dashboard, o desde **Settings → Data API** (URL) y **Settings → API Keys**
-   (key).
-4. En la app, andá a **Ajustes → Sincronización en la nube**, pegá esos dos
-   valores y **Conectar proyecto**. Después **Crear cuenta** / **Iniciar sesión**
-   con tu email.
+1. En Supabase → **SQL Editor**, ejecutá el contenido de
+   [`supabase-schema.sql`](supabase-schema.sql). Crea las tablas con **Row
+   Level Security**: cada usuario solo ve y edita sus propios datos.
+2. En Supabase → **Authentication → Sign In / Providers → Email**, desactivá
+   **"Confirm email"**. Es necesario porque la app no pide tu email real (ver
+   abajo) y una dirección inventada nunca puede confirmar nada.
+3. En la app, cada quien toca **"Iniciar sesión / Crear cuenta"** y elige un
+   **usuario** (por ejemplo `jose` o `ana`) y una contraseña. Nada de emails.
 
-La `anon key` / `publishable key` es una clave **pública** pensada para
-usarse en el navegador: es seguro dejarla en la app publicada, porque Row
-Level Security es lo que protege los datos. Por eso el modelo funciona sobre
-GitHub Pages sin backend propio.
+Las credenciales del proyecto (`DEFAULT_URL`/`DEFAULT_KEY` en `js/cloud.js`)
+son datos **públicos** por diseño: es seguro dejarlas escritas en la app
+publicada, porque Row Level Security es lo que protege los datos. Por eso el
+modelo funciona sobre GitHub Pages sin backend propio. Si alguna vez querés
+apuntar a otro proyecto, se puede seguir pegando una URL/key distinta desde
+Ajustes cuando esas constantes estén vacías.
 
-**Sin pegar nada:** si en `js/cloud.js` se completan las constantes
-`DEFAULT_URL` y `DEFAULT_KEY` con esos dos valores, la app se conecta sola
-al abrir y el formulario de "pegar URL/key" directamente no aparece — cada
-quien solo ve la pantalla de "Ingresar / Crear cuenta". Así es como está
-pensado para el uso normal (no técnico) de la app.
+### Login con usuario, no con email
+
+Supabase Auth pide internamente algo con forma de email, así que la app arma
+uno por dentro con un dominio que no existe (`usuario@finpepe.invalid`,
+reservado justo para esto). Nadie ve ese dominio: en toda la app solo se
+muestra el usuario. La contraparte es que **no hay recuperación de
+contraseña por email** (una dirección inventada no puede recibirlo) — si
+alguien la olvida, se resetea a mano desde el dashboard de Supabase
+(**Authentication → Users**).
 
 ### Cuentas separadas y gastos compartidos
 
-Cada persona crea su **propia cuenta** (su email y contraseña) contra el mismo
-proyecto de Supabase: sus movimientos, tarjetas y ahorros quedan totalmente
+Cada persona crea su **propia cuenta** (su usuario y contraseña) contra el
+mismo proyecto de Supabase: sus movimientos, tarjetas y ahorros quedan totalmente
 privados entre sí gracias a Row Level Security — no hace falta nada especial
 para esto.
 

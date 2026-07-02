@@ -1606,6 +1606,18 @@
   }
 
   /* ================= Nube / cuenta (Supabase) ================= */
+  // Supabase Auth pide un email, pero acá se usa como un login simple de
+  // "usuario": puertas adentro se arma un email falso con un dominio que no
+  // existe (.invalid, reservado por RFC 2606 justo para esto). Nadie ve ese
+  // dominio: siempre se muestra solo la parte de usuario.
+  const AUTH_DOMAIN = 'finpepe.invalid';
+  function usernameToEmail(u) {
+    const slug = u.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+    return slug ? `${slug}@${AUTH_DOMAIN}` : '';
+  }
+  function usernameOf(email) {
+    return (email || '').split('@')[0] || 'sesión activa';
+  }
   let cloudBusy = false;
 
   function renderAccountChip() {
@@ -1617,8 +1629,7 @@
       chip.innerHTML = '<span class="dot"></span>Nube: desconectada';
     } else if (Cloud.user()) {
       chip.classList.add('synced');
-      const email = Cloud.user().email || 'sesión activa';
-      chip.innerHTML = `<span class="dot"></span>${esc(email)}`;
+      chip.innerHTML = `<span class="dot"></span>${esc(usernameOf(Cloud.user().email))}`;
     } else {
       chip.classList.add('offline');
       chip.innerHTML = '<span class="dot"></span>Iniciar sesión';
@@ -1638,7 +1649,7 @@
     }
     if (Cloud.user()) {
       return `<h2 class="card-title">Sincronización en la nube</h2>
-        <div class="auth-status"><span class="dot"></span> Conectado como <b>${esc(Cloud.user().email || '')}</b></div>
+        <div class="auth-status"><span class="dot"></span> Conectado como <b>${esc(usernameOf(Cloud.user().email))}</b></div>
         <div class="hint" style="margin-bottom:10px">Tus datos se guardan en tu proyecto de Supabase y se sincronizan en todos tus dispositivos donde inicies sesión.</div>
         <div class="inline-form">
           <button class="btn btn-sm" id="btn-cloud-pull">Traer datos de la nube</button>
@@ -1715,7 +1726,7 @@
   function authDialog() {
     const dlg = $('#dialog');
     dlg.className = 'dialog dialog-auth';
-    const draft = { mode: 'in', email: '', pass: '' };
+    const draft = { mode: 'in', user: '', pass: '' };
 
     function paint() {
       dlg.innerHTML = `
@@ -1729,7 +1740,7 @@
           <button type="button" class="auth-tab ${draft.mode === 'up' ? 'active' : ''}" data-amode="up">Crear cuenta</button>
         </div>
         <div class="auth-body">
-          <input type="email" id="au-email" autocomplete="username" placeholder="Email" value="${esc(draft.email)}">
+          <input type="text" id="au-user" autocomplete="username" placeholder="Usuario (por ej. jose)" value="${esc(draft.user)}">
           <input type="password" id="au-pass" autocomplete="${draft.mode === 'in' ? 'current-password' : 'new-password'}"
                  placeholder="Contraseña (mínimo 6 caracteres)" value="${esc(draft.pass)}">
           <div class="auth-msg" id="au-msg"></div>
@@ -1740,7 +1751,7 @@
     }
 
     function readInputs() {
-      draft.email = $('#au-email', dlg).value.trim();
+      draft.user = $('#au-user', dlg).value.trim();
       draft.pass = $('#au-pass', dlg).value;
     }
 
@@ -1751,7 +1762,7 @@
         draft.mode = b.dataset.amode;
         paint();
       }));
-      const submit = () => { readInputs(); doAuth(draft.mode, draft.email, draft.pass, dlg); };
+      const submit = () => { readInputs(); doAuth(draft.mode, draft.user, draft.pass, dlg); };
       $('#au-submit', dlg).addEventListener('click', submit);
       $('#au-pass', dlg).addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
     }
@@ -1760,10 +1771,11 @@
     dlg.showModal();
   }
 
-  async function doAuth(mode, email, password, dlg) {
+  async function doAuth(mode, username, password, dlg) {
     if (cloudBusy) return;
+    const email = usernameToEmail(username);
     if (!email || password.length < 6) {
-      $('#au-msg', dlg).textContent = 'Completá el email y una contraseña de 6 caracteres o más.';
+      $('#au-msg', dlg).textContent = 'Completá un usuario y una contraseña de 6 caracteres o más.';
       return;
     }
     cloudBusy = true;
@@ -1773,7 +1785,8 @@
       if (mode === 'up') {
         await Cloud.signUp(email, password);
         if (!Cloud.user()) {
-          msg.textContent = 'Cuenta creada. Revisá tu email para confirmar y después iniciá sesión.';
+          msg.textContent = 'No se pudo crear la sesión automáticamente. En el proyecto de Supabase, ' +
+            'desactivá "Confirm email" (Authentication → Sign In / Providers → Email) y volvé a intentar.';
           cloudBusy = false;
           return;
         }
@@ -1783,7 +1796,12 @@
       dlg.close();
       await onAuthChanged();
     } catch (e) {
-      msg.textContent = 'No se pudo: ' + (e.message || e);
+      const raw = e.message || String(e);
+      msg.textContent = /already registered|already exists/i.test(raw)
+        ? 'Ese usuario ya existe. Probá con "Ingresar" en vez de "Crear cuenta".'
+        : /invalid login/i.test(raw)
+        ? 'Usuario o contraseña incorrectos.'
+        : 'No se pudo: ' + raw;
     }
     cloudBusy = false;
   }
