@@ -30,28 +30,67 @@ una base de datos **Supabase**.
   los últimos 6 meses.
 - **Sincronización en la nube (opcional)** con Supabase: iniciás sesión y tus
   datos se guardan en tu base de datos y aparecen en todos tus dispositivos.
+- **Gastos compartidos en pareja**: creás un "hogar", invitás a tu pareja con
+  un código, y las cuentas de cada uno siguen siendo privadas. Para no cargar
+  cada gasto dos veces, en el mismo formulario de "+ Movimiento" hay un
+  tilde **"Es un gasto compartido"**: guarda tu gasto personal como siempre y
+  además avisa al hogar compartido con el reparto que elijas (50/50 por
+  defecto). La app calcula quién le debe a quién y permite registrar pagos
+  para saldar la deuda.
+- **Carga rápida de movimientos**: pantalla con calculadora integrada para el
+  importe (podés sumar/restar varios gastos antes de guardar) y categoría /
+  cuenta por lista, no por combos.
+- **Tema claro y oscuro**, con el interruptor en el encabezado.
 - **Respaldo**: exportar/importar todos los datos en JSON y exportar
   movimientos a CSV (compatible con Excel).
 
-## Base de datos con Supabase (opcional)
+## Base de datos con Supabase
 
-La app anda perfecta sin base de datos (todo en el navegador). Si querés
-sincronizar entre el teléfono y la computadora, conectá tu proyecto de Supabase
-(el plan gratis alcanza de sobra):
+La app anda perfecta sin base de datos (todo en el navegador). Para
+sincronizar entre el teléfono y la computadora (y usar gastos compartidos),
+ya viene conectada a un proyecto de Supabase (el plan gratis alcanza de
+sobra) — no hace falta pegar nada:
 
-1. Creá un proyecto en [supabase.com](https://supabase.com).
-2. En **SQL Editor**, pegá y ejecutá el contenido de
-   [`supabase-schema.sql`](supabase-schema.sql). Crea una tabla `finance_state`
-   con **Row Level Security**: cada usuario solo ve y edita sus propios datos.
-3. En **Project Settings → API**, copiá la **Project URL** y la **anon public
-   key**.
-4. En la app, andá a **Ajustes → Sincronización en la nube**, pegá esos dos
-   valores y **Conectar proyecto**. Después **Crear cuenta** / **Iniciar sesión**
-   con tu email.
+1. En Supabase → **SQL Editor**, ejecutá el contenido de
+   [`supabase-schema.sql`](supabase-schema.sql). Crea las tablas con **Row
+   Level Security**: cada usuario solo ve y edita sus propios datos.
+2. En Supabase → **Authentication → Sign In / Providers → Email**, desactivá
+   **"Confirm email"**. Es necesario porque la app no pide tu email real (ver
+   abajo) y una dirección inventada nunca puede confirmar nada.
+3. En la app, cada quien toca **"Iniciar sesión / Crear cuenta"** y elige un
+   **usuario** (por ejemplo `jose` o `ana`) y una contraseña. Nada de emails.
 
-La `anon key` es una clave **pública** pensada para usarse en el navegador: es
-seguro dejarla en la app publicada, porque Row Level Security es lo que protege
-los datos. Por eso el modelo funciona sobre GitHub Pages sin backend propio.
+Las credenciales del proyecto (`DEFAULT_URL`/`DEFAULT_KEY` en `js/cloud.js`)
+son datos **públicos** por diseño: es seguro dejarlas escritas en la app
+publicada, porque Row Level Security es lo que protege los datos. Por eso el
+modelo funciona sobre GitHub Pages sin backend propio. Si alguna vez querés
+apuntar a otro proyecto, se puede seguir pegando una URL/key distinta desde
+Ajustes cuando esas constantes estén vacías.
+
+### Login con usuario, no con email
+
+Supabase Auth pide internamente algo con forma de email, así que la app arma
+uno por dentro con un dominio que no existe (`usuario@finpepe.invalid`,
+reservado justo para esto). Nadie ve ese dominio: en toda la app solo se
+muestra el usuario. La contraparte es que **no hay recuperación de
+contraseña por email** (una dirección inventada no puede recibirlo) — si
+alguien la olvida, se resetea a mano desde el dashboard de Supabase
+(**Authentication → Users**).
+
+### Cuentas separadas y gastos compartidos
+
+Cada persona crea su **propia cuenta** (su usuario y contraseña) contra el
+mismo proyecto de Supabase: sus movimientos, tarjetas y ahorros quedan totalmente
+privados entre sí gracias a Row Level Security — no hace falta nada especial
+para esto.
+
+Para llevar los **gastos compartidos** (por ejemplo alquiler o el super, que
+pagan entre los dos), andá a la pestaña **Compartido**: uno de los dos crea un
+"hogar" y genera un código de invitación; el otro lo carga desde la misma
+pestaña para unirse. A partir de ahí, cada uno registra lo que pagó y la app
+calcula el saldo (quién le debe a quién) y permite anotar cuando se paga esa
+deuda. Esto vive en tablas separadas (`households`, `shared_expenses`, etc.) y
+no mezcla ni duplica los movimientos personales de cada cuenta.
 
 ## Publicar en GitHub Pages
 
