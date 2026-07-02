@@ -14,8 +14,8 @@ const Cloud = (() => {
   // sola y solo queda iniciar sesión. Son datos PÚBLICOS por diseño (la
   // seguridad la da Row Level Security en la base), así que es seguro
   // dejarlos escritos en este archivo publicado en GitHub Pages.
-  const DEFAULT_URL = '';
-  const DEFAULT_KEY = '';
+  const DEFAULT_URL = 'https://fwldbohbsohuzxyxpqte.supabase.co';
+  const DEFAULT_KEY = 'sb_publishable_XzLob0A3xYNNIgyXJNIwtA_hGkTbuAu';
 
   let client = null;
   let session = null;
