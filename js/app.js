@@ -174,6 +174,38 @@
     return { close, prevClose, prevPrevClose, due: dueAfter(close), prevDue: dueAfter(prevClose) };
   }
 
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  /* Línea de tiempo del ciclo: último cierre → su vencimiento → próximo
+     cierre, con los puntos y el tramo recorrido pintados. */
+  function cardCycleTimeline(card) {
+    const cy = cardCycle(card);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const daysToClose = Math.round((cy.close - today) / DAY_MS);
+    const segTotal = cy.close - cy.prevDue;
+    const segDone = Math.min(Math.max(today - cy.prevDue, 0), Math.max(segTotal, 1));
+    const pct2 = segTotal > 0 ? Math.round((segDone / segTotal) * 100) : 100;
+    const shortDate = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+    return `
+      <div class="cycle-card">
+        <div class="cycle-days">${daysToClose <= 0 ? 'Cierra hoy.' : `Faltan ${daysToClose} día${daysToClose === 1 ? '' : 's'} para el cierre.`}</div>
+        <div class="cycle-track">
+          <span class="cd-date" style="grid-column:1;grid-row:1;justify-self:start">${esc(shortDate(cy.prevClose))}</span>
+          <span class="cd-date" style="grid-column:3;grid-row:1;justify-self:center">${esc(shortDate(cy.prevDue))}</span>
+          <span class="cd-date" style="grid-column:5;grid-row:1;justify-self:end">${esc(shortDate(cy.close))}</span>
+
+          <span class="cycle-dot filled" style="grid-column:1;grid-row:2;justify-self:start"></span>
+          <span class="cycle-line" style="grid-column:2;grid-row:2;--p:100%"></span>
+          <span class="cycle-dot filled" style="grid-column:3;grid-row:2;justify-self:center"></span>
+          <span class="cycle-line" style="grid-column:4;grid-row:2;--p:${pct2}%"></span>
+          <span class="cycle-dot" style="grid-column:5;grid-row:2;justify-self:end"></span>
+
+          <span class="cd-tag" style="grid-column:1;grid-row:3;justify-self:start">Cierre</span>
+          <span class="cd-tag" style="grid-column:3;grid-row:3;justify-self:center">Vencimiento</span>
+          <span class="cd-tag" style="grid-column:5;grid-row:3;justify-self:end">Próx. cierre</span>
+        </div>
+      </div>`;
+  }
+
   /* Total de gastos de una tarjeta en el período (from, to], en moneda visible. */
   function cardPeriodTotal(cardId, from, to) {
     const a = dateToStr(from), b = dateToStr(to);
@@ -927,21 +959,21 @@
       <div class="field-row" id="m-card-days" hidden>
         <div class="field">
           <label for="m-close">Día de cierre</label>
-          <input type="number" name="closingDay" id="m-close" min="1" max="28" step="1" value="${esc(m.closingDay ?? 25)}">
+          <input type="number" name="closingDay" id="m-close" min="1" max="31" step="1" value="${esc(m.closingDay ?? 25)}">
         </div>
         <div class="field">
           <label for="m-due">Día de vencimiento</label>
-          <input type="number" name="dueDay" id="m-due" min="1" max="28" step="1" value="${esc(m.dueDay ?? 5)}">
+          <input type="number" name="dueDay" id="m-due" min="1" max="31" step="1" value="${esc(m.dueDay ?? 5)}">
         </div>
       </div>
-      <span class="hint" id="m-hint" hidden>Usá días entre 1 y 28. Si tu tarjeta cierra el 29, 30 o 31, poné 28.</span>`;
+      <span class="hint" id="m-hint" hidden>Si el vencimiento cae con un número de día menor al de cierre (por ej. cierre 25, vencimiento 5), la app entiende que es al mes siguiente. En meses más cortos, el día 29-31 se ajusta solo al último día del mes.</span>`;
 
     const dlg = openDialog(editing ? 'Editar medio de pago' : 'Nuevo medio de pago', body, {
       onSubmit(d) {
         const data = { name: d.name.trim(), kind: d.kind };
         if (d.kind === 'credito') {
-          data.closingDay = Math.min(28, Math.max(1, parseInt(d.closingDay, 10) || 25));
-          data.dueDay = Math.min(28, Math.max(1, parseInt(d.dueDay, 10) || 5));
+          data.closingDay = Math.min(31, Math.max(1, parseInt(d.closingDay, 10) || 25));
+          data.dueDay = Math.min(31, Math.max(1, parseInt(d.dueDay, 10) || 5));
         }
         if (editing) Object.assign(method, data);
         else S().methods.push({ id: Store.uid(), ...data });
@@ -1036,15 +1068,14 @@
             const cy = cardCycle(m);
             const current = cardPeriodTotal(m.id, cy.prevClose, cy.close);
             const toPay = cardPeriodTotal(m.id, cy.prevPrevClose, cy.prevClose);
-            const closeAdj = cy.close.getDate() !== m.closingDay ? ' (ajustado)' : '';
-            const dueAdj = cy.prevDue.getDate() !== m.dueDay ? ' (ajustado)' : '';
+            const closeAdj = cy.close.getDate() !== m.closingDay;
+            const dueAdj = cy.prevDue.getDate() !== m.dueDay;
             const nOv = Object.keys(m.overrides || {}).length;
-            details = `<dl>
-              <dt>Cierra el día</dt><dd>${m.closingDay} · próximo: ${esc(fmtDay(cy.close))}${closeAdj}</dd>
-              <dt>Vence el día</dt><dd>${m.dueDay} · próximo: ${esc(fmtDay(cy.prevDue))}${dueAdj}</dd>
+            details = `${cardCycleTimeline(m)}
+            <dl>
               <dt>Resumen en curso</dt><dd>${fmtDisp(current)}</dd>
               <dt>Último resumen</dt><dd>${fmtDisp(toPay)}</dd>
-              ${nOv ? `<dt>Ajustes puntuales</dt><dd>${nOv}</dd>` : ''}
+              ${nOv ? `<dt>Ajustes puntuales</dt><dd>${nOv}${(closeAdj || dueAdj) ? ' (aplicado este período)' : ''}</dd>` : ''}
             </dl>`;
           } else {
             const monthTotal = sumDisp(S().transactions.filter(
