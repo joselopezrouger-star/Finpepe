@@ -79,8 +79,9 @@ const Store = (() => {
   }
 
   let state = load();
+  const saveHooks = [];
 
-  function save() {
+  function persist() {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) {
@@ -88,9 +89,27 @@ const Store = (() => {
     }
   }
 
+  // Guardado del usuario: persiste en localStorage y notifica a los hooks
+  // (por ejemplo, la sincronización con la nube).
+  function save() {
+    state._updatedAt = Date.now();
+    persist();
+    for (const h of saveHooks) {
+      try { h(state); } catch (e) { console.error(e); }
+    }
+  }
+
+  function onSave(cb) { saveHooks.push(cb); }
+
   function replace(next) {
     state = migrate(next);
     save();
+  }
+
+  // Aplica un estado traído de la nube sin volver a disparar una subida.
+  function applyRemote(next) {
+    state = migrate(next);
+    persist();
   }
 
   function reset() {
@@ -104,6 +123,6 @@ const Store = (() => {
 
   return {
     get state() { return state; },
-    uid, save, replace, reset, exportJSON, defaults,
+    uid, save, onSave, replace, applyRemote, reset, exportJSON, defaults,
   };
 })();

@@ -20,6 +20,7 @@
       </span>
     </div>
     <div class="topbar-actions">
+      <button id="account-chip" class="rate-chip" type="button" title="Cuenta y sincronización"></button>
       <button id="rate-chip" class="rate-chip" type="button" title="Cotización usada para convertir. Clic para actualizar."></button>
       <div class="seg" role="group" aria-label="Moneda de visualización">
         <button type="button" data-cur="ARS" class="seg-btn">$ ARS</button>
@@ -31,6 +32,7 @@
   <nav class="tabs" aria-label="Secciones">
     <button type="button" data-view="resumen">Resumen</button>
     <button type="button" data-view="movimientos">Movimientos</button>
+    <button type="button" data-view="calendario">Calendario</button>
     <button type="button" data-view="tarjetas">Tarjetas y medios</button>
     <button type="button" data-view="ahorros">Ahorros</button>
     <button type="button" data-view="plan">Planificar</button>
@@ -49,8 +51,10 @@
 
 <dialog id="dialog" class="dialog"></dialog>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/store.js"></script>
 <script src="js/fx.js"></script>
+<script src="js/cloud.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/app.js"></script>
 </body>

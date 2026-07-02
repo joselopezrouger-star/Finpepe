@@ -4,7 +4,7 @@
    Especificación: marcas finas, extremos redondeados (4px) contra datos y rectos
    contra la línea de base, grilla hairline, tooltip en hover y foco. */
 const Charts = (() => {
-  const COLORS = { income: '#2a78d6', expense: '#e34948' };
+  const COLORS = { income: '#0a8f3c', expense: '#d03b3b', category: '#b5760a' };
 
   /* ---------- Tooltip único ---------- */
   let tipEl = null;

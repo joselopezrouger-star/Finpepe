@@ -80,6 +80,8 @@
     fType: '', fCat: '', fMethod: '',
     trendTable: false,
     openSavings: {},          // id -> bool (historial expandido)
+    calMonth: curMonth(),     // mes del calendario
+    calSel: null,             // 'YYYY-MM-DD' día seleccionado en el calendario
   };
 
   /* ================= Ciclo de tarjetas de crédito ================= */
@@ -405,7 +407,21 @@
       };
     }).sort((a, b) => a.cy.due - b.cy.due);
 
+    // Patrimonio neto = activos (ahorros) − deudas (resúmenes de tarjeta a pagar)
+    const activos = savTotal;
+    const deudas = cardRows.reduce((a, r) => a + r.current + r.toPay, 0);
+    const neto = activos - deudas;
+
     el.innerHTML = `
+      <div class="hero">
+        <div class="hero-label">◇ Patrimonio neto</div>
+        <div class="hero-value">${fmtDisp(neto)}</div>
+        <div class="hero-split">
+          <div><div class="k">Activos (ahorros)</div><div class="v">${fmtDisp(activos)}</div></div>
+          <div><div class="k">Deudas (tarjetas)</div><div class="v">${fmtDisp(deudas)}</div></div>
+        </div>
+      </div>
+
       <div class="toolbar">
         <div class="month-nav">
           <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
@@ -480,7 +496,7 @@
     // Gráficos
     if (catItems.length) {
       Charts.hBars($('#chart-cats', el), catItems, {
-        fmt: fmtDisp, color: Charts.COLORS.expense,
+        fmt: fmtDisp, color: Charts.COLORS.category,
       });
     }
     const trendEl = $('#chart-trend', el);
@@ -715,6 +731,173 @@
       Store.save();
       render();
     }));
+  }
+
+  /* ================= Vista: Calendario ================= */
+  // Eventos (pagos e ingresos previstos) de un mes: fijos + vencimientos de tarjeta.
+  function eventsForMonth(mk) {
+    const [y, mo] = mk.split('-').map(Number);
+    const events = [];
+
+    for (const r of S().recurring) {
+      const d = clampDate(y, mo - 1, r.day);
+      events.push({
+        date: dateToStr(d), kind: r.type, // 'gasto' | 'ingreso'
+        icon: r.type === 'ingreso' ? '💰' : '🔁',
+        title: r.name, sub: (r.type === 'ingreso' ? 'Ingreso fijo' : 'Gasto fijo') + ' · día ' + r.day,
+        amount: r.amount, currency: r.currency,
+      });
+    }
+
+    for (const c of S().methods.filter((m) => m.kind === 'credito')) {
+      const due = clampDate(y, mo - 1, c.dueDay);
+      // Resumen que vence en esa fecha: el que cerró justo antes del vencimiento.
+      let close = clampDate(due.getFullYear(), due.getMonth(), c.closingDay);
+      if (close >= due) close = clampDate(due.getFullYear(), due.getMonth() - 1, c.closingDay);
+      const prevClose = clampDate(close.getFullYear(), close.getMonth() - 1, c.closingDay);
+      const amount = cardPeriodTotal(c.id, prevClose, close); // ya en moneda visible
+      events.push({
+        date: dateToStr(due), kind: 'card', icon: '💳',
+        title: c.name, sub: 'Vencimiento tarjeta · día ' + c.dueDay,
+        amountDisp: amount,
+      });
+    }
+    return events;
+  }
+
+  function eventAmountDisp(ev) {
+    return ev.kind === 'card' ? ev.amountDisp : convOrNull(ev.amount, ev.currency);
+  }
+
+  function vCalendario(el) {
+    const mk = ui.calMonth;
+    const [y, mo] = mk.split('-').map(Number);
+    const events = eventsForMonth(mk);
+    const byDay = new Map();
+    for (const ev of events) {
+      if (!byDay.has(ev.date)) byDay.set(ev.date, []);
+      byDay.get(ev.date).push(ev);
+    }
+
+    // Total del mes a pagar (gastos fijos + tarjetas) en moneda visible
+    let mesPagos = 0;
+    for (const ev of events) {
+      if (ev.kind === 'ingreso') continue;
+      const v = eventAmountDisp(ev);
+      if (v != null) mesPagos += v;
+    }
+
+    // Grilla: semanas empiezan el lunes
+    const first = new Date(y, mo - 1, 1);
+    const daysInMonth = new Date(y, mo, 0).getDate();
+    const lead = (first.getDay() + 6) % 7; // lunes=0
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const dow = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    const today = todayStr();
+
+    const cellHTML = (d) => {
+      if (d == null) return '<div class="cal-cell pad"></div>';
+      const ds = `${y}-${pad(mo)}-${pad(d)}`;
+      const evs = byDay.get(ds) || [];
+      const kinds = [...new Set(evs.map((e) => e.kind))].slice(0, 3);
+      const dots = kinds.map((k) => `<i class="dot-${k}"></i>`).join('');
+      const cls = ['cal-cell'];
+      if (evs.length) cls.push('has');
+      if (ds === today) cls.push('today');
+      if (ds === ui.calSel) cls.push('sel');
+      return `<div class="${cls.join(' ')}" ${evs.length ? `data-day="${ds}"` : ''}>
+        <span class="cal-num">${d}</span>
+        <span class="cal-dots">${dots}</span>
+      </div>`;
+    };
+
+    // Agenda: día seleccionado, o todos los eventos del mes ordenados
+    const agendaEvents = (ui.calSel && byDay.has(ui.calSel))
+      ? byDay.get(ui.calSel).map((e) => ({ ...e }))
+      : events.slice();
+    agendaEvents.sort((a, b) => a.date.localeCompare(b.date));
+
+    let agendaHTML = '';
+    let lastDay = '';
+    if (!agendaEvents.length) {
+      agendaHTML = '<div class="empty">No hay pagos ni ingresos previstos este mes. Cargá tus gastos fijos y tarjetas en “Planificar” y “Tarjetas”.</div>';
+    } else {
+      for (const ev of agendaEvents) {
+        if (ev.date !== lastDay) {
+          lastDay = ev.date;
+          const dd = parseDate(ev.date);
+          agendaHTML += `<div class="agenda-day">${esc(new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(dd))}</div>`;
+        }
+        const v = eventAmountDisp(ev);
+        const amountTxt = ev.kind === 'card'
+          ? fmtDisp(v)
+          : (ev.kind === 'ingreso' ? '+ ' : '− ') + fmtMoney(ev.amount, ev.currency);
+        const amountCls = ev.kind === 'ingreso' ? 'amount-in' : '';
+        agendaHTML += `<div class="agenda-item">
+          <div class="agenda-icon">${ev.icon}</div>
+          <div class="agenda-body">
+            <div class="agenda-name">${esc(ev.title)}</div>
+            <div class="agenda-sub">${esc(ev.sub)}</div>
+          </div>
+          <div class="agenda-amount ${amountCls}">${amountTxt}</div>
+        </div>`;
+      }
+    }
+
+    el.innerHTML = `
+      <div class="grid-2">
+        <div class="card tile">
+          <div class="tile-label">Pagos previstos · ${esc(monthLabel(mk))}</div>
+          <div class="tile-value">${fmtDisp(mesPagos)}</div>
+          <div class="tile-delta">Gastos fijos y vencimientos de tarjeta</div>
+        </div>
+        <div class="card tile">
+          <div class="tile-label">Eventos este mes</div>
+          <div class="tile-value">${events.length}</div>
+          <div class="tile-delta">Anticipate: nunca se te pasa un pago</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cal-head">
+          <button class="icon-btn" data-cnav="-1" aria-label="Mes anterior">‹</button>
+          <span class="month-label">${esc(monthLabel(mk))}</span>
+          <button class="icon-btn" data-cnav="1" aria-label="Mes siguiente">›</button>
+        </div>
+        <div class="cal-grid">
+          ${dow.map((d) => `<div class="cal-dow">${d}</div>`).join('')}
+          ${cells.map(cellHTML).join('')}
+        </div>
+        <div class="chart-legend" style="margin-top:12px">
+          <span><span class="key" style="background:var(--expense-series)"></span>Gasto fijo</span>
+          <span><span class="key" style="background:var(--income-series)"></span>Ingreso fijo</span>
+          <span><span class="key" style="background:var(--accent)"></span>Tarjeta</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">
+          <span>${ui.calSel ? 'Día seleccionado' : 'Agenda del mes'}</span>
+          ${ui.calSel ? '<button class="link-btn" data-calall>ver todo el mes</button>' : ''}
+        </h2>
+        <div class="agenda">${agendaHTML}</div>
+      </div>`;
+
+    $$('[data-cnav]', el).forEach((b) => b.addEventListener('click', () => {
+      ui.calMonth = addMonthsKey(ui.calMonth, Number(b.dataset.cnav));
+      ui.calSel = null;
+      render();
+    }));
+    $$('[data-day]', el).forEach((c) => c.addEventListener('click', () => {
+      ui.calSel = (ui.calSel === c.dataset.day) ? null : c.dataset.day;
+      render();
+    }));
+    const calAll = $('[data-calall]', el);
+    if (calAll) calAll.addEventListener('click', () => { ui.calSel = null; render(); });
   }
 
   /* ================= Vista: Ahorros ================= */
@@ -1107,6 +1290,8 @@
 
     el.innerHTML = `
       <div class="settings-grid">
+        <div class="card" id="account-card">${accountCardHTML()}</div>
+
         <div class="card">
           <h2 class="card-title">Cotización del dólar</h2>
           <div class="inline-form" style="margin-bottom:10px">
@@ -1170,6 +1355,7 @@
         </div>
       </div>`;
 
+    wireAccountCard(el);
     $('#set-fx', el).addEventListener('change', (e) => {
       S().settings.fxSource = e.target.value;
       Store.save();
@@ -1236,10 +1422,202 @@
     });
   }
 
+  /* ================= Nube / cuenta (Supabase) ================= */
+  let cloudBusy = false;
+
+  function renderAccountChip() {
+    const chip = $('#account-chip');
+    if (!chip) return;
+    chip.classList.add('account-chip');
+    chip.classList.remove('synced', 'offline');
+    if (!Cloud.isConfigured()) {
+      chip.innerHTML = '<span class="dot"></span>Nube: desconectada';
+    } else if (Cloud.user()) {
+      chip.classList.add('synced');
+      const email = Cloud.user().email || 'sesión activa';
+      chip.innerHTML = `<span class="dot"></span>${esc(email)}`;
+    } else {
+      chip.classList.add('offline');
+      chip.innerHTML = '<span class="dot"></span>Iniciar sesión';
+    }
+  }
+
+  function onAccountChip() {
+    if (Cloud.isConfigured() && !Cloud.user()) authDialog();
+    else { ui.view = 'ajustes'; render(); }
+  }
+
+  function accountCardHTML() {
+    const c = Cloud.config();
+    if (!Cloud.available()) {
+      return `<h2 class="card-title">Sincronización en la nube</h2>
+        <div class="empty">No se pudo cargar el cliente de Supabase (¿estás sin conexión?). La app sigue funcionando y guardando en este navegador.</div>`;
+    }
+    if (Cloud.user()) {
+      return `<h2 class="card-title">Sincronización en la nube</h2>
+        <div class="auth-status"><span class="dot"></span> Conectado como <b>${esc(Cloud.user().email || '')}</b></div>
+        <div class="hint" style="margin-bottom:10px">Tus datos se guardan en tu proyecto de Supabase y se sincronizan en todos tus dispositivos donde inicies sesión.</div>
+        <div class="inline-form">
+          <button class="btn btn-sm" id="btn-cloud-pull">Traer datos de la nube</button>
+          <button class="btn btn-sm btn-danger" id="btn-cloud-signout">Cerrar sesión</button>
+        </div>`;
+    }
+    if (Cloud.isConfigured()) {
+      return `<h2 class="card-title">Sincronización en la nube</h2>
+        <div class="hint" style="margin-bottom:10px">Proyecto configurado. Iniciá sesión para sincronizar tus datos entre dispositivos.</div>
+        <div class="inline-form">
+          <button class="btn btn-primary btn-sm" id="btn-cloud-login">Iniciar sesión / crear cuenta</button>
+          <button class="btn btn-sm" id="btn-cloud-config">Cambiar proyecto</button>
+        </div>`;
+    }
+    return `<h2 class="card-title">Sincronización en la nube (opcional)</h2>
+      <div class="hint" style="margin-bottom:10px">
+        Por defecto los datos viven solo en este navegador. Si querés que se
+        guarden en una base de datos y se sincronicen entre tu teléfono y la
+        computadora, conectá tu proyecto de <b>Supabase</b> (gratis).
+      </div>
+      <ol class="hint" style="margin:0 0 12px 18px;line-height:1.7">
+        <li>En Supabase → <b>SQL Editor</b>, ejecutá el script <code>supabase-schema.sql</code> del repo.</li>
+        <li>En <b>Project Settings → API</b>, copiá la <b>Project URL</b> y la <b>anon public key</b>.</li>
+        <li>Pegalas acá abajo. (Son claves públicas: es seguro usarlas en el navegador.)</li>
+      </ol>
+      <div class="field" style="margin-bottom:8px">
+        <label for="sb-url">Project URL</label>
+        <input type="text" id="sb-url" placeholder="https://xxxx.supabase.co" value="${esc(c.url || '')}">
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label for="sb-key">anon public key</label>
+        <input type="text" id="sb-key" placeholder="eyJhbGciOi…" value="${esc(c.anonKey || '')}">
+      </div>
+      <button class="btn btn-primary btn-sm" id="btn-cloud-save">Conectar proyecto</button>`;
+  }
+
+  function refreshAccountCard() {
+    const card = $('#account-card');
+    if (card) { card.innerHTML = accountCardHTML(); wireAccountCard(document); }
+    renderAccountChip();
+  }
+
+  function wireAccountCard(root) {
+    const save = $('#btn-cloud-save', root);
+    if (save) save.addEventListener('click', () => {
+      const url = $('#sb-url', root).value.trim();
+      const key = $('#sb-key', root).value.trim();
+      if (!/^https:\/\/.+\.supabase\.co/.test(url)) { alert('La Project URL debería verse como https://xxxx.supabase.co'); return; }
+      if (key.length < 20) { alert('La anon key parece incompleta.'); return; }
+      Cloud.saveConfig(url, key);
+      Cloud.init(onAuthChanged).then(() => { refreshAccountCard(); authDialog(); });
+    });
+    const config = $('#btn-cloud-config', root);
+    if (config) config.addEventListener('click', () => { Cloud.clearConfig(); refreshAccountCard(); });
+    const login = $('#btn-cloud-login', root);
+    if (login) login.addEventListener('click', authDialog);
+    const out = $('#btn-cloud-signout', root);
+    if (out) out.addEventListener('click', async () => {
+      await Cloud.signOut();
+      onAuthChanged();
+    });
+    const pull = $('#btn-cloud-pull', root);
+    if (pull) pull.addEventListener('click', async () => {
+      try {
+        const remote = await Cloud.pull();
+        if (remote && remote.data && Array.isArray(remote.data.transactions)) {
+          Store.applyRemote(remote.data);
+          render();
+        } else alert('Todavía no hay datos en la nube.');
+      } catch (e) { alert('No se pudo traer: ' + e.message); }
+    });
+  }
+
+  function authDialog() {
+    const body = `
+      <div class="field">
+        <label for="au-email">Email</label>
+        <input type="email" name="email" id="au-email" required autocomplete="username" placeholder="vos@email.com">
+      </div>
+      <div class="field">
+        <label for="au-pass">Contraseña</label>
+        <input type="password" name="password" id="au-pass" required minlength="6" autocomplete="current-password" placeholder="mínimo 6 caracteres">
+      </div>
+      <div class="hint" id="au-msg"></div>`;
+    const dlg = openDialog('Sincronizar con la nube', body, {
+      submitLabel: 'Ingresar',
+      footExtra: '<button type="button" class="btn" id="au-signup" style="margin-right:auto">Crear cuenta</button>',
+      onSubmit(d) { doAuth('in', d.email, d.password, dlg); return false; },
+    });
+    $('#au-signup', dlg).addEventListener('click', () => {
+      const email = $('#au-email', dlg).value.trim();
+      const pass = $('#au-pass', dlg).value;
+      if (!email || pass.length < 6) { $('#au-msg', dlg).textContent = 'Completá email y una contraseña de 6+ caracteres.'; return; }
+      doAuth('up', email, pass, dlg);
+    });
+  }
+
+  async function doAuth(mode, email, password, dlg) {
+    if (cloudBusy) return;
+    cloudBusy = true;
+    const msg = $('#au-msg', dlg);
+    msg.textContent = mode === 'up' ? 'Creando cuenta…' : 'Ingresando…';
+    try {
+      if (mode === 'up') {
+        await Cloud.signUp(email, password);
+        if (!Cloud.user()) {
+          msg.textContent = 'Cuenta creada. Revisá tu email para confirmar y después iniciá sesión.';
+          cloudBusy = false;
+          return;
+        }
+      } else {
+        await Cloud.signIn(email, password);
+      }
+      dlg.close();
+      await onAuthChanged();
+    } catch (e) {
+      msg.textContent = 'No se pudo: ' + (e.message || e);
+    }
+    cloudBusy = false;
+  }
+
+  // Al cambiar el estado de sesión: traer datos remotos o subir los locales.
+  async function onAuthChanged() {
+    renderAccountChip();
+    if (Cloud.user()) {
+      try {
+        const remote = await Cloud.pull();
+        if (remote && remote.data && Array.isArray(remote.data.transactions)) {
+          const localTs = S()._updatedAt || 0;
+          const remoteTs = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+          // La nube manda salvo que lo local sea más nuevo y la nube esté vacía de cambios.
+          if (remoteTs >= localTs || !S().transactions.length) {
+            Store.applyRemote(remote.data);
+          } else {
+            await Cloud.push(S());
+          }
+        } else {
+          await Cloud.push(S()); // primera vez: sembrar la nube con lo local
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    render();
+  }
+
+  async function initCloud() {
+    if (!Cloud.available() || !Cloud.isConfigured()) { renderAccountChip(); return; }
+    try {
+      await Cloud.init(onAuthChanged);
+      await onAuthChanged();
+    } catch (e) {
+      console.error('Init nube', e);
+      renderAccountChip();
+    }
+  }
+
   /* ================= Router / render ================= */
   const VIEWS = {
     resumen: vResumen,
     movimientos: vMovimientos,
+    calendario: vCalendario,
     tarjetas: vTarjetas,
     ahorros: vAhorros,
     plan: vPlan,
@@ -1251,6 +1629,7 @@
     $$('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === ui.view));
     $$('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.cur === disp()));
     renderRateChip();
+    renderAccountChip();
     renderBanner();
     const el = $('#view');
     VIEWS[ui.view](el);
@@ -1270,13 +1649,18 @@
     }));
     $('#btn-new-tx').addEventListener('click', () => txForm(null));
     $('#rate-chip').addEventListener('click', refreshRates);
+    $('#account-chip').addEventListener('click', onAccountChip);
     $('#footer-backup').addEventListener('click', (e) => {
       e.preventDefault();
       ui.view = 'ajustes';
       render();
     });
 
+    // Cada guardado local se sube a la nube (si hay sesión activa).
+    Store.onSave((state) => Cloud.schedulePush(state));
+
     render();
+    initCloud();
 
     // Actualiza cotización si nunca se trajo o si tiene más de 6 horas
     const s = S().settings;
