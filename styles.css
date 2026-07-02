@@ -156,37 +156,80 @@ a { color: var(--accent-down); }
 .seg-btn + .seg-btn { border-left: 1px solid var(--border); }
 .seg-btn.active { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 
-/* ---------- Pestañas ---------- */
-.tabs {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 0 20px;
+/* ---------- Navegación inferior ---------- */
+.bottom-nav {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 40;
+  width: min(420px, calc(100vw - 20px));
   display: flex;
+  align-items: stretch;
+  justify-content: space-between;
   gap: 2px;
-  overflow-x: auto;
+  padding: 6px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
 }
-.tabs button {
+.bottom-nav button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   border: 0;
   background: transparent;
-  font: 13px var(--font);
-  color: var(--ink-2);
-  padding: 9px 12px 10px;
+  border-radius: 999px;
+  padding: 8px 4px 7px;
+  color: var(--muted);
   cursor: pointer;
-  border-bottom: 2px solid transparent;
+}
+.bottom-nav button .bn-icon { font-size: 19px; line-height: 1; }
+.bottom-nav button .bn-label { font-size: 10px; font-weight: 650; letter-spacing: 0.01em; }
+.bottom-nav button.active { color: var(--accent); background: var(--accent-wash); }
+
+/* ---------- Sub-pestañas (dentro de cada sección) ---------- */
+.subtabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.subtabs button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-2);
+  font: 12.5px var(--font);
+  font-weight: 650;
+  padding: 7px 15px;
+  border-radius: 999px;
+  cursor: pointer;
   white-space: nowrap;
 }
-.tabs button:hover { color: var(--ink); }
-.tabs button.active {
-  color: var(--ink);
-  font-weight: 600;
-  border-bottom-color: var(--accent);
+.subtabs button:hover { border-color: var(--border-strong); color: var(--ink); }
+.subtabs button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
 }
 
 /* ---------- Estructura ---------- */
 .view {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 20px 20px 104px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.view-content {
   display: grid;
   gap: 16px;
 }
@@ -204,7 +247,7 @@ a { color: var(--accent-down); }
 
 .footer {
   max-width: 1080px;
-  margin: 8px auto 32px;
+  margin: 8px auto 96px;
   padding: 0 20px;
   color: var(--muted);
   font-size: 12px;
@@ -317,7 +360,7 @@ a { color: var(--accent-down); }
 }
 
 /* ---------- Formularios ---------- */
-select, input[type="text"], input[type="number"], input[type="date"] {
+select, input[type="text"], input[type="number"], input[type="date"], input[type="month"] {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-s);
   background: var(--surface);
@@ -627,6 +670,16 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   font-size: 15px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
 }
 .row-del:hover { color: var(--crit); background: var(--danger-bg); }
+
+.ov-list { display: grid; gap: 4px; }
+.ov-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border-radius: var(--radius-s);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
 
 /* ---------- Gráficos ---------- */
 .chart-legend {

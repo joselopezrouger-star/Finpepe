@@ -44,16 +44,6 @@
       <button id="btn-new-tx" class="btn btn-primary" type="button">+ Movimiento</button>
     </div>
   </div>
-  <nav class="tabs" aria-label="Secciones">
-    <button type="button" data-view="resumen">Resumen</button>
-    <button type="button" data-view="movimientos">Movimientos</button>
-    <button type="button" data-view="calendario">Calendario</button>
-    <button type="button" data-view="compartido">Compartido</button>
-    <button type="button" data-view="tarjetas">Tarjetas y medios</button>
-    <button type="button" data-view="ahorros">Ahorros</button>
-    <button type="button" data-view="plan">Planificar</button>
-    <button type="button" data-view="ajustes">Ajustes</button>
-  </nav>
 </header>
 
 <div id="banner" class="banner" hidden></div>
@@ -64,6 +54,13 @@
   Tus datos se guardan únicamente en este navegador. Hacé copias de seguridad desde
   <a href="#" id="footer-backup">Ajustes → Datos</a>.
 </footer>
+
+<nav class="bottom-nav" aria-label="Secciones">
+  <button type="button" data-group="inicio"><span class="bn-icon" aria-hidden="true">⌂</span><span class="bn-label">Inicio</span></button>
+  <button type="button" data-group="movimientos"><span class="bn-icon" aria-hidden="true">⇅</span><span class="bn-label">Movimientos</span></button>
+  <button type="button" data-group="cuentas"><span class="bn-icon" aria-hidden="true">▤</span><span class="bn-label">Cuentas</span></button>
+  <button type="button" data-group="mas"><span class="bn-icon" aria-hidden="true">⋯</span><span class="bn-label">Más</span></button>
+</nav>
 
 <dialog id="dialog" class="dialog"></dialog>
 

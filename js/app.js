@@ -144,15 +144,31 @@
   };
 
   /* ================= Ciclo de tarjetas de crédito ================= */
+  /* El día de cierre/vencimiento de una tarjeta puede variar puntualmente en
+     algún período (el banco lo corre). card.overrides guarda, por mes de
+     cierre ('YYYY-MM'), el día que pisa al general de la tarjeta ese mes. */
+  function periodKey(y, m0) {
+    const d = new Date(y, m0, 1);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  }
+  function cardDayFor(card, kind, y, m0) {
+    const key = periodKey(y, m0);
+    const ov = card.overrides && card.overrides[key];
+    return (ov && ov[kind] != null) ? ov[kind] : card[kind];
+  }
+  function cardDate(card, kind, y, m0) {
+    const d = new Date(y, m0, 1);
+    return clampDate(d.getFullYear(), d.getMonth(), cardDayFor(card, kind, y, m0));
+  }
   function cardCycle(card) {
     const now = new Date(); now.setHours(0, 0, 0, 0);
-    let close = clampDate(now.getFullYear(), now.getMonth(), card.closingDay);
-    if (close < now) close = clampDate(now.getFullYear(), now.getMonth() + 1, card.closingDay);
-    const prevClose = clampDate(close.getFullYear(), close.getMonth() - 1, card.closingDay);
-    const prevPrevClose = clampDate(prevClose.getFullYear(), prevClose.getMonth() - 1, card.closingDay);
+    let close = cardDate(card, 'closingDay', now.getFullYear(), now.getMonth());
+    if (close < now) close = cardDate(card, 'closingDay', now.getFullYear(), now.getMonth() + 1);
+    const prevClose = cardDate(card, 'closingDay', close.getFullYear(), close.getMonth() - 1);
+    const prevPrevClose = cardDate(card, 'closingDay', prevClose.getFullYear(), prevClose.getMonth() - 1);
     const dueAfter = (c) => {
-      let d = clampDate(c.getFullYear(), c.getMonth(), card.dueDay);
-      if (d <= c) d = clampDate(c.getFullYear(), c.getMonth() + 1, card.dueDay);
+      let d = cardDate(card, 'dueDay', c.getFullYear(), c.getMonth());
+      if (d <= c) d = cardDate(card, 'dueDay', c.getFullYear(), c.getMonth() + 1);
       return d;
     };
     return { close, prevClose, prevPrevClose, due: dueAfter(close), prevDue: dueAfter(prevClose) };
@@ -423,6 +439,7 @@
         <div class="tx-row" data-openrow="date">
           <span class="tx-row-label">Fecha</span>
           <span class="tx-row-value">${esc(fmtDateFull(draft.date))}</span>
+          <span class="tx-row-chev" aria-hidden="true">›</span>
         </div>
         <input type="date" id="tx-date-input" class="tx-visually-hidden" value="${esc(draft.date)}">
 
@@ -502,6 +519,7 @@
         const input = $('#tx-date-input', dlg);
         if (input.showPicker) { try { input.showPicker(); return; } catch (e) {} }
         input.focus();
+        input.click();
       });
       $('#tx-date-input', dlg).addEventListener('change', (e) => { draft.date = e.target.value; paint(); });
       $$('.cur-pill', dlg).forEach((b) => b.addEventListener('click', () => { draft.currency = b.dataset.cur; paint(); }));
@@ -940,6 +958,69 @@
     toggle();
   }
 
+  /* Ajuste puntual de cierre/vencimiento para un período (mes) puntual,
+     para cuando el banco corre la fecha ese mes en particular. */
+  function cardOverrideForm(card) {
+    const cy = cardCycle(card);
+    const defaultKey = periodKey(cy.close.getFullYear(), cy.close.getMonth());
+    const overrides = card.overrides || {};
+    const rows = Object.keys(overrides).sort().map((key) => {
+      const ov = overrides[key];
+      const [y, m] = key.split('-').map(Number);
+      const label = monthLabel(key);
+      const parts = [];
+      if (ov.closingDay != null) parts.push(`cierre día ${ov.closingDay}`);
+      if (ov.dueDay != null) parts.push(`vencimiento día ${ov.dueDay}`);
+      return `<div class="ov-row" data-ovrow="${esc(key)}">
+        <span>${esc(label)}: ${esc(parts.join(' · ') || 'sin cambios')}</span>
+        <button type="button" class="row-del" data-ovdel="${esc(key)}" aria-label="Quitar ajuste">✕</button>
+      </div>`;
+    }).join('');
+
+    const body = `
+      <div class="field">
+        <label for="ov-period">Período a ajustar (mes de cierre)</label>
+        <input type="month" name="period" id="ov-period" value="${esc(defaultKey)}" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="ov-close">Día de cierre ese mes</label>
+          <input type="number" name="closingDay" id="ov-close" min="1" max="31" step="1" placeholder="usual: ${esc(card.closingDay)}">
+        </div>
+        <div class="field">
+          <label for="ov-due">Día de vencimiento ese mes</label>
+          <input type="number" name="dueDay" id="ov-due" min="1" max="31" step="1" placeholder="usual: ${esc(card.dueDay)}">
+        </div>
+      </div>
+      <span class="hint">Dejá vacío el campo que ese mes no cambia. Sirve para cuando el banco corre la fecha puntualmente.</span>
+      ${rows ? `<div class="ov-list"><span class="hint">Ajustes ya cargados:</span>${rows}</div>` : ''}`;
+
+    const dlg = openDialog(`Ajustar fechas de ${card.name}`, body, {
+      submitLabel: 'Guardar ajuste',
+      onSubmit(d) {
+        const key = d.period;
+        if (!key) return false;
+        const close = d.closingDay.trim() === '' ? null : Math.min(31, Math.max(1, parseInt(d.closingDay, 10)));
+        const due = d.dueDay.trim() === '' ? null : Math.min(31, Math.max(1, parseInt(d.dueDay, 10)));
+        if (close == null && due == null) return false;
+        card.overrides = card.overrides || {};
+        card.overrides[key] = {
+          ...(close != null ? { closingDay: close } : {}),
+          ...(due != null ? { dueDay: due } : {}),
+        };
+        Store.save();
+        render();
+      },
+    });
+    $$('[data-ovdel]', dlg).forEach((b) => b.addEventListener('click', () => {
+      delete card.overrides[b.dataset.ovdel];
+      Store.save();
+      dlg.close();
+      render();
+      cardOverrideForm(card);
+    }));
+  }
+
   function vTarjetas(el) {
     const methods = S().methods;
     el.innerHTML = `
@@ -955,11 +1036,15 @@
             const cy = cardCycle(m);
             const current = cardPeriodTotal(m.id, cy.prevClose, cy.close);
             const toPay = cardPeriodTotal(m.id, cy.prevPrevClose, cy.prevClose);
+            const closeAdj = cy.close.getDate() !== m.closingDay ? ' (ajustado)' : '';
+            const dueAdj = cy.prevDue.getDate() !== m.dueDay ? ' (ajustado)' : '';
+            const nOv = Object.keys(m.overrides || {}).length;
             details = `<dl>
-              <dt>Cierra el día</dt><dd>${m.closingDay} · próximo: ${esc(fmtDay(cy.close))}</dd>
-              <dt>Vence el día</dt><dd>${m.dueDay} · próximo: ${esc(fmtDay(cy.prevDue))}</dd>
+              <dt>Cierra el día</dt><dd>${m.closingDay} · próximo: ${esc(fmtDay(cy.close))}${closeAdj}</dd>
+              <dt>Vence el día</dt><dd>${m.dueDay} · próximo: ${esc(fmtDay(cy.prevDue))}${dueAdj}</dd>
               <dt>Resumen en curso</dt><dd>${fmtDisp(current)}</dd>
               <dt>Último resumen</dt><dd>${fmtDisp(toPay)}</dd>
+              ${nOv ? `<dt>Ajustes puntuales</dt><dd>${nOv}</dd>` : ''}
             </dl>`;
           } else {
             const monthTotal = sumDisp(S().transactions.filter(
@@ -973,6 +1058,7 @@
             </div>
             ${details}
             <div class="entity-actions">
+              ${m.kind === 'credito' ? `<button class="btn btn-sm" data-adjust="${esc(m.id)}">Ajustar fechas</button>` : ''}
               <button class="btn btn-sm" data-edit="${esc(m.id)}">Editar</button>
               <button class="btn btn-sm btn-danger" data-del="${esc(m.id)}">Eliminar</button>
             </div>
@@ -985,6 +1071,9 @@
     $('#btn-add-method', el).addEventListener('click', () => methodForm(null));
     $$('[data-edit]', el).forEach((b) => b.addEventListener('click', () => {
       methodForm(methodById(b.dataset.edit));
+    }));
+    $$('[data-adjust]', el).forEach((b) => b.addEventListener('click', () => {
+      cardOverrideForm(methodById(b.dataset.adjust));
     }));
     $$('[data-del]', el).forEach((b) => b.addEventListener('click', () => {
       const id = b.dataset.del;
@@ -1018,15 +1107,15 @@
     }
 
     for (const c of S().methods.filter((m) => m.kind === 'credito')) {
-      const due = clampDate(y, mo - 1, c.dueDay);
+      const due = cardDate(c, 'dueDay', y, mo - 1);
       // Resumen que vence en esa fecha: el que cerró justo antes del vencimiento.
-      let close = clampDate(due.getFullYear(), due.getMonth(), c.closingDay);
-      if (close >= due) close = clampDate(due.getFullYear(), due.getMonth() - 1, c.closingDay);
-      const prevClose = clampDate(close.getFullYear(), close.getMonth() - 1, c.closingDay);
+      let close = cardDate(c, 'closingDay', due.getFullYear(), due.getMonth());
+      if (close >= due) close = cardDate(c, 'closingDay', due.getFullYear(), due.getMonth() - 1);
+      const prevClose = cardDate(c, 'closingDay', close.getFullYear(), close.getMonth() - 1);
       const amount = cardPeriodTotal(c.id, prevClose, close); // ya en moneda visible
       events.push({
         date: dateToStr(due), kind: 'card', icon: '💳',
-        title: c.name, sub: 'Vencimiento tarjeta · día ' + c.dueDay,
+        title: c.name, sub: 'Vencimiento tarjeta · día ' + due.getDate(),
         amountDisp: amount,
       });
     }
@@ -2376,22 +2465,47 @@
     ajustes: vAjustes,
   };
 
+  // Navegación de 4 botones abajo (máximo); cada uno puede contener más de
+  // una vista, que se elige con una sub-pestaña dentro de la sección.
+  const GROUPS = [
+    { key: 'inicio', views: ['resumen'] },
+    { key: 'movimientos', views: ['movimientos', 'calendario'] },
+    { key: 'cuentas', views: ['tarjetas', 'ahorros'] },
+    { key: 'mas', views: ['plan', 'compartido', 'ajustes'] },
+  ];
+  const VIEW_LABELS = {
+    resumen: 'Resumen', movimientos: 'Movimientos', calendario: 'Calendario',
+    tarjetas: 'Tarjetas y medios', ahorros: 'Ahorros', plan: 'Planificar',
+    compartido: 'Compartido', ajustes: 'Ajustes',
+  };
+  function groupOf(view) { return GROUPS.find((g) => g.views.includes(view)) || GROUPS[0]; }
+
   function render() {
     Charts.tipHide();
-    $$('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === ui.view));
+    const grp = groupOf(ui.view);
+    $$('.bottom-nav button').forEach((b) => b.classList.toggle('active', b.dataset.group === grp.key));
     $$('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.cur === disp()));
     renderRateChip();
     renderAccountChip();
     renderBanner();
     const el = $('#view');
-    VIEWS[ui.view](el);
+    el.innerHTML = grp.views.length > 1
+      ? `<div class="subtabs">${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}</div><div class="view-content"></div>`
+      : '<div class="view-content"></div>';
+    $$('[data-subview]', el).forEach((b) => b.addEventListener('click', () => {
+      ui.view = b.dataset.subview;
+      if (ui.view === 'compartido') shared.loaded = false;
+      render();
+    }));
+    VIEWS[ui.view]($('.view-content', el));
   }
 
   function init() {
     generateRecurring();
 
-    $$('.tabs button').forEach((b) => b.addEventListener('click', () => {
-      ui.view = b.dataset.view;
+    $$('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
+      const grp = GROUPS.find((g) => g.key === b.dataset.group);
+      if (!grp.views.includes(ui.view)) ui.view = grp.views[0];
       // "Compartido" vive en la nube y lo puede cambiar la otra persona en
       // cualquier momento: siempre se recarga al entrar a la pestaña.
       if (ui.view === 'compartido') shared.loaded = false;
