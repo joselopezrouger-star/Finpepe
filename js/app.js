@@ -1993,7 +1993,8 @@
           <button type="button" class="auth-tab ${draft.mode === 'up' ? 'active' : ''}" data-amode="up">Crear cuenta</button>
         </div>
         <div class="auth-body">
-          <input type="text" id="au-user" autocomplete="username" placeholder="Usuario (por ej. jose)" value="${esc(draft.user)}">
+          <input type="text" id="au-user" autocomplete="username" placeholder="Usuario, no tu email (por ej. jose)" value="${esc(draft.user)}">
+          ${draft.mode === 'up' ? '<span class="hint">Elegí un nombre corto, no hace falta que sea tu email.</span>' : ''}
           <input type="password" id="au-pass" autocomplete="${draft.mode === 'in' ? 'current-password' : 'new-password'}"
                  placeholder="Contraseña (mínimo 6 caracteres)" value="${esc(draft.pass)}">
           <div class="auth-msg" id="au-msg"></div>

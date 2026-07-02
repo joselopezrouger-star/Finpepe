@@ -869,14 +869,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   padding: 20px 22px;
   color: var(--ink);
 }
+/* Antes usaba filter:blur() para el halo, pero Safari no recorta bien un
+   hijo con filter dentro de un padre con overflow:hidden (más si hay un
+   ancestro position:sticky, como nuestro header) — el halo se "escapaba"
+   del card y aparecía flotando cerca del encabezado. Un radial-gradient
+   da el mismo efecto suave sin ese bug. */
 .hero::before {
   content: '';
   position: absolute;
-  top: -40px; right: -40px;
-  width: 140px; height: 140px;
-  background: var(--accent);
-  opacity: 0.12;
-  filter: blur(36px);
+  top: -60px; right: -60px;
+  width: 220px; height: 220px;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 72%);
+  opacity: 0.18;
   border-radius: 50%;
   pointer-events: none;
 }
