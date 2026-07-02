@@ -1,73 +1,77 @@
 /* Finpepe — hoja de estilos.
-   Diseño bancario / corporativo serio: superficies blancas o azul-marino muy
-   oscuro, un solo acento azul marino, sin decoración de más. Los colores de
-   series y estado vienen de la paleta validada (ver js/charts.js). */
+   Diseño fintech oscuro: navy casi negro, acento teal vivo y coral para lo
+   negativo, tarjetas con bordes sutiles, tipografía Inter + Barlow para
+   números grandes. Paleta tomada de la referencia del usuario (Tailwind
+   theme tokens). Los colores de series y estado vienen de acá mismo
+   (ver js/charts.js, que los lee en vivo). */
 
 :root {
-  /* Paleta "banco": blanco frío + azul marino profundo. */
-  --bg: #f1f4f8;
+  /* Contraparte clara: misma identidad (teal + coral), ajustada para
+     legibilidad sobre blanco. */
+  --bg: #f4f6f8;
   --surface: #ffffff;
-  --surface-2: #eef2f7;
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
-  --ink: #0f1b2d;
-  --ink-2: #46536b;
-  --muted: #6b7890;
-  --grid: #e6eaf1;
-  --axis: #cbd5e1;
-  --accent: #163864;          /* azul marino profundo (fondos de botón/acento) */
-  --accent-strong: #0f2847;
-  --accent-down: #1d4ed8;     /* azul más vivo para enlaces sobre blanco */
-  --accent-wash: #e8eef7;
-  --honey: #1d4ed8;           /* degradé del hero / marca */
-  --honey-deep: #0f2847;
-  --on-accent: #ffffff;       /* texto blanco sobre el azul marino */
-  --income: #146c46;
-  --income-series: #16794f;
-  --expense-series: #c81e3a;
-  --category-series: #3b6fa8;
-  --good: #16794f;
+  --surface-2: #eef1f4;
+  --border: #e2e6ec;
+  --border-strong: #cbd2dc;
+  --ink: #0b1220;
+  --ink-2: #55617a;
+  --muted: #7c879c;
+  --grid: #e7eaef;
+  --axis: #cbd2dc;
+  --accent: #08d59d;           /* teal vivo (fondos de botón/acento) */
+  --accent-strong: #04996f;
+  --accent-down: #048066;      /* teal más oscuro, legible como texto/enlace sobre blanco */
+  --accent-wash: #e3f8f1;
+  --honey: #08d59d;            /* degradé del hero / marca */
+  --honey-deep: #04996f;
+  --on-accent: #032a1f;        /* texto oscuro sobre el teal */
+  --income: #04996f;
+  --income-series: #04996f;
+  --expense-series: #d6362f;
+  --category-series: #048066;
+  --good: #04996f;
   --warn: #a15c00;
-  --crit: #c81e3a;
-  --danger-bg: #fdf0f1;
-  --danger-border: #f2c9ce;
-  --danger-ink: #8c1f30;
-  --radius: 10px;
-  --radius-s: 7px;
-  --font: 'Plus Jakarta Sans', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --crit: #d6362f;
+  --danger-bg: #fdf0ef;
+  --danger-border: #f4c9c6;
+  --danger-ink: #8c241f;
+  --radius: 12px;
+  --radius-s: 9px;
+  --font: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-heading: 'Barlow', var(--font);
 }
 
-/* Tema oscuro: mismo azul marino, ahora como superficie de fondo, con un
-   acento más claro para que siga siendo legible. Mismos nombres de
-   variable, valores distintos: el resto de la hoja no sabe qué tema hay. */
+/* Tema oscuro (el look elegido, y el que arranca por defecto): navy casi
+   negro + teal vivo, tal cual la referencia. Mismos nombres de variable,
+   valores distintos: el resto de la hoja no sabe qué tema hay. */
 :root[data-theme="dark"] {
-  --bg: #0b1220;
-  --surface: #111a2c;
-  --surface-2: #16223a;
-  --border: #22314d;
-  --border-strong: #2d3f60;
-  --ink: #eef2f8;
-  --ink-2: #b7c2d6;
-  --muted: #7c8aa8;
-  --grid: #1c2740;
-  --axis: #2d3f60;
-  --accent: #2e5aac;
-  --accent-strong: #1d4ed8;
-  --accent-down: #6ea8ff;
-  --accent-wash: #16223a;
-  --honey: #2e5aac;
-  --honey-deep: #163864;
-  --on-accent: #ffffff;
-  --income: #2fa968;
-  --income-series: #2fa968;
-  --expense-series: #e5484d;
-  --category-series: #5b8fd6;
-  --good: #2fa968;
-  --warn: #d6a53c;
-  --crit: #e5484d;
-  --danger-bg: #2c1720;
-  --danger-border: #4a2530;
-  --danger-ink: #ff9baa;
+  --bg: #0a0f1e;
+  --surface: #13192b;
+  --surface-2: #1a2235;
+  --border: #202a40;
+  --border-strong: #2c3a58;
+  --ink: #f8fafc;
+  --ink-2: #94a3b8;
+  --muted: #94a3b8;
+  --grid: #202a40;
+  --axis: #202a40;
+  --accent: #08d59d;
+  --accent-strong: #06b586;
+  --accent-down: #08d59d;      /* el teal ya rinde ~9:1 como texto sobre estas superficies oscuras */
+  --accent-wash: #142a24;
+  --honey: #08d59d;
+  --honey-deep: #04996f;
+  --on-accent: #032a1f;
+  --income: #08d59d;
+  --income-series: #08d59d;
+  --expense-series: #ff5e5b;
+  --category-series: #08d59d;
+  --good: #08d59d;
+  --warn: #f5d142;
+  --crit: #ff5e5b;
+  --danger-bg: #2a1416;
+  --danger-border: #4a2228;
+  --danger-ink: #ff5e5b;
 }
 
 * { box-sizing: border-box; }
@@ -237,8 +241,20 @@ a { color: var(--accent-down); }
 
 /* ---------- Tiles de resumen ---------- */
 .tile { padding: 14px 16px; }
-.tile-label { font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
-.tile-value { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+.tile-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink-2); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+}
+.tile-badge {
+  width: 22px; height: 22px; flex: none;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+}
+.tile-badge-income { background: var(--accent-wash); color: var(--accent); }
+.tile-badge-expense { background: var(--danger-bg); color: var(--crit); }
+.tile-badge-neutral { background: var(--surface-2); color: var(--ink-2); }
+.tile-value { font: 600 24px/1.2 var(--font-heading); letter-spacing: -0.01em; }
 .tile-value.pos { color: var(--income); }
 .tile-value.neg { color: var(--crit); }
 .tile-delta { font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -343,6 +359,13 @@ dialog[open].dialog {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
 }
+/* Sin esto, clases como .dialog-tx (que ponen display:flex para su layout
+   interno) le ganan en especificidad a la regla nativa "dialog { display:
+   none }" y el diálogo queda visible -aunque cerrado- flotando al final de
+   la página. Es la causa real del bug "quedó lageado abajo" tras guardar. */
+.dialog:not([open]) {
+  display: none !important;
+}
 .dialog::backdrop { background: rgba(11, 11, 11, 0.32); }
 .dialog form { display: flex; flex-direction: column; }
 .dialog-head {
@@ -434,8 +457,7 @@ dialog[open].dialog {
 }
 .cur-pill.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .tx-amount-display {
-  font-size: 32px;
-  font-weight: 700;
+  font: 700 32px/1.2 var(--font-heading);
   letter-spacing: -0.01em;
   display: flex;
   align-items: baseline;
@@ -585,8 +607,8 @@ table.data tr:last-child td { border-bottom: 0; }
 table.data tbody tr.rowlink { cursor: pointer; }
 table.data tbody tr.rowlink:hover { background: var(--surface-2); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.amount-in { color: var(--income); font-weight: 600; }
-.amount-out { font-weight: 600; }
+.amount-in { color: var(--income); font: 600 13px var(--font-heading); }
+.amount-out { font: 600 13px var(--font-heading); }
 .cell-sub { color: var(--muted); font-size: 12px; }
 
 .badge {
@@ -781,27 +803,46 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 }
 
 /* ---------- Hero: patrimonio neto ---------- */
+/* Superficie normal, no un bloque grande de color sólido — el acento vivo
+   queda reservado para el número, que es la única marca que lo necesita.
+   Un resplandor sutil detrás (como la referencia) le da algo de vida sin
+   volverse un cartel. */
 .hero {
-  background: linear-gradient(145deg, var(--honey) 0%, var(--honey-deep) 100%);
-  border: 1px solid var(--honey-deep);
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px 22px;
-  color: var(--on-accent);
+  color: var(--ink);
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 140px; height: 140px;
+  background: var(--accent);
+  opacity: 0.12;
+  filter: blur(36px);
+  border-radius: 50%;
+  pointer-events: none;
 }
 .hero-label {
+  position: relative;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  opacity: 0.85;
+  color: var(--muted);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 .hero-value {
-  font-size: 34px;
-  font-weight: 700;
+  position: relative;
+  font: 700 34px/1.2 var(--font-heading);
   letter-spacing: -0.02em;
   margin: 2px 0 14px;
+  color: var(--accent);
 }
 /* Entero grande + centavos chicos "flotando" arriba, como un saldo de
    billetera/homebanking — nunca tabular-nums acá, se ve suelto en tamaños
@@ -815,28 +856,16 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   margin-left: 2px;
 }
 .hero-split {
+  position: relative;
   display: flex;
   gap: 26px;
   flex-wrap: wrap;
-  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  border-top: 1px solid var(--border);
   padding-top: 12px;
 }
-.hero-split .k { font-size: 12px; opacity: 0.8; }
-.hero-split .v { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.hero-split .k { font-size: 12px; color: var(--muted); }
+.hero-split .v { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); }
 @media (max-width: 560px) { .hero-value { font-size: 28px; } }
-
-/* En oscuro, un bloque grande sólido de coral es demasiado ruidoso: la
-   tarjeta pasa a ser una superficie normal y el color vivo queda solo en
-   el número, que es la única marca que lo necesita. */
-:root[data-theme="dark"] .hero {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--ink);
-}
-:root[data-theme="dark"] .hero-label,
-:root[data-theme="dark"] .hero-split .k { color: var(--muted); opacity: 1; }
-:root[data-theme="dark"] .hero-value { color: var(--accent); }
-:root[data-theme="dark"] .hero-split { border-top-color: var(--border); }
 
 /* ---------- Chip de cuenta / sincronización ---------- */
 .account-chip .dot {

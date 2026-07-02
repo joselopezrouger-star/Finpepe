@@ -699,21 +699,21 @@
 
       <div class="grid-tiles">
         <div class="card tile">
-          <div class="tile-label">Ingresos</div>
+          <div class="tile-label"><span class="tile-badge tile-badge-income">↓</span>Ingresos</div>
           <div class="tile-value pos">${fmtDisp(inc)}</div>
           ${delta(inc, incPrev, true)}
         </div>
         <div class="card tile">
-          <div class="tile-label">Gastos</div>
+          <div class="tile-label"><span class="tile-badge tile-badge-expense">↑</span>Gastos</div>
           <div class="tile-value">${fmtDisp(exp)}</div>
           ${delta(exp, expPrev, false)}
         </div>
         <div class="card tile">
-          <div class="tile-label">Balance del mes</div>
+          <div class="tile-label"><span class="tile-badge tile-badge-neutral">⇄</span>Balance del mes</div>
           <div class="tile-value ${balance > 0 ? 'pos' : balance < 0 ? 'neg' : ''}">${fmtDisp(balance)}</div>
         </div>
         <div class="card tile">
-          <div class="tile-label">Ahorros totales</div>
+          <div class="tile-label"><span class="tile-badge tile-badge-neutral">◆</span>Ahorros totales</div>
           <div class="tile-value">${fmtDisp(savTotal)}</div>
         </div>
       </div>
