@@ -31,9 +31,16 @@ una base de datos **Supabase**.
 - **Sincronización en la nube (opcional)** con Supabase: iniciás sesión y tus
   datos se guardan en tu base de datos y aparecen en todos tus dispositivos.
 - **Gastos compartidos en pareja**: creás un "hogar", invitás a tu pareja con
-  un código, y cada uno carga lo que paga (con reparto 50/50 o personalizado).
-  La app calcula quién le debe a quién y permite registrar pagos para saldar
-  la deuda. Las cuentas de cada uno siguen siendo privadas — esto es aparte.
+  un código, y las cuentas de cada uno siguen siendo privadas. Para no cargar
+  cada gasto dos veces, en el mismo formulario de "+ Movimiento" hay un
+  tilde **"Es un gasto compartido"**: guarda tu gasto personal como siempre y
+  además avisa al hogar compartido con el reparto que elijas (50/50 por
+  defecto). La app calcula quién le debe a quién y permite registrar pagos
+  para saldar la deuda.
+- **Carga rápida de movimientos**: pantalla con calculadora integrada para el
+  importe (podés sumar/restar varios gastos antes de guardar) y categoría /
+  cuenta por lista, no por combos.
+- **Tema claro y oscuro**, con el interruptor en el encabezado.
 - **Respaldo**: exportar/importar todos los datos en JSON y exportar
   movimientos a CSV (compatible con Excel).
 
@@ -47,19 +54,24 @@ sincronizar entre el teléfono y la computadora, conectá tu proyecto de Supabas
 2. En **SQL Editor**, pegá y ejecutá el contenido de
    [`supabase-schema.sql`](supabase-schema.sql). Crea una tabla `finance_state`
    con **Row Level Security**: cada usuario solo ve y edita sus propios datos.
-3. En **Project Settings → API**, copiá la **Project URL** y la **anon public
-   key**.
+3. Copiá la **Project URL** y la **Publishable key** (antes llamada "anon
+   key") tocando el botón verde **"Connect"** arriba a la derecha del
+   dashboard, o desde **Settings → Data API** (URL) y **Settings → API Keys**
+   (key).
 4. En la app, andá a **Ajustes → Sincronización en la nube**, pegá esos dos
    valores y **Conectar proyecto**. Después **Crear cuenta** / **Iniciar sesión**
    con tu email.
 
-La `anon key` es una clave **pública** pensada para usarse en el navegador: es
-seguro dejarla en la app publicada, porque Row Level Security es lo que protege
-los datos. Por eso el modelo funciona sobre GitHub Pages sin backend propio.
+La `anon key` / `publishable key` es una clave **pública** pensada para
+usarse en el navegador: es seguro dejarla en la app publicada, porque Row
+Level Security es lo que protege los datos. Por eso el modelo funciona sobre
+GitHub Pages sin backend propio.
 
-En la interfaz nueva de Supabase, la "anon key" se llama **"Publishable key"** y
-el **Project URL** está en **Settings → Data API**, o tocando el botón verde
-**"Connect"** arriba a la derecha del dashboard.
+**Sin pegar nada:** si en `js/cloud.js` se completan las constantes
+`DEFAULT_URL` y `DEFAULT_KEY` con esos dos valores, la app se conecta sola
+al abrir y el formulario de "pegar URL/key" directamente no aparece — cada
+quien solo ve la pantalla de "Ingresar / Crear cuenta". Así es como está
+pensado para el uso normal (no técnico) de la app.
 
 ### Cuentas separadas y gastos compartidos
 

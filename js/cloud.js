@@ -9,6 +9,14 @@ const Cloud = (() => {
   const CFG_KEY = 'finpepe:cloud';
   const TABLE = 'finance_state';
 
+  // Proyecto de Supabase "de fábrica": si se completan estos dos valores acá,
+  // ni Jose ni su novia necesitan pegar nada en Ajustes — la app se conecta
+  // sola y solo queda iniciar sesión. Son datos PÚBLICOS por diseño (la
+  // seguridad la da Row Level Security en la base), así que es seguro
+  // dejarlos escritos en este archivo publicado en GitHub Pages.
+  const DEFAULT_URL = '';
+  const DEFAULT_KEY = '';
+
   let client = null;
   let session = null;
   let onChange = () => {};
@@ -17,8 +25,13 @@ const Cloud = (() => {
   const available = () => typeof window !== 'undefined' && !!window.supabase;
 
   function config() {
-    try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }
-    catch { return {}; }
+    let stored = {};
+    try { stored = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }
+    catch { stored = {}; }
+    return {
+      url: stored.url || DEFAULT_URL,
+      anonKey: stored.anonKey || DEFAULT_KEY,
+    };
   }
   function saveConfig(url, anonKey) {
     localStorage.setItem(CFG_KEY, JSON.stringify({ url: url.trim(), anonKey: anonKey.trim() }));
@@ -33,6 +46,9 @@ const Cloud = (() => {
     const c = config();
     return !!(c.url && c.anonKey);
   }
+  // El formulario de "pegar URL/key" en Ajustes solo tiene sentido si no hay
+  // un proyecto de fábrica embebido — si ya viene configurado, no hace falta.
+  const hasDefaults = () => !!(DEFAULT_URL && DEFAULT_KEY);
 
   function ensureClient() {
     if (client) return client;
@@ -245,7 +261,7 @@ const Cloud = (() => {
   }
 
   return {
-    available, config, saveConfig, clearConfig, isConfigured,
+    available, config, saveConfig, clearConfig, isConfigured, hasDefaults,
     init, user, signUp, signIn, signOut, pull, push, schedulePush,
     getHousehold, createHousehold, createInvite, redeemInvite, leaveHousehold,
     listSharedExpenses, addSharedExpense, deleteSharedExpense,

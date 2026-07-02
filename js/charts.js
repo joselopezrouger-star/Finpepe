@@ -4,7 +4,18 @@
    Especificación: marcas finas, extremos redondeados (4px) contra datos y rectos
    contra la línea de base, grilla hairline, tooltip en hover y foco. */
 const Charts = (() => {
-  const COLORS = { income: '#0a8f3c', expense: '#d03b3b', category: '#b5760a' };
+  // Los colores de las marcas siguen el tema activo (claro/oscuro): se leen
+  // de las variables CSS en vez de quedar fijos, así los gráficos se
+  // repintan bien cuando el usuario cambia de tema.
+  function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+  const COLORS = {
+    get income() { return cssVar('--income-series', '#0a8f3c'); },
+    get expense() { return cssVar('--expense-series', '#d03b3b'); },
+    get category() { return cssVar('--category-series', '#b5760a'); },
+  };
 
   /* ---------- Tooltip único ---------- */
   let tipEl = null;

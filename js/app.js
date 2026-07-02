@@ -33,6 +33,7 @@
   const monthShortFmt = new Intl.DateTimeFormat('es-AR', { month: 'short' });
   const dayMonthFmt = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short' });
   const dateShortFmt = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  const dateFullFmt = new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'numeric', year: 'numeric' });
 
   const monthLabel = (mk) => {
     const [y, m] = mk.split('-').map(Number);
@@ -41,6 +42,10 @@
   };
   const fmtDay = (d) => dayMonthFmt.format(d);
   const fmtDateShort = (str) => dateShortFmt.format(parseDate(str));
+  const fmtDateFull = (str) => {
+    const s = dateFullFmt.format(parseDate(str));
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
 
   const nfARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
   const nfUSD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -157,6 +162,26 @@
       : 'Sin cotización — tocá para actualizar';
   }
 
+  /* ================= Tema claro / oscuro ================= */
+  const THEME_KEY = 'finpepe:theme';
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  }
+  function updateThemeButton() {
+    const btn = $('#theme-toggle');
+    const dark = currentTheme() === 'dark';
+    btn.textContent = dark ? '☀' : '◐';
+    btn.title = dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
+  }
+  function toggleTheme() {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    if (next === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    else document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem(THEME_KEY, next);
+    updateThemeButton();
+    render(); // Repinta los gráficos con los colores del nuevo tema.
+  }
+
   function renderBanner() {
     const b = $('#banner');
     const anyUSD = disp() === 'USD' ||
@@ -173,6 +198,7 @@
   /* ================= Diálogo genérico ================= */
   function openDialog(title, bodyHTML, { submitLabel = 'Guardar', onSubmit, footExtra = '' } = {}) {
     const dlg = $('#dialog');
+    dlg.className = 'dialog'; // por si quedó una clase de txForm/authDialog de un uso anterior
     dlg.innerHTML = `
       <form novalidate="false">
         <div class="dialog-head">
@@ -207,121 +233,278 @@
     .join('');
 
   /* ================= Formulario de movimiento ================= */
+  const cats = (type) => S().categories.filter((c) => c.type === type);
+
+  /* Carga de movimientos: pantalla grande con calculadora para el importe y
+     listas (no <select>) para categoría/cuenta, con navegación "drill-down"
+     dentro del mismo diálogo. */
   function txForm(tx) {
     const editing = !!tx;
-    const t = tx || {
-      type: 'gasto', date: todayStr(), amount: '', currency: 'ARS',
-      categoryId: '', methodId: S().methods[0] ? S().methods[0].id : '', note: '',
+    const partner = sharedPartner();
+    const canShare = !editing && !!partner && !!(shared.household);
+
+    const draft = {
+      type: editing ? tx.type : 'gasto',
+      date: editing ? tx.date : todayStr(),
+      currency: editing ? tx.currency : 'ARS',
+      categoryId: editing ? tx.categoryId : '',
+      methodId: editing ? tx.methodId : (S().methods[0] ? S().methods[0].id : ''),
+      shareIt: false,
+      sharePct: 50,
+      acc: editing ? tx.amount : null,
+      op: null,
+      cur: '',
     };
-    const cats = (type) => S().categories.filter((c) => c.type === type);
-    const body = `
-      <div class="field-row">
-        <div class="field">
-          <label for="f-type">Tipo</label>
-          <select name="type" id="f-type">
-            <option value="gasto" ${t.type === 'gasto' ? 'selected' : ''}>Gasto</option>
-            <option value="ingreso" ${t.type === 'ingreso' ? 'selected' : ''}>Ingreso</option>
-          </select>
+
+    const dlg = $('#dialog');
+    dlg.className = 'dialog dialog-tx';
+    let mode = 'form'; // 'form' | 'category' | 'method'
+
+    function applyOp(a, op, b) {
+      a = a || 0;
+      if (op === '+') return a + b;
+      if (op === '-') return a - b;
+      if (op === '×') return a * b;
+      if (op === '÷') return b !== 0 ? a / b : a;
+      return b;
+    }
+    function numFmt(n) { return (Math.round(n * 100) / 100).toString(); }
+    function finalAmount() {
+      const curVal = draft.cur === '' ? null : parseFloat(draft.cur);
+      if (draft.op && curVal != null) return applyOp(draft.acc, draft.op, curVal);
+      if (curVal != null) return curVal;
+      return draft.acc != null ? draft.acc : 0;
+    }
+    function displayExpr() {
+      const parts = [];
+      if (draft.acc != null) parts.push(numFmt(draft.acc));
+      if (draft.op) parts.push(draft.op);
+      if (draft.cur !== '') parts.push(draft.cur);
+      return parts.length ? parts.join(' ') : '0';
+    }
+    function pressDigit(d) {
+      if (d === '.' && draft.cur.includes('.')) return;
+      if (draft.cur.length > 12) return;
+      draft.cur = (draft.cur === '0' && d !== '.') ? d : draft.cur + d;
+      paint();
+    }
+    function pressOp(op) {
+      const curVal = draft.cur === '' ? null : parseFloat(draft.cur);
+      if (draft.op && curVal != null) draft.acc = applyOp(draft.acc, draft.op, curVal);
+      else if (curVal != null) draft.acc = curVal;
+      draft.op = op;
+      draft.cur = '';
+      paint();
+    }
+    function pressEquals() {
+      const curVal = draft.cur === '' ? null : parseFloat(draft.cur);
+      if (draft.op && curVal != null) draft.acc = applyOp(draft.acc, draft.op, curVal);
+      else if (curVal != null) draft.acc = curVal;
+      draft.op = null;
+      draft.cur = draft.acc != null ? numFmt(draft.acc) : '';
+      paint();
+    }
+    function pressBack() {
+      if (draft.cur) draft.cur = draft.cur.slice(0, -1);
+      else if (draft.op) draft.op = null;
+      else if (draft.acc != null) { draft.cur = numFmt(draft.acc); draft.acc = null; }
+      paint();
+    }
+
+    function currentInstMethod() { return methodById(draft.methodId); }
+    function showInstallments() {
+      const m = currentInstMethod();
+      return !editing && draft.type === 'gasto' && m && m.kind === 'credito';
+    }
+
+    function formHTML() {
+      const m = currentInstMethod();
+      return `
+      <div class="dialog-head tx-head">
+        <button type="button" class="row-del" data-close aria-label="Cerrar">✕</button>
+        <span class="tx-head-title">${draft.type === 'gasto' ? 'Gasto' : 'Ingreso'}</span>
+        <span></span>
+      </div>
+      <div class="tx-tabs">
+        <button type="button" class="tx-tab ${draft.type === 'ingreso' ? 'active tx-tab-income' : ''}" data-ttype="ingreso">Ingreso</button>
+        <button type="button" class="tx-tab ${draft.type === 'gasto' ? 'active tx-tab-expense' : ''}" data-ttype="gasto">Gasto</button>
+      </div>
+      <div class="tx-body">
+        <div class="tx-row" data-openrow="date">
+          <span class="tx-row-label">Fecha</span>
+          <span class="tx-row-value">${esc(fmtDateFull(draft.date))}</span>
         </div>
-        <div class="field">
-          <label for="f-date">Fecha</label>
-          <input type="date" name="date" id="f-date" value="${esc(t.date)}" required>
+        <input type="date" id="tx-date-input" class="tx-visually-hidden" value="${esc(draft.date)}">
+
+        <div class="tx-amount-block">
+          <div class="tx-cur-toggle">
+            <button type="button" class="cur-pill ${draft.currency === 'ARS' ? 'active' : ''}" data-cur="ARS">$</button>
+            <button type="button" class="cur-pill ${draft.currency === 'USD' ? 'active' : ''}" data-cur="USD">US$</button>
+          </div>
+          <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : 'is-expense'}">
+            <span>${esc(displayExpr())}</span>
+            <button type="button" class="tx-amount-back" data-back aria-label="Borrar">⌫</button>
+          </div>
+        </div>
+
+        <div class="tx-row" data-pick="category">
+          <span class="tx-row-label">Categoría</span>
+          <span class="tx-row-value">${draft.categoryId ? esc(catName(draft.categoryId)) : 'Elegir'}</span>
+          <span class="tx-row-chev">›</span>
+        </div>
+        <div class="tx-row" data-pick="method">
+          <span class="tx-row-label">Cuenta</span>
+          <span class="tx-row-value">${draft.methodId ? esc(methodName(draft.methodId)) : 'Elegir'}</span>
+          <span class="tx-row-chev">›</span>
+        </div>
+
+        ${showInstallments() ? `
+        <div class="tx-row-note">
+          <label>Cuotas</label>
+          <input type="number" id="tx-inst" min="1" max="36" step="1" value="1">
+        </div>` : ''}
+
+        ${canShare ? `
+        <label class="tx-check-row">
+          <input type="checkbox" id="tx-share" ${draft.shareIt ? 'checked' : ''}>
+          <span>Es un gasto compartido con ${esc(partnerLabel(partner))}</span>
+        </label>
+        ${draft.shareIt ? `
+        <div class="tx-row-note">
+          <label>Vos te quedás con este % del gasto (el resto le corresponde a ${esc(partnerLabel(partner))})</label>
+          <input type="number" id="tx-share-pct" min="0" max="100" step="1" value="${draft.sharePct}">
+        </div>` : ''}` : ''}
+
+        <div class="tx-row-note">
+          <label>Nota <span class="hint">(opcional)</span></label>
+          <input type="text" id="tx-note" maxlength="80" value="${editing ? esc(tx.note || '') : ''}">
         </div>
       </div>
-      <div class="field-row">
-        <div class="field">
-          <label for="f-amount">Monto${editing || t.type === 'ingreso' ? '' : ' total'}</label>
-          <input type="number" name="amount" id="f-amount" min="0.01" step="0.01"
-                 value="${t.amount !== '' ? esc(t.amount) : ''}" required inputmode="decimal">
-        </div>
-        <div class="field">
-          <label for="f-currency">Moneda</label>
-          <select name="currency" id="f-currency">
-            <option value="ARS" ${t.currency === 'ARS' ? 'selected' : ''}>ARS — pesos</option>
-            <option value="USD" ${t.currency === 'USD' ? 'selected' : ''}>USD — dólares</option>
-          </select>
-        </div>
+      <div class="tx-keypad">
+        <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-op="÷">÷</button>
+        <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-op="×">×</button>
+        <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-op="-">−</button>
+        <button type="button" data-k=".">.</button><button type="button" data-k="0">0</button><button type="button" data-eq>=</button><button type="button" data-op="+">+</button>
       </div>
-      <div class="field">
-        <label for="f-cat">Categoría</label>
-        <select name="categoryId" id="f-cat" required>${selOptions(cats(t.type), t.categoryId)}</select>
-      </div>
-      <div class="field">
-        <label for="f-method">Medio de pago</label>
-        <select name="methodId" id="f-method" required>${selOptions(S().methods, t.methodId)}</select>
-      </div>
-      <div class="field" id="f-inst-wrap" hidden>
-        <label for="f-inst">Cuotas</label>
-        <input type="number" name="installments" id="f-inst" min="1" max="36" step="1" value="1">
-        <span class="hint">El monto total se divide en cuotas mensuales que van cayendo en los resúmenes siguientes.</span>
-      </div>
-      <div class="field">
-        <label for="f-note">Detalle <span class="hint">(opcional)</span></label>
-        <input type="text" name="note" id="f-note" maxlength="80" value="${esc(t.note || '')}">
+      <div class="dialog-foot">
+        ${editing ? '<button type="button" class="btn btn-danger" data-del style="margin-right:auto">Eliminar</button>' : ''}
+        <button type="button" class="btn btn-primary" data-save>Guardar</button>
       </div>`;
+    }
 
-    const footExtra = editing
-      ? `<button type="button" class="btn btn-danger" data-del style="margin-right:auto">Eliminar</button>` : '';
+    function pickerHTML(kind) {
+      const items = kind === 'category' ? cats(draft.type) : S().methods;
+      const selId = kind === 'category' ? draft.categoryId : draft.methodId;
+      return `
+      <div class="dialog-head tx-head">
+        <button type="button" class="row-del" data-pickback aria-label="Volver">‹</button>
+        <span class="tx-head-title">${kind === 'category' ? 'Categoría' : 'Cuenta'}</span>
+        <span></span>
+      </div>
+      <div class="tx-picklist">
+        ${items.length ? items.map((i) => `
+          <div class="tx-pick-row ${i.id === selId ? 'sel' : ''}" data-pickid="${esc(i.id)}">
+            <span>${esc(i.name)}</span>${i.id === selId ? '<span class="tx-pick-check">✓</span>' : ''}
+          </div>`).join('')
+        : '<div class="empty">No hay opciones cargadas. Agregá una desde Ajustes o Tarjetas y medios.</div>'}
+      </div>`;
+    }
 
-    const dlg = openDialog(editing ? 'Editar movimiento' : 'Nuevo movimiento', body, {
-      footExtra,
-      onSubmit(d) {
-        const amount = Math.round(parseFloat(d.amount) * 100) / 100;
-        if (!(amount > 0)) return false;
-        const base = {
-          date: d.date, type: d.type, amount, currency: d.currency,
-          categoryId: d.categoryId, methodId: d.methodId, note: d.note.trim(),
-        };
-        if (editing) {
-          Object.assign(tx, base);
+    function paint() {
+      dlg.innerHTML = mode === 'form' ? formHTML() : pickerHTML(mode);
+      wire();
+    }
+
+    function wire() {
+      $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => dlg.close()));
+      if (mode !== 'form') {
+        $('[data-pickback]', dlg).addEventListener('click', () => { mode = 'form'; paint(); });
+        $$('[data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
+          if (mode === 'category') draft.categoryId = row.dataset.pickid;
+          else draft.methodId = row.dataset.pickid;
+          mode = 'form';
+          paint();
+        }));
+        return;
+      }
+      $$('.tx-tab', dlg).forEach((b) => b.addEventListener('click', () => {
+        draft.type = b.dataset.ttype;
+        if (draft.categoryId && !cats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
+        paint();
+      }));
+      $('[data-openrow="date"]', dlg).addEventListener('click', () => {
+        const input = $('#tx-date-input', dlg);
+        if (input.showPicker) { try { input.showPicker(); return; } catch (e) {} }
+        input.focus();
+      });
+      $('#tx-date-input', dlg).addEventListener('change', (e) => { draft.date = e.target.value; paint(); });
+      $$('.cur-pill', dlg).forEach((b) => b.addEventListener('click', () => { draft.currency = b.dataset.cur; paint(); }));
+      $$('[data-pick]', dlg).forEach((row) => row.addEventListener('click', () => { mode = row.dataset.pick; paint(); }));
+      const shareBox = $('#tx-share', dlg);
+      if (shareBox) shareBox.addEventListener('change', (e) => { draft.shareIt = e.target.checked; paint(); });
+      $$('.tx-keypad [data-k]', dlg).forEach((b) => b.addEventListener('click', () => pressDigit(b.dataset.k)));
+      $$('.tx-keypad [data-op]', dlg).forEach((b) => b.addEventListener('click', () => pressOp(b.dataset.op)));
+      $('[data-eq]', dlg).addEventListener('click', pressEquals);
+      $('[data-back]', dlg).addEventListener('click', pressBack);
+      $('[data-save]', dlg).addEventListener('click', onSave);
+      const delBtn = $('[data-del]', dlg);
+      if (delBtn) delBtn.addEventListener('click', () => { dlg.close(); deleteTx(tx); });
+    }
+
+    async function onSave() {
+      const amount = Math.round(finalAmount() * 100) / 100;
+      if (!(amount > 0)) { alert('Ingresá un monto mayor a 0.'); return; }
+      if (!draft.categoryId) { alert('Elegí una categoría.'); return; }
+      if (!draft.methodId) { alert('Elegí una cuenta.'); return; }
+      const note = ($('#tx-note', dlg) || {}).value || '';
+      const base = {
+        date: draft.date, type: draft.type, amount, currency: draft.currency,
+        categoryId: draft.categoryId, methodId: draft.methodId, note: note.trim(),
+      };
+
+      if (editing) {
+        Object.assign(tx, base);
+      } else {
+        const instEl = $('#tx-inst', dlg);
+        const n = showInstallments() ? Math.max(1, parseInt((instEl && instEl.value) || '1', 10) || 1) : 1;
+        if (n === 1) {
+          S().transactions.push({ id: Store.uid(), ...base });
         } else {
-          const method = methodById(d.methodId);
-          const n = (d.type === 'gasto' && method && method.kind === 'credito')
-            ? Math.max(1, parseInt(d.installments || '1', 10) || 1) : 1;
-          if (n === 1) {
-            S().transactions.push({ id: Store.uid(), ...base });
-          } else {
-            const groupId = Store.uid();
-            const per = Math.round((amount / n) * 100) / 100;
-            const start = parseDate(d.date);
-            for (let k = 1; k <= n; k++) {
-              const cuota = (k === n) ? Math.round((amount - per * (n - 1)) * 100) / 100 : per;
-              const dk = clampDate(start.getFullYear(), start.getMonth() + (k - 1), start.getDate());
-              S().transactions.push({
-                id: Store.uid(), ...base, amount: cuota, date: dateToStr(dk),
-                groupId, installment: { k, n },
-              });
-            }
+          const groupId = Store.uid();
+          const per = Math.round((amount / n) * 100) / 100;
+          const start = parseDate(draft.date);
+          for (let k = 1; k <= n; k++) {
+            const cuota = (k === n) ? Math.round((amount - per * (n - 1)) * 100) / 100 : per;
+            const dk = clampDate(start.getFullYear(), start.getMonth() + (k - 1), start.getDate());
+            S().transactions.push({
+              id: Store.uid(), ...base, amount: cuota, date: dateToStr(dk),
+              groupId, installment: { k, n },
+            });
           }
         }
-        Store.save();
-        render();
-      },
-    });
+      }
+      Store.save();
 
-    // Mostrar cuotas solo para gastos nuevos con tarjeta de crédito
-    const instWrap = $('#f-inst-wrap', dlg);
-    const update = () => {
-      const m = methodById($('#f-method', dlg).value);
-      const isCredit = m && m.kind === 'credito';
-      const isGasto = $('#f-type', dlg).value === 'gasto';
-      instWrap.hidden = editing || !isCredit || !isGasto;
-      // recargar categorías según tipo
-      const type = $('#f-type', dlg).value;
-      const sel = $('#f-cat', dlg);
-      const cur = sel.value;
-      sel.innerHTML = selOptions(cats(type), cur);
-    };
-    $('#f-type', dlg).addEventListener('change', update);
-    $('#f-method', dlg).addEventListener('change', update);
-    update();
-
-    if (editing) {
-      $('[data-del]', dlg).addEventListener('click', () => {
-        dlg.close();
-        deleteTx(tx);
-      });
+      if (canShare && draft.shareIt) {
+        const pctEl = $('#tx-share-pct', dlg);
+        const pct = Math.min(100, Math.max(0, parseFloat((pctEl && pctEl.value) || '50')));
+        try {
+          await Cloud.addSharedExpense({
+            household_id: shared.household.id, paid_by: sharedMe().id,
+            payer_share: pct / 100, amount, currency: draft.currency,
+            date: draft.date, note: note.trim() || null,
+          });
+          shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
+        } catch (e) {
+          alert('El movimiento se guardó, pero no se pudo avisar a la cuenta compartida: ' + e.message);
+        }
+      }
+      dlg.close();
+      render();
     }
+
+    paint();
+    dlg.showModal();
   }
 
   function deleteTx(tx) {
@@ -1464,10 +1647,10 @@
     }
     if (Cloud.isConfigured()) {
       return `<h2 class="card-title">Sincronización en la nube</h2>
-        <div class="hint" style="margin-bottom:10px">Proyecto configurado. Iniciá sesión para sincronizar tus datos entre dispositivos.</div>
+        <div class="hint" style="margin-bottom:10px">Iniciá sesión (o creá tu cuenta) para sincronizar tus datos entre dispositivos.</div>
         <div class="inline-form">
           <button class="btn btn-primary btn-sm" id="btn-cloud-login">Iniciar sesión / crear cuenta</button>
-          <button class="btn btn-sm" id="btn-cloud-config">Cambiar proyecto</button>
+          ${Cloud.hasDefaults() ? '' : '<button class="btn btn-sm" id="btn-cloud-config">Cambiar proyecto</button>'}
         </div>`;
     }
     return `<h2 class="card-title">Sincronización en la nube (opcional)</h2>
@@ -1530,31 +1713,59 @@
   }
 
   function authDialog() {
-    const body = `
-      <div class="field">
-        <label for="au-email">Email</label>
-        <input type="email" name="email" id="au-email" required autocomplete="username" placeholder="vos@email.com">
-      </div>
-      <div class="field">
-        <label for="au-pass">Contraseña</label>
-        <input type="password" name="password" id="au-pass" required minlength="6" autocomplete="current-password" placeholder="mínimo 6 caracteres">
-      </div>
-      <div class="hint" id="au-msg"></div>`;
-    const dlg = openDialog('Sincronizar con la nube', body, {
-      submitLabel: 'Ingresar',
-      footExtra: '<button type="button" class="btn" id="au-signup" style="margin-right:auto">Crear cuenta</button>',
-      onSubmit(d) { doAuth('in', d.email, d.password, dlg); return false; },
-    });
-    $('#au-signup', dlg).addEventListener('click', () => {
-      const email = $('#au-email', dlg).value.trim();
-      const pass = $('#au-pass', dlg).value;
-      if (!email || pass.length < 6) { $('#au-msg', dlg).textContent = 'Completá email y una contraseña de 6+ caracteres.'; return; }
-      doAuth('up', email, pass, dlg);
-    });
+    const dlg = $('#dialog');
+    dlg.className = 'dialog dialog-auth';
+    const draft = { mode: 'in', email: '', pass: '' };
+
+    function paint() {
+      dlg.innerHTML = `
+        <div class="auth-hero">
+          <div class="mark" aria-hidden="true">F</div>
+          <h2>${draft.mode === 'in' ? 'Ingresá a tu cuenta' : 'Creá tu cuenta'}</h2>
+          <p>Para sincronizar tus datos entre tus dispositivos.</p>
+        </div>
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab ${draft.mode === 'in' ? 'active' : ''}" data-amode="in">Ingresar</button>
+          <button type="button" class="auth-tab ${draft.mode === 'up' ? 'active' : ''}" data-amode="up">Crear cuenta</button>
+        </div>
+        <div class="auth-body">
+          <input type="email" id="au-email" autocomplete="username" placeholder="Email" value="${esc(draft.email)}">
+          <input type="password" id="au-pass" autocomplete="${draft.mode === 'in' ? 'current-password' : 'new-password'}"
+                 placeholder="Contraseña (mínimo 6 caracteres)" value="${esc(draft.pass)}">
+          <div class="auth-msg" id="au-msg"></div>
+          <button type="button" class="btn btn-primary auth-submit" id="au-submit">${draft.mode === 'in' ? 'Ingresar' : 'Crear cuenta'}</button>
+          <button type="button" class="link-btn" data-close style="justify-self:center">Cancelar</button>
+        </div>`;
+      wire();
+    }
+
+    function readInputs() {
+      draft.email = $('#au-email', dlg).value.trim();
+      draft.pass = $('#au-pass', dlg).value;
+    }
+
+    function wire() {
+      $('[data-close]', dlg).addEventListener('click', () => dlg.close());
+      $$('.auth-tab', dlg).forEach((b) => b.addEventListener('click', () => {
+        readInputs();
+        draft.mode = b.dataset.amode;
+        paint();
+      }));
+      const submit = () => { readInputs(); doAuth(draft.mode, draft.email, draft.pass, dlg); };
+      $('#au-submit', dlg).addEventListener('click', submit);
+      $('#au-pass', dlg).addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    }
+
+    paint();
+    dlg.showModal();
   }
 
   async function doAuth(mode, email, password, dlg) {
     if (cloudBusy) return;
+    if (!email || password.length < 6) {
+      $('#au-msg', dlg).textContent = 'Completá el email y una contraseña de 6 caracteres o más.';
+      return;
+    }
     cloudBusy = true;
     const msg = $('#au-msg', dlg);
     msg.textContent = mode === 'up' ? 'Creando cuenta…' : 'Ingresando…';
@@ -1604,6 +1815,7 @@
       } catch (e) {
         console.error(e);
       }
+      loadShared(); // en segundo plano, para que "+ Movimiento" ya sepa si hay hogar compartido
     }
     render();
   }
@@ -2011,6 +2223,8 @@
     $('#btn-new-tx').addEventListener('click', () => txForm(null));
     $('#rate-chip').addEventListener('click', refreshRates);
     $('#account-chip').addEventListener('click', onAccountChip);
+    $('#theme-toggle').addEventListener('click', toggleTheme);
+    updateThemeButton();
     $('#footer-backup').addEventListener('click', (e) => {
       e.preventDefault();
       ui.view = 'ajustes';
