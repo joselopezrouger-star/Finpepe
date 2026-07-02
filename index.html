@@ -8,15 +8,18 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='17' font-weight='700' fill='%23fff' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="styles.css">
 <script>
   // Aplica el tema guardado antes de pintar la página, para evitar el
-  // parpadeo de pasar de claro a oscuro un instante después de cargar.
+  // parpadeo de pasar de un tema a otro un instante después de cargar.
+  // Por defecto arranca en oscuro (el look elegido); "light" lo pisa.
   try {
     var t = localStorage.getItem('finpepe:theme');
-    if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-  } catch (e) {}
+    if (t !== 'light') document.documentElement.setAttribute('data-theme', 'dark');
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
 </script>
 </head>
 <body>
