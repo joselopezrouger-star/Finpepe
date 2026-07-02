@@ -333,6 +333,15 @@ select:focus, input:focus, .btn:focus-visible, .icon-btn:focus-visible {
   background: var(--surface);
   color: var(--ink);
   box-shadow: 0 12px 40px rgba(11, 11, 11, 0.14);
+  margin: auto;
+}
+/* Red de seguridad: si por lo que sea el navegador no promueve el <dialog>
+   a overlay flotante (algunas versiones de iOS Safari lo hacen mal dentro
+   de layouts con "position: sticky"), esto lo fuerza siempre a quedar
+   centrado y flotando en vez de aparecer "adentro" de la página. */
+dialog[open].dialog {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
 }
 .dialog::backdrop { background: rgba(11, 11, 11, 0.32); }
 .dialog form { display: flex; flex-direction: column; }
@@ -404,7 +413,8 @@ select:focus, input:focus, .btn:focus-visible, .icon-btn:focus-visible {
 }
 .tx-row-label { color: var(--ink-2); font-size: 13.5px; width: 84px; flex: none; }
 .tx-row-value { flex: 1; font-weight: 600; font-size: 14px; text-align: right; }
-.tx-row-chev { color: var(--muted); font-size: 16px; }
+.tx-row-chev { color: var(--muted); font-size: 16px; display: inline-block; transition: transform 0.15s; }
+.tx-row-chev.open { transform: rotate(90deg); }
 .tx-visually-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 .tx-amount-block {
@@ -477,16 +487,34 @@ select:focus, input:focus, .btn:focus-visible, .icon-btn:focus-visible {
 }
 .tx-keypad button[data-eq] { background: var(--accent); color: var(--on-accent); }
 
-.tx-picklist { padding: 4px 14px; overflow-y: auto; }
+/* Lista de categoría/cuenta desplegada ahí mismo, sin cambiar de hoja. */
+.tx-pick-inline {
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  margin: 0 -2px;
+  padding: 2px 2px;
+}
+.tx-pick-group {
+  padding: 8px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .tx-pick-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 13px 2px;
-  border-bottom: 1px solid var(--border);
+  padding: 11px 10px;
+  border-radius: var(--radius-s);
   font-size: 14px;
   cursor: pointer;
 }
+.tx-pick-row:hover { background: var(--surface); }
+.tx-pick-row.indent { padding-left: 22px; }
 .tx-pick-row.sel { color: var(--accent); font-weight: 600; }
 .tx-pick-check { color: var(--accent); font-weight: 700; }
 
@@ -719,6 +747,38 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   color: var(--muted); font-size: 13px; padding: 0 4px; border-radius: 50%;
 }
 .cat-chip button:hover { color: var(--crit); }
+
+.subcats-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.subcats-toggle input { width: 32px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+
+.cat-group-list { display: grid; gap: 6px; }
+.cat-group-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 9px 12px;
+  background: var(--surface);
+}
+.cat-group-main { min-width: 0; }
+.cat-group-main .cell-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  display: block;
+}
 
 /* ---------- Hero: patrimonio neto ---------- */
 .hero {

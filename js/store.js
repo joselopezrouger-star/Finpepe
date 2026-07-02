@@ -7,27 +7,44 @@ const Store = (() => {
   const uid = () =>
     Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 
+  // Categorías con dos niveles: un grupo (parentId: null) y, opcionalmente,
+  // subcategorías dentro de ese grupo (parentId apunta al grupo). Un grupo
+  // sin subcategorías se usa directamente como categoría.
   const seedCategories = () => [
-    // Gastos
-    { id: 'c-super',    name: 'Supermercado',   type: 'gasto' },
-    { id: 'c-comida',   name: 'Comida afuera',  type: 'gasto' },
-    { id: 'c-transp',   name: 'Transporte',     type: 'gasto' },
-    { id: 'c-vivienda', name: 'Vivienda',       type: 'gasto' },
-    { id: 'c-servicios',name: 'Servicios',      type: 'gasto' },
-    { id: 'c-salud',    name: 'Salud',          type: 'gasto' },
-    { id: 'c-educ',     name: 'Educación',      type: 'gasto' },
-    { id: 'c-entret',   name: 'Entretenimiento',type: 'gasto' },
-    { id: 'c-ropa',     name: 'Ropa',           type: 'gasto' },
-    { id: 'c-viajes',   name: 'Viajes',         type: 'gasto' },
-    { id: 'c-impuestos',name: 'Impuestos',      type: 'gasto' },
-    { id: 'c-subs',     name: 'Suscripciones',  type: 'gasto' },
-    { id: 'c-otros-g',  name: 'Otros gastos',   type: 'gasto' },
+    // Gastos — grupos
+    { id: 'c-casa',      name: 'Casa',            type: 'gasto', parentId: null },
+    { id: 'c-comida',    name: 'Comida',          type: 'gasto', parentId: null },
+    { id: 'c-auto',      name: 'Auto y transporte', type: 'gasto', parentId: null },
+    { id: 'c-salud',     name: 'Salud',           type: 'gasto', parentId: null },
+    { id: 'c-entret',    name: 'Entretenimiento', type: 'gasto', parentId: null },
+    { id: 'c-ropa',      name: 'Ropa',            type: 'gasto', parentId: null },
+    { id: 'c-educ',      name: 'Educación',       type: 'gasto', parentId: null },
+    { id: 'c-viajes',    name: 'Viajes',          type: 'gasto', parentId: null },
+    { id: 'c-impuestos', name: 'Impuestos',       type: 'gasto', parentId: null },
+    { id: 'c-otros-g',   name: 'Otros gastos',    type: 'gasto', parentId: null },
+    // Gastos — subcategorías
+    { id: 'c-casa-super',    name: 'Supermercado', type: 'gasto', parentId: 'c-casa' },
+    { id: 'c-casa-serv',     name: 'Servicios',    type: 'gasto', parentId: 'c-casa' },
+    { id: 'c-casa-alquiler', name: 'Alquiler',     type: 'gasto', parentId: 'c-casa' },
+    { id: 'c-casa-limpieza', name: 'Limpieza',     type: 'gasto', parentId: 'c-casa' },
+    { id: 'c-comida-deliv',  name: 'Delivery',     type: 'gasto', parentId: 'c-comida' },
+    { id: 'c-comida-resto',  name: 'Restaurantes', type: 'gasto', parentId: 'c-comida' },
+    { id: 'c-comida-cafe',   name: 'Cafés',        type: 'gasto', parentId: 'c-comida' },
+    { id: 'c-auto-nafta',    name: 'Nafta',        type: 'gasto', parentId: 'c-auto' },
+    { id: 'c-auto-peajes',   name: 'Peajes',       type: 'gasto', parentId: 'c-auto' },
+    { id: 'c-auto-mecanico', name: 'Mecánico',     type: 'gasto', parentId: 'c-auto' },
+    { id: 'c-auto-publico',  name: 'Transporte público', type: 'gasto', parentId: 'c-auto' },
+    { id: 'c-salud-farmacia',name: 'Farmacia',     type: 'gasto', parentId: 'c-salud' },
+    { id: 'c-salud-medico',  name: 'Médico',       type: 'gasto', parentId: 'c-salud' },
+    { id: 'c-salud-seguro',  name: 'Seguro médico', type: 'gasto', parentId: 'c-salud' },
+    { id: 'c-entret-stream', name: 'Streaming',    type: 'gasto', parentId: 'c-entret' },
+    { id: 'c-entret-salidas',name: 'Salidas',      type: 'gasto', parentId: 'c-entret' },
     // Ingresos
-    { id: 'c-sueldo',   name: 'Sueldo',         type: 'ingreso' },
-    { id: 'c-free',     name: 'Freelance',      type: 'ingreso' },
-    { id: 'c-invers',   name: 'Inversiones',    type: 'ingreso' },
-    { id: 'c-ventas',   name: 'Ventas',         type: 'ingreso' },
-    { id: 'c-otros-i',  name: 'Otros ingresos', type: 'ingreso' },
+    { id: 'c-sueldo',   name: 'Sueldo',         type: 'ingreso', parentId: null },
+    { id: 'c-free',     name: 'Freelance',      type: 'ingreso', parentId: null },
+    { id: 'c-invers',   name: 'Inversiones',    type: 'ingreso', parentId: null },
+    { id: 'c-ventas',   name: 'Ventas',         type: 'ingreso', parentId: null },
+    { id: 'c-otros-i',  name: 'Otros ingresos', type: 'ingreso', parentId: null },
   ];
 
   const seedMethods = () => [
@@ -44,11 +61,13 @@ const Store = (() => {
       manualRate: null,         // number | null — pisa la cotización de la API
       cachedRates: null,        // { casa: {compra, venta, nombre} }
       ratesUpdatedAt: null,     // ISO string
+      useSubcategories: true,   // false = todas las categorías en una sola lista plana
     },
     categories: seedCategories(),
     methods: seedMethods(),
     // {id, date:'YYYY-MM-DD', type:'ingreso'|'gasto', amount, currency,
-    //  categoryId, methodId, note, groupId?, installment?:{k,n}, recurringId?}
+    //  categoryId, methodId, note, groupId?, installment?:{k,n}, recurringId?,
+    //  usdSnapshot?: equivalente en USD al momento de cargarlo (solo ARS)}
     transactions: [],
     // {id, name, currency, target|null, entries:[{id, date, amount, note}]}
     savings: [],
@@ -65,6 +84,8 @@ const Store = (() => {
     for (const k of Object.keys(d.settings)) {
       if (s.settings[k] === undefined) s.settings[k] = d.settings[k];
     }
+    // Categorías creadas antes de las subcategorías: quedan como grupo (sin padre).
+    for (const c of s.categories) if (c.parentId === undefined) c.parentId = null;
     return s;
   }
 
