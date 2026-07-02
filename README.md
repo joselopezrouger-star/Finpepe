@@ -30,6 +30,10 @@ una base de datos **Supabase**.
   los últimos 6 meses.
 - **Sincronización en la nube (opcional)** con Supabase: iniciás sesión y tus
   datos se guardan en tu base de datos y aparecen en todos tus dispositivos.
+- **Gastos compartidos en pareja**: creás un "hogar", invitás a tu pareja con
+  un código, y cada uno carga lo que paga (con reparto 50/50 o personalizado).
+  La app calcula quién le debe a quién y permite registrar pagos para saldar
+  la deuda. Las cuentas de cada uno siguen siendo privadas — esto es aparte.
 - **Respaldo**: exportar/importar todos los datos en JSON y exportar
   movimientos a CSV (compatible con Excel).
 
@@ -52,6 +56,25 @@ sincronizar entre el teléfono y la computadora, conectá tu proyecto de Supabas
 La `anon key` es una clave **pública** pensada para usarse en el navegador: es
 seguro dejarla en la app publicada, porque Row Level Security es lo que protege
 los datos. Por eso el modelo funciona sobre GitHub Pages sin backend propio.
+
+En la interfaz nueva de Supabase, la "anon key" se llama **"Publishable key"** y
+el **Project URL** está en **Settings → Data API**, o tocando el botón verde
+**"Connect"** arriba a la derecha del dashboard.
+
+### Cuentas separadas y gastos compartidos
+
+Cada persona crea su **propia cuenta** (su email y contraseña) contra el mismo
+proyecto de Supabase: sus movimientos, tarjetas y ahorros quedan totalmente
+privados entre sí gracias a Row Level Security — no hace falta nada especial
+para esto.
+
+Para llevar los **gastos compartidos** (por ejemplo alquiler o el super, que
+pagan entre los dos), andá a la pestaña **Compartido**: uno de los dos crea un
+"hogar" y genera un código de invitación; el otro lo carga desde la misma
+pestaña para unirse. A partir de ahí, cada uno registra lo que pagó y la app
+calcula el saldo (quién le debe a quién) y permite anotar cuando se paga esa
+deuda. Esto vive en tablas separadas (`households`, `shared_expenses`, etc.) y
+no mezcla ni duplica los movimientos personales de cada cuenta.
 
 ## Publicar en GitHub Pages
 

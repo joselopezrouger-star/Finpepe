@@ -128,9 +128,128 @@ const Cloud = (() => {
     }, 1200);
   }
 
+  /* ---------------- Hogar compartido (gastos en pareja) ---------------- */
+
+  function randomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin caracteres ambiguos
+    let s = '';
+    for (let i = 0; i < 7; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    return s;
+  }
+
+  /* Hogar del usuario actual (o null) + lista de miembros ({user_id, email}). */
+  async function getHousehold() {
+    const cl = ensureClient();
+    if (!cl || !user()) return null;
+    const { data: rows, error } = await cl
+      .from('household_members')
+      .select('household_id, households(id, name, created_by)')
+      .eq('user_id', user().id)
+      .limit(1);
+    if (error) throw error;
+    if (!rows || !rows.length) return null;
+    const household = rows[0].households;
+    const { data: members, error: mErr } = await cl
+      .from('household_members')
+      .select('user_id, email')
+      .eq('household_id', household.id);
+    if (mErr) throw mErr;
+    return { ...household, members: members || [] };
+  }
+
+  async function createHousehold(name) {
+    const cl = ensureClient();
+    if (!cl || !user()) throw new Error('Iniciá sesión primero.');
+    const { data, error } = await cl.from('households')
+      .insert({ name: name || 'Nuestro hogar', created_by: user().id })
+      .select().single();
+    if (error) throw error;
+    const { error: mErr } = await cl.from('household_members')
+      .insert({ household_id: data.id, user_id: user().id, email: user().email });
+    if (mErr) throw mErr;
+    return data;
+  }
+
+  async function createInvite(householdId) {
+    const cl = ensureClient();
+    if (!cl || !user()) throw new Error('Iniciá sesión primero.');
+    const code = randomCode();
+    const { error } = await cl.from('household_invites')
+      .insert({ code, household_id: householdId, created_by: user().id });
+    if (error) throw error;
+    return code;
+  }
+
+  async function redeemInvite(code) {
+    const cl = ensureClient();
+    if (!cl || !user()) throw new Error('Iniciá sesión primero.');
+    const { data, error } = await cl.rpc('redeem_household_invite', { invite_code: code.trim().toUpperCase() });
+    if (error) throw error;
+    return data; // household_id
+  }
+
+  async function leaveHousehold(householdId) {
+    const cl = ensureClient();
+    if (!cl || !user()) return;
+    const { error } = await cl.from('household_members')
+      .delete().eq('household_id', householdId).eq('user_id', user().id);
+    if (error) throw error;
+  }
+
+  async function listSharedExpenses(householdId) {
+    const cl = ensureClient();
+    if (!cl) return [];
+    const { data, error } = await cl.from('shared_expenses')
+      .select('*').eq('household_id', householdId)
+      .order('date', { ascending: false }).order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function addSharedExpense(row) {
+    const cl = ensureClient();
+    if (!cl || !user()) throw new Error('Iniciá sesión primero.');
+    const { error } = await cl.from('shared_expenses').insert({ ...row, created_by: user().id });
+    if (error) throw error;
+  }
+
+  async function deleteSharedExpense(id) {
+    const cl = ensureClient();
+    if (!cl) return;
+    const { error } = await cl.from('shared_expenses').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  async function listSettlements(householdId) {
+    const cl = ensureClient();
+    if (!cl) return [];
+    const { data, error } = await cl.from('shared_settlements')
+      .select('*').eq('household_id', householdId)
+      .order('date', { ascending: false }).order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function addSettlement(row) {
+    const cl = ensureClient();
+    if (!cl || !user()) throw new Error('Iniciá sesión primero.');
+    const { error } = await cl.from('shared_settlements').insert(row);
+    if (error) throw error;
+  }
+
+  async function deleteSettlement(id) {
+    const cl = ensureClient();
+    if (!cl) return;
+    const { error } = await cl.from('shared_settlements').delete().eq('id', id);
+    if (error) throw error;
+  }
+
   return {
     available, config, saveConfig, clearConfig, isConfigured,
     init, user, signUp, signIn, signOut, pull, push, schedulePush,
+    getHousehold, createHousehold, createInvite, redeemInvite, leaveHousehold,
+    listSharedExpenses, addSharedExpense, deleteSharedExpense,
+    listSettlements, addSettlement, deleteSettlement,
     get lastError() { return lastError; },
   };
 })();

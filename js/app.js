@@ -1580,6 +1580,12 @@
   // Al cambiar el estado de sesión: traer datos remotos o subir los locales.
   async function onAuthChanged() {
     renderAccountChip();
+    // Cambió la sesión (login/logout/otra cuenta): invalida la caché de
+    // "Compartido" para no arrastrar el hogar de una cuenta anterior.
+    shared.loaded = false;
+    shared.household = null;
+    shared.expenses = [];
+    shared.settlements = [];
     if (Cloud.user()) {
       try {
         const remote = await Cloud.pull();
@@ -1613,11 +1619,363 @@
     }
   }
 
+  /* ================= Vista: Compartido (gastos en pareja) ================= */
+  // Caché en memoria: esta vista vive en Supabase, no en Store (la usan dos
+  // cuentas distintas a la vez), así que se carga aparte de forma asíncrona.
+  const shared = { loaded: false, loading: false, household: null, expenses: [], settlements: [] };
+
+  function sharedMe() { return Cloud.user(); }
+  function sharedPartner() {
+    if (!shared.household) return null;
+    const me = sharedMe();
+    return shared.household.members.find((m) => m.user_id !== me.id) || null;
+  }
+
+  async function loadShared() {
+    if (shared.loading) return;
+    shared.loading = true;
+    try {
+      shared.household = await Cloud.getHousehold();
+      if (shared.household) {
+        [shared.expenses, shared.settlements] = await Promise.all([
+          Cloud.listSharedExpenses(shared.household.id),
+          Cloud.listSettlements(shared.household.id),
+        ]);
+      } else {
+        shared.expenses = [];
+        shared.settlements = [];
+      }
+    } catch (e) {
+      console.error('Error al cargar gastos compartidos', e);
+    }
+    shared.loaded = true;
+    shared.loading = false;
+    if (ui.view === 'compartido') render();
+  }
+
+  function sharedBalance() {
+    const me = sharedMe();
+    const partner = sharedPartner();
+    if (!me || !partner) return 0;
+    let bal = 0;
+    for (const e of shared.expenses) {
+      const amt = convOrNull(Number(e.amount), e.currency);
+      if (amt == null) continue;
+      const owedToPayer = amt * (1 - Number(e.payer_share));
+      bal += (e.paid_by === me.id) ? owedToPayer : -owedToPayer;
+    }
+    for (const s of shared.settlements) {
+      const amt = convOrNull(Number(s.amount), s.currency);
+      if (amt == null) continue;
+      if (s.from_user === partner.user_id && s.to_user === me.id) bal -= amt;
+      if (s.from_user === me.id && s.to_user === partner.user_id) bal += amt;
+    }
+    return bal;
+  }
+
+  function partnerLabel(m) {
+    return (m && m.email) ? m.email.split('@')[0] : 'tu pareja';
+  }
+
+  function createHouseholdForm() {
+    const body = `
+      <div class="field">
+        <label for="h-name">Nombre <span class="hint">(opcional)</span></label>
+        <input type="text" name="name" id="h-name" maxlength="40" placeholder="Nuestro hogar">
+      </div>
+      <span class="hint">Después vas a poder generar un código para invitar a tu pareja.</span>`;
+    openDialog('Crear hogar compartido', body, {
+      submitLabel: 'Crear',
+      async onSubmit(d) {
+        try {
+          await Cloud.createHousehold(d.name.trim());
+          shared.loaded = false;
+          await loadShared();
+        } catch (e) { alert('No se pudo crear: ' + e.message); }
+      },
+    });
+  }
+
+  function joinHouseholdForm() {
+    const body = `
+      <div class="field">
+        <label for="j-code">Código de invitación</label>
+        <input type="text" name="code" id="j-code" required maxlength="10" style="text-transform:uppercase" placeholder="ABC1234">
+      </div>
+      <div class="hint" id="j-msg"></div>`;
+    const dlg = openDialog('Unirme a un hogar', body, {
+      submitLabel: 'Unirme',
+      onSubmit(d) {
+        Cloud.redeemInvite(d.code).then(async () => {
+          shared.loaded = false;
+          await loadShared();
+          dlg.close();
+        }).catch((e) => { $('#j-msg', dlg).textContent = e.message || 'Código inválido.'; });
+        return false;
+      },
+    });
+  }
+
+  function sharedExpenseForm() {
+    const partner = sharedPartner();
+    const body = `
+      <div class="field-row">
+        <div class="field">
+          <label for="se-amount">Monto</label>
+          <input type="number" name="amount" id="se-amount" min="0.01" step="0.01" required inputmode="decimal">
+        </div>
+        <div class="field">
+          <label for="se-currency">Moneda</label>
+          <select name="currency" id="se-currency">
+            <option value="ARS">ARS — pesos</option>
+            <option value="USD">USD — dólares</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="se-date">Fecha</label>
+          <input type="date" name="date" id="se-date" value="${todayStr()}" required>
+        </div>
+        <div class="field">
+          <label for="se-who">¿Quién pagó?</label>
+          <select name="paidBy" id="se-who">
+            <option value="me">Yo</option>
+            ${partner ? `<option value="partner">${esc(partnerLabel(partner))}</option>` : ''}
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="se-share">El que pagó se queda con este % del gasto</label>
+        <input type="number" name="payerPct" id="se-share" min="0" max="100" step="1" value="50" required>
+        <span class="hint">50% = se divide por igual. El resto le corresponde al otro.</span>
+      </div>
+      <div class="field">
+        <label for="se-note">Detalle <span class="hint">(opcional)</span></label>
+        <input type="text" name="note" id="se-note" maxlength="60" placeholder="Supermercado, alquiler, salida…">
+      </div>`;
+    openDialog('Nuevo gasto compartido', body, {
+      async onSubmit(d) {
+        const amount = Math.round(parseFloat(d.amount) * 100) / 100;
+        const pct = Math.min(100, Math.max(0, parseFloat(d.payerPct)));
+        if (!(amount > 0) || isNaN(pct)) return false;
+        const me = sharedMe();
+        const paidById = d.paidBy === 'partner' && partner ? partner.user_id : me.id;
+        try {
+          await Cloud.addSharedExpense({
+            household_id: shared.household.id, paid_by: paidById,
+            payer_share: pct / 100, amount, currency: d.currency,
+            date: d.date, note: d.note.trim() || null,
+          });
+          shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
+          render();
+        } catch (e) { alert('No se pudo guardar: ' + e.message); return false; }
+      },
+    });
+  }
+
+  function settlementForm() {
+    const partner = sharedPartner();
+    const me = sharedMe();
+    if (!partner) return;
+    const body = `
+      <div class="field">
+        <label for="st-dir">¿Quién le paga a quién?</label>
+        <select name="dir" id="st-dir">
+          <option value="me-to-partner">Yo le pago a ${esc(partnerLabel(partner))}</option>
+          <option value="partner-to-me">${esc(partnerLabel(partner))} me paga a mí</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="st-amount">Monto</label>
+          <input type="number" name="amount" id="st-amount" min="0.01" step="0.01" required inputmode="decimal">
+        </div>
+        <div class="field">
+          <label for="st-currency">Moneda</label>
+          <select name="currency" id="st-currency">
+            <option value="ARS">ARS — pesos</option>
+            <option value="USD">USD — dólares</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="st-date">Fecha</label>
+        <input type="date" name="date" id="st-date" value="${todayStr()}" required>
+      </div>
+      <div class="field">
+        <label for="st-note">Detalle <span class="hint">(opcional)</span></label>
+        <input type="text" name="note" id="st-note" maxlength="60">
+      </div>`;
+    openDialog('Registrar pago', body, {
+      submitLabel: 'Registrar',
+      async onSubmit(d) {
+        const amount = Math.round(parseFloat(d.amount) * 100) / 100;
+        if (!(amount > 0)) return false;
+        const fromMe = d.dir === 'me-to-partner';
+        try {
+          await Cloud.addSettlement({
+            household_id: shared.household.id,
+            from_user: fromMe ? me.id : partner.user_id,
+            to_user: fromMe ? partner.user_id : me.id,
+            amount, currency: d.currency, date: d.date, note: d.note.trim() || null,
+          });
+          shared.settlements = await Cloud.listSettlements(shared.household.id);
+          render();
+        } catch (e) { alert('No se pudo guardar: ' + e.message); return false; }
+      },
+    });
+  }
+
+  function vCompartido(el) {
+    if (!Cloud.available() || !Cloud.isConfigured() || !Cloud.user()) {
+      el.innerHTML = `<div class="card">
+        <h2 class="card-title">Gastos compartidos</h2>
+        <div class="empty">
+          Esta función es para compartir gastos con tu pareja: necesitás conectar
+          la nube e iniciar sesión primero.<br><br>
+          <button class="btn btn-primary btn-sm" id="go-settings">Ir a Ajustes</button>
+        </div>
+      </div>`;
+      $('#go-settings', el).addEventListener('click', () => { ui.view = 'ajustes'; render(); });
+      return;
+    }
+
+    if (!shared.loaded) {
+      el.innerHTML = `<div class="card"><div class="empty">Cargando…</div></div>`;
+      loadShared();
+      return;
+    }
+
+    if (!shared.household) {
+      el.innerHTML = `<div class="card">
+        <h2 class="card-title">Gastos compartidos con tu pareja</h2>
+        <div class="hint" style="margin-bottom:14px">
+          Creá un hogar y compartile un código a tu pareja para que se una.
+          Desde ahí, cada uno carga lo que paga y la app calcula quién le debe
+          a quién — sin duplicar categorías ni movimientos de la cuenta de cada uno.
+        </div>
+        <div class="inline-form">
+          <button class="btn btn-primary btn-sm" id="btn-create-house">Crear hogar</button>
+          <button class="btn btn-sm" id="btn-join-house">Ya tengo un código</button>
+        </div>
+      </div>`;
+      $('#btn-create-house', el).addEventListener('click', createHouseholdForm);
+      $('#btn-join-house', el).addEventListener('click', joinHouseholdForm);
+      return;
+    }
+
+    const partner = sharedPartner();
+    const bal = sharedBalance();
+    const balAbs = Math.abs(bal);
+    const balTxt = balAbs < 0.01
+      ? 'Están a mano'
+      : (bal > 0
+          ? `${esc(partnerLabel(partner))} te debe ${fmtDisp(balAbs)}`
+          : `Le debés a ${esc(partnerLabel(partner))} ${fmtDisp(balAbs)}`);
+
+    // Combina gastos y pagos en una sola lista cronológica.
+    const feed = [
+      ...shared.expenses.map((e) => ({ kind: 'expense', ...e })),
+      ...shared.settlements.map((s) => ({ kind: 'settlement', ...s })),
+    ].sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at));
+
+    const me = sharedMe();
+    const rowHTML = (item) => {
+      if (item.kind === 'settlement') {
+        const fromMe = item.from_user === me.id;
+        const title = fromMe ? `Le pagaste a ${esc(partnerLabel(partner))}` : `${esc(partnerLabel(partner))} te pagó`;
+        return `<div class="agenda-item">
+          <div class="agenda-icon">✅</div>
+          <div class="agenda-body">
+            <div class="agenda-name">${title}</div>
+            <div class="agenda-sub">${esc(fmtDateShort(item.date))}${item.note ? ' · ' + esc(item.note) : ''}</div>
+          </div>
+          <div class="agenda-amount">${fmtMoney(item.amount, item.currency)}</div>
+          <button class="row-del" data-delset="${esc(item.id)}" aria-label="Eliminar">✕</button>
+        </div>`;
+      }
+      const paidByMe = item.paid_by === me.id;
+      const who = paidByMe ? 'Vos' : esc(partnerLabel(partner));
+      const pct = Math.round(Number(item.payer_share) * 100);
+      return `<div class="agenda-item">
+        <div class="agenda-icon">🧾</div>
+        <div class="agenda-body">
+          <div class="agenda-name">${esc(item.note || 'Gasto compartido')}</div>
+          <div class="agenda-sub">${esc(fmtDateShort(item.date))} · Pagó ${who} · reparto ${pct}/${100 - pct}</div>
+        </div>
+        <div class="agenda-amount">${fmtMoney(item.amount, item.currency)}</div>
+        <button class="row-del" data-delexp="${esc(item.id)}" aria-label="Eliminar">✕</button>
+      </div>`;
+    };
+
+    el.innerHTML = `
+      <div class="hero">
+        <div class="hero-label">◇ Balance con ${esc(partnerLabel(partner))}</div>
+        <div class="hero-value" style="font-size:26px">${balTxt}</div>
+        ${!partner ? '<div class="hero-split"><div class="k">Esperando a que tu pareja se una con el código de invitación.</div></div>' : ''}
+      </div>
+
+      <div class="toolbar">
+        <button class="btn btn-primary btn-sm" id="btn-add-se">+ Gasto compartido</button>
+        ${partner ? '<button class="btn btn-sm" id="btn-add-settle">Registrar pago</button>' : ''}
+        <div class="spacer"></div>
+        <button class="link-btn" id="btn-refresh-shared">↻ Actualizar</button>
+        ${!partner ? '<button class="link-btn" id="btn-invite">Generar código para tu pareja</button>' : ''}
+        <button class="link-btn" id="btn-leave-house">Salir del hogar</button>
+      </div>
+      <div id="invite-box"></div>
+
+      <div class="card">
+        <h2 class="card-title">Historial</h2>
+        <div class="agenda">${feed.length ? feed.map(rowHTML).join('') : '<div class="empty">Todavía no cargaron ningún gasto compartido.</div>'}</div>
+      </div>`;
+
+    $('#btn-add-se', el).addEventListener('click', sharedExpenseForm);
+    const addSettle = $('#btn-add-settle', el);
+    if (addSettle) addSettle.addEventListener('click', settlementForm);
+    $('#btn-refresh-shared', el).addEventListener('click', () => {
+      shared.loaded = false;
+      render();
+    });
+    const inviteBtn = $('#btn-invite', el);
+    if (inviteBtn) inviteBtn.addEventListener('click', async () => {
+      try {
+        const code = await Cloud.createInvite(shared.household.id);
+        $('#invite-box', el).innerHTML = `<div class="card">
+          <div class="hint">Compartile este código a tu pareja (vale 7 días). Lo carga en <b>Compartido → Ya tengo un código</b>:</div>
+          <div class="tile-value" style="letter-spacing:0.08em;margin-top:6px">${esc(code)}</div>
+        </div>`;
+      } catch (e) { alert('No se pudo generar el código: ' + e.message); }
+    });
+    $('#btn-leave-house', el).addEventListener('click', async () => {
+      if (!confirm('¿Salir de este hogar compartido? Vas a dejar de ver el historial de gastos en común.')) return;
+      try {
+        await Cloud.leaveHousehold(shared.household.id);
+        shared.loaded = false;
+        await loadShared();
+      } catch (e) { alert('No se pudo salir: ' + e.message); }
+    });
+    $$('[data-delexp]', el).forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar este gasto compartido?')) return;
+      await Cloud.deleteSharedExpense(b.dataset.delexp);
+      shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
+      render();
+    }));
+    $$('[data-delset]', el).forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar este pago?')) return;
+      await Cloud.deleteSettlement(b.dataset.delset);
+      shared.settlements = await Cloud.listSettlements(shared.household.id);
+      render();
+    }));
+  }
+
   /* ================= Router / render ================= */
   const VIEWS = {
     resumen: vResumen,
     movimientos: vMovimientos,
     calendario: vCalendario,
+    compartido: vCompartido,
     tarjetas: vTarjetas,
     ahorros: vAhorros,
     plan: vPlan,
@@ -1640,6 +1998,9 @@
 
     $$('.tabs button').forEach((b) => b.addEventListener('click', () => {
       ui.view = b.dataset.view;
+      // "Compartido" vive en la nube y lo puede cambiar la otra persona en
+      // cualquier momento: siempre se recarga al entrar a la pestaña.
+      if (ui.view === 'compartido') shared.loaded = false;
       render();
     }));
     $$('.seg-btn').forEach((b) => b.addEventListener('click', () => {
