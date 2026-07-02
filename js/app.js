@@ -58,6 +58,26 @@
   const fmtDisp = (n) => (n == null || !isFinite(n)) ? '—' : fmtMoney(n, disp());
   const convOrNull = (amount, cur) => toDisp(amount, cur);
 
+  /* Monto de un movimiento guardado, en la moneda de visualización.
+     Los gastos/ingresos en ARS llevan un "usdSnapshot": el equivalente en
+     dólares al momento de cargarlos (con la cotización de ese día), para que
+     ver el historial en USD no se distorsione por la inflación entre medio.
+     Si no hay snapshot (movimientos viejos) o se muestra en ARS, se
+     convierte con la cotización actual como antes. */
+  function txDispAmount(t) {
+    if (t.currency === disp()) return t.amount;
+    if (disp() === 'USD' && t.currency === 'ARS' && t.usdSnapshot != null) return t.usdSnapshot;
+    return convOrNull(t.amount, t.currency);
+  }
+
+  /* Equivalente en USD de un monto en ARS, con la cotización del momento
+     (null si no hay cotización disponible todavía). */
+  function usdSnapshotFor(amount, currency) {
+    if (currency !== 'ARS') return null;
+    const r = rate();
+    return r ? Math.round(FX.convert(amount, 'ARS', 'USD', r.value) * 100) / 100 : null;
+  }
+
   // Número protagonista (ej. Patrimonio neto): parte entera grande + centavos
   // chicos en superíndice, como el saldo de una billetera/homebanking.
   function heroMoneyHTML(n, cur) {
@@ -75,7 +95,7 @@
   function sumDisp(txs) {
     let total = 0;
     for (const t of txs) {
-      const v = convOrNull(t.amount, t.currency);
+      const v = txDispAmount(t);
       if (v != null) total += v;
     }
     return total;
@@ -85,6 +105,27 @@
   const methodById = (id) => S().methods.find((m) => m.id === id);
   const catName = (id) => (catById(id) || {}).name || '—';
   const methodName = (id) => (methodById(id) || {}).name || '—';
+
+  /* Categorías con dos niveles: un grupo (parentId null) puede tener
+     subcategorías (parentId = id del grupo). Un grupo sin hijos se usa
+     directamente como categoría. */
+  const catGroups = (type) => S().categories.filter((c) => c.type === type && !c.parentId);
+  const catChildren = (parentId) => S().categories.filter((c) => c.parentId === parentId);
+  const useSubcats = () => S().settings.useSubcategories;
+
+  // Categorías que se pueden asignar a un movimiento: con subcategorías
+  // activas, solo hojas (grupos sin hijos + subcategorías); si no, todas.
+  function selectableCats(type) {
+    if (!useSubcats()) return S().categories.filter((c) => c.type === type);
+    return S().categories.filter((c) => c.type === type && (c.parentId || !catChildren(c.id).length));
+  }
+
+  // Sube hasta el grupo de más arriba (para agrupar reportes por categoría).
+  function topCategoryOf(id) {
+    const c = catById(id);
+    if (!c || !c.parentId) return id;
+    return topCategoryOf(c.parentId);
+  }
 
   const KIND_LABEL = {
     efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', billetera: 'Billetera virtual',
@@ -137,7 +178,7 @@
         S().transactions.push({
           id: Store.uid(), date: dateToStr(d), type: r.type, amount: r.amount,
           currency: r.currency, categoryId: r.categoryId, methodId: r.methodId,
-          note: r.name, recurringId: r.id,
+          note: r.name, recurringId: r.id, usdSnapshot: usdSnapshotFor(r.amount, r.currency),
         });
         r.lastGen = m;
         changed = true;
@@ -246,11 +287,10 @@
     .join('');
 
   /* ================= Formulario de movimiento ================= */
-  const cats = (type) => S().categories.filter((c) => c.type === type);
 
-  /* Carga de movimientos: pantalla grande con calculadora para el importe y
-     listas (no <select>) para categoría/cuenta, con navegación "drill-down"
-     dentro del mismo diálogo. */
+  /* Carga de movimientos: una sola pantalla con calculadora para el importe
+     y listas que se despliegan ahí mismo para categoría/cuenta (sin navegar
+     a otra hoja: se abren y cierran en el lugar). */
   function txForm(tx) {
     const editing = !!tx;
     const partner = sharedPartner();
@@ -267,11 +307,11 @@
       acc: editing ? tx.amount : null,
       op: null,
       cur: '',
+      expand: null, // null | 'category' | 'method' — qué lista está desplegada
     };
 
     const dlg = $('#dialog');
     dlg.className = 'dialog dialog-tx';
-    let mode = 'form'; // 'form' | 'category' | 'method'
 
     function applyOp(a, op, b) {
       a = a || 0;
@@ -282,6 +322,18 @@
       return b;
     }
     function numFmt(n) { return (Math.round(n * 100) / 100).toString(); }
+    // Formatea SOLO para mostrar (puntos de miles, coma decimal); el valor
+    // interno sigue siendo un string parseable con punto decimal.
+    function formatTyped(s) {
+      if (!s) return s === '' ? '' : s;
+      const neg = s.startsWith('-');
+      if (neg) s = s.slice(1);
+      const dot = s.indexOf('.');
+      const intPart = (dot === -1 ? s : s.slice(0, dot)) || '0';
+      const decPart = dot === -1 ? null : s.slice(dot + 1);
+      const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      return (neg ? '−' : '') + grouped + (decPart !== null ? ',' + decPart : '');
+    }
     function finalAmount() {
       const curVal = draft.cur === '' ? null : parseFloat(draft.cur);
       if (draft.op && curVal != null) return applyOp(draft.acc, draft.op, curVal);
@@ -290,9 +342,9 @@
     }
     function displayExpr() {
       const parts = [];
-      if (draft.acc != null) parts.push(numFmt(draft.acc));
+      if (draft.acc != null) parts.push(formatTyped(numFmt(draft.acc)));
       if (draft.op) parts.push(draft.op);
-      if (draft.cur !== '') parts.push(draft.cur);
+      if (draft.cur !== '') parts.push(formatTyped(draft.cur));
       return parts.length ? parts.join(' ') : '0';
     }
     function pressDigit(d) {
@@ -330,8 +382,33 @@
       return !editing && draft.type === 'gasto' && m && m.kind === 'credito';
     }
 
+    function pickRowHTML(item, selId, indent) {
+      return `<div class="tx-pick-row ${indent ? 'indent' : ''} ${item.id === selId ? 'sel' : ''}" data-pickid="${esc(item.id)}">
+        <span>${esc(item.name)}</span>${item.id === selId ? '<span class="tx-pick-check">✓</span>' : ''}
+      </div>`;
+    }
+    function categoryOptionsHTML() {
+      if (!useSubcats()) {
+        const items = S().categories.filter((c) => c.type === draft.type);
+        return items.length ? items.map((i) => pickRowHTML(i, draft.categoryId)).join('')
+          : '<div class="empty">No hay categorías. Agregá una desde Ajustes.</div>';
+      }
+      const groups = catGroups(draft.type);
+      if (!groups.length) return '<div class="empty">No hay categorías. Agregá una desde Ajustes.</div>';
+      return groups.map((g) => {
+        const children = catChildren(g.id);
+        if (!children.length) return pickRowHTML(g, draft.categoryId);
+        return `<div class="tx-pick-group">${esc(g.name)}</div>` +
+          children.map((c) => pickRowHTML(c, draft.categoryId, true)).join('');
+      }).join('');
+    }
+    function methodOptionsHTML() {
+      const items = S().methods;
+      return items.length ? items.map((i) => pickRowHTML(i, draft.methodId)).join('')
+        : '<div class="empty">No hay medios. Agregá uno desde Tarjetas y medios.</div>';
+    }
+
     function formHTML() {
-      const m = currentInstMethod();
       return `
       <div class="dialog-head tx-head">
         <button type="button" class="row-del" data-close aria-label="Cerrar">✕</button>
@@ -360,16 +437,19 @@
           </div>
         </div>
 
-        <div class="tx-row" data-pick="category">
+        <div class="tx-row" data-toggle="category">
           <span class="tx-row-label">Categoría</span>
           <span class="tx-row-value">${draft.categoryId ? esc(catName(draft.categoryId)) : 'Elegir'}</span>
-          <span class="tx-row-chev">›</span>
+          <span class="tx-row-chev ${draft.expand === 'category' ? 'open' : ''}">›</span>
         </div>
-        <div class="tx-row" data-pick="method">
+        ${draft.expand === 'category' ? `<div class="tx-pick-inline" data-kind="category">${categoryOptionsHTML()}</div>` : ''}
+
+        <div class="tx-row" data-toggle="method">
           <span class="tx-row-label">Cuenta</span>
           <span class="tx-row-value">${draft.methodId ? esc(methodName(draft.methodId)) : 'Elegir'}</span>
-          <span class="tx-row-chev">›</span>
+          <span class="tx-row-chev ${draft.expand === 'method' ? 'open' : ''}">›</span>
         </div>
+        ${draft.expand === 'method' ? `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML()}</div>` : ''}
 
         ${showInstallments() ? `
         <div class="tx-row-note">
@@ -405,44 +485,17 @@
       </div>`;
     }
 
-    function pickerHTML(kind) {
-      const items = kind === 'category' ? cats(draft.type) : S().methods;
-      const selId = kind === 'category' ? draft.categoryId : draft.methodId;
-      return `
-      <div class="dialog-head tx-head">
-        <button type="button" class="row-del" data-pickback aria-label="Volver">‹</button>
-        <span class="tx-head-title">${kind === 'category' ? 'Categoría' : 'Cuenta'}</span>
-        <span></span>
-      </div>
-      <div class="tx-picklist">
-        ${items.length ? items.map((i) => `
-          <div class="tx-pick-row ${i.id === selId ? 'sel' : ''}" data-pickid="${esc(i.id)}">
-            <span>${esc(i.name)}</span>${i.id === selId ? '<span class="tx-pick-check">✓</span>' : ''}
-          </div>`).join('')
-        : '<div class="empty">No hay opciones cargadas. Agregá una desde Ajustes o Tarjetas y medios.</div>'}
-      </div>`;
-    }
-
     function paint() {
-      dlg.innerHTML = mode === 'form' ? formHTML() : pickerHTML(mode);
+      dlg.innerHTML = formHTML();
       wire();
     }
 
     function wire() {
       $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => dlg.close()));
-      if (mode !== 'form') {
-        $('[data-pickback]', dlg).addEventListener('click', () => { mode = 'form'; paint(); });
-        $$('[data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
-          if (mode === 'category') draft.categoryId = row.dataset.pickid;
-          else draft.methodId = row.dataset.pickid;
-          mode = 'form';
-          paint();
-        }));
-        return;
-      }
       $$('.tx-tab', dlg).forEach((b) => b.addEventListener('click', () => {
         draft.type = b.dataset.ttype;
-        if (draft.categoryId && !cats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
+        if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
+        draft.expand = null;
         paint();
       }));
       $('[data-openrow="date"]', dlg).addEventListener('click', () => {
@@ -452,7 +505,18 @@
       });
       $('#tx-date-input', dlg).addEventListener('change', (e) => { draft.date = e.target.value; paint(); });
       $$('.cur-pill', dlg).forEach((b) => b.addEventListener('click', () => { draft.currency = b.dataset.cur; paint(); }));
-      $$('[data-pick]', dlg).forEach((row) => row.addEventListener('click', () => { mode = row.dataset.pick; paint(); }));
+      $$('[data-toggle]', dlg).forEach((row) => row.addEventListener('click', () => {
+        const k = row.dataset.toggle;
+        draft.expand = draft.expand === k ? null : k;
+        paint();
+      }));
+      $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
+        const kind = row.closest('.tx-pick-inline').dataset.kind;
+        if (kind === 'category') draft.categoryId = row.dataset.pickid;
+        else draft.methodId = row.dataset.pickid;
+        draft.expand = null;
+        paint();
+      }));
       const shareBox = $('#tx-share', dlg);
       if (shareBox) shareBox.addEventListener('change', (e) => { draft.shareIt = e.target.checked; paint(); });
       $$('.tx-keypad [data-k]', dlg).forEach((b) => b.addEventListener('click', () => pressDigit(b.dataset.k)));
@@ -476,12 +540,17 @@
       };
 
       if (editing) {
+        // El equivalente en USD queda como estaba si el monto/moneda no
+        // cambiaron (para no perder el valor histórico por editar la nota o
+        // la categoría); si cambian, se recalcula con la cotización actual.
+        const keepSnapshot = tx.currency === draft.currency && tx.amount === amount && tx.usdSnapshot != null;
+        base.usdSnapshot = keepSnapshot ? tx.usdSnapshot : usdSnapshotFor(amount, draft.currency);
         Object.assign(tx, base);
       } else {
         const instEl = $('#tx-inst', dlg);
         const n = showInstallments() ? Math.max(1, parseInt((instEl && instEl.value) || '1', 10) || 1) : 1;
         if (n === 1) {
-          S().transactions.push({ id: Store.uid(), ...base });
+          S().transactions.push({ id: Store.uid(), ...base, usdSnapshot: usdSnapshotFor(amount, draft.currency) });
         } else {
           const groupId = Store.uid();
           const per = Math.round((amount / n) * 100) / 100;
@@ -491,7 +560,7 @@
             const dk = clampDate(start.getFullYear(), start.getMonth() + (k - 1), start.getDate());
             S().transactions.push({
               id: Store.uid(), ...base, amount: cuota, date: dateToStr(dk),
-              groupId, installment: { k, n },
+              groupId, installment: { k, n }, usdSnapshot: usdSnapshotFor(cuota, draft.currency),
             });
           }
         }
@@ -566,9 +635,10 @@
     // Gastos por categoría (top 8 + Otros)
     const byCat = new Map();
     for (const t of inMonth.filter((x) => x.type === 'gasto')) {
-      const v = convOrNull(t.amount, t.currency);
+      const v = txDispAmount(t);
       if (v == null) continue;
-      byCat.set(t.categoryId, (byCat.get(t.categoryId) || 0) + v);
+      const topId = topCategoryOf(t.categoryId);
+      byCat.set(topId, (byCat.get(topId) || 0) + v);
     }
     let catItems = [...byCat.entries()]
       .map(([id, value]) => ({ label: catName(id), value }))
@@ -778,12 +848,14 @@
               const cur = t.currency === 'USD' ? ' <span class="badge badge-cur">USD</span>' : '';
               const sign = t.type === 'gasto' ? '−' : '+';
               const cls = t.type === 'gasto' ? 'amount-out' : 'amount-in';
+              const usdLine = (t.currency === 'ARS' && t.usdSnapshot != null)
+                ? `<div class="cell-sub">≈ ${esc(fmtMoney(t.usdSnapshot, 'USD'))}</div>` : '';
               return `<tr class="rowlink" data-tx="${esc(t.id)}">
                 <td class="cell-sub">${esc(fmtDateShort(t.date))}</td>
                 <td>${esc(t.note || catName(t.categoryId))}${inst}${rec}${cur}</td>
                 <td class="cell-sub">${esc(catName(t.categoryId))}</td>
                 <td class="cell-sub">${esc(methodName(t.methodId))}</td>
-                <td class="num ${cls}">${sign} ${fmtMoney(t.amount, t.currency)}</td>
+                <td class="num ${cls}">${sign} ${fmtMoney(t.amount, t.currency)}${usdLine}</td>
                 <td><button class="row-del" data-del="${esc(t.id)}" aria-label="Eliminar">✕</button></td>
               </tr>`;
             }).join('')}
@@ -1252,8 +1324,7 @@
     const editing = !!budget;
     const b = budget || { categoryId: '', amount: '', currency: 'ARS' };
     const usados = new Set(S().budgets.map((x) => x.categoryId));
-    const cats = S().categories.filter(
-      (c) => c.type === 'gasto' && (editing ? true : !usados.has(c.id)));
+    const cats = catGroups('gasto').filter((c) => editing || !usados.has(c.id));
     if (!cats.length) { alert('Todas las categorías de gasto ya tienen presupuesto.'); return; }
     const body = `
       <div class="field">
@@ -1293,7 +1364,6 @@
       name: '', type: 'gasto', amount: '', currency: 'ARS',
       categoryId: '', methodId: S().methods[0] ? S().methods[0].id : '', day: 1,
     };
-    const cats = (type) => S().categories.filter((c) => c.type === type);
     const body = `
       <div class="field">
         <label for="r-name">Nombre</label>
@@ -1328,7 +1398,7 @@
       </div>
       <div class="field">
         <label for="r-cat">Categoría</label>
-        <select name="categoryId" id="r-cat" required>${selOptions(cats(r.type), r.categoryId)}</select>
+        <select name="categoryId" id="r-cat" required>${selOptions(selectableCats(r.type), r.categoryId)}</select>
       </div>
       <div class="field">
         <label for="r-method">Medio de pago</label>
@@ -1356,7 +1426,7 @@
     });
     $('#r-type', dlg).addEventListener('change', () => {
       const sel = $('#r-cat', dlg);
-      sel.innerHTML = selOptions(cats($('#r-type', dlg).value), sel.value);
+      sel.innerHTML = selOptions(selectableCats($('#r-type', dlg).value), sel.value);
     });
   }
 
@@ -1366,7 +1436,7 @@
       (t) => t.type === 'gasto' && monthKeyOf(t.date) === mk);
 
     const budgetRows = S().budgets.map((b) => {
-      const spent = sumDisp(monthTx.filter((t) => t.categoryId === b.categoryId));
+      const spent = sumDisp(monthTx.filter((t) => topCategoryOf(t.categoryId) === b.categoryId));
       const limit = convOrNull(b.amount, b.currency);
       const pct = limit > 0 ? (spent / limit) * 100 : null;
       return { b, spent, limit, pct };
@@ -1474,6 +1544,91 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
+  /* Crear/editar un grupo de categoría: nombre, sus subcategorías (agregar,
+     renombrar, borrar) y borrar el grupo entero si queda vacío y sin uso. */
+  function categoryGroupForm(group, newType) {
+    const editing = !!group;
+    const type = editing ? group.type : newType;
+    const children = editing ? catChildren(group.id) : [];
+
+    function catInUse(id) {
+      return S().transactions.some((t) => t.categoryId === id) ||
+        S().budgets.some((x) => x.categoryId === id) ||
+        S().recurring.some((r) => r.categoryId === id);
+    }
+
+    function body() {
+      return `
+      <div class="field">
+        <label for="cg-name">Nombre</label>
+        <input type="text" name="name" id="cg-name" required maxlength="30" value="${esc(editing ? group.name : '')}">
+      </div>
+      ${editing ? `
+      <div class="field">
+        <label>Subcategorías</label>
+        <div class="cat-list" id="cg-children">
+          ${children.map((c) => `<span class="cat-chip">${esc(c.name)}<button type="button" data-childdel="${esc(c.id)}" aria-label="Eliminar ${esc(c.name)}">✕</button></span>`).join('') || '<span class="hint">Ninguna todavía.</span>'}
+        </div>
+      </div>
+      <div class="field">
+        <div class="inline-form">
+          <input type="text" id="cg-newchild" placeholder="Nueva subcategoría…" maxlength="30">
+          <button type="button" class="btn btn-sm" id="cg-addchild">Agregar</button>
+        </div>
+      </div>` : ''}`;
+    }
+
+    const dlg = openDialog(editing ? 'Editar categoría' : 'Nueva categoría', body(), {
+      footExtra: editing ? '<button type="button" class="btn btn-danger" data-delgroup style="margin-right:auto">Eliminar</button>' : '',
+      onSubmit(d) {
+        const name = d.name.trim();
+        if (!name) return false;
+        if (editing) {
+          group.name = name;
+        } else {
+          S().categories.push({ id: Store.uid(), name, type, parentId: null });
+        }
+        Store.save();
+        render();
+      },
+    });
+
+    if (editing) {
+      const refreshChildren = () => {
+        $('#cg-children', dlg).innerHTML = catChildren(group.id).map((c) =>
+          `<span class="cat-chip">${esc(c.name)}<button type="button" data-childdel="${esc(c.id)}" aria-label="Eliminar ${esc(c.name)}">✕</button></span>`
+        ).join('') || '<span class="hint">Ninguna todavía.</span>';
+        $$('[data-childdel]', dlg).forEach((b) => b.addEventListener('click', onChildDel));
+      };
+      function onChildDel(e) {
+        const id = e.currentTarget.dataset.childdel;
+        if (catInUse(id)) { alert('Esa subcategoría está en uso (movimientos, presupuestos o fijos). Reasignalos primero.'); return; }
+        S().categories = S().categories.filter((c) => c.id !== id);
+        Store.save();
+        refreshChildren();
+      }
+      $$('[data-childdel]', dlg).forEach((b) => b.addEventListener('click', onChildDel));
+      $('#cg-addchild', dlg).addEventListener('click', () => {
+        const input = $('#cg-newchild', dlg);
+        const name = input.value.trim();
+        if (!name) return;
+        S().categories.push({ id: Store.uid(), name, type, parentId: group.id });
+        Store.save();
+        input.value = '';
+        refreshChildren();
+      });
+      $('[data-delgroup]', dlg).addEventListener('click', () => {
+        if (catChildren(group.id).length) { alert('Primero borrá sus subcategorías.'); return; }
+        if (catInUse(group.id)) { alert('Esta categoría está en uso (movimientos, presupuestos o fijos). Reasignala primero.'); return; }
+        if (!confirm(`¿Eliminar “${group.name}”?`)) return;
+        S().categories = S().categories.filter((c) => c.id !== group.id);
+        Store.save();
+        dlg.close();
+        render();
+      });
+    }
+  }
+
   function vAjustes(el) {
     const s = S().settings;
     const updated = s.ratesUpdatedAt
@@ -1512,24 +1667,31 @@
         </div>
 
         <div class="card">
-          <h2 class="card-title">Categorías</h2>
-          <div style="display:grid;gap:12px">
+          <h2 class="card-title">
+            <span>Categorías</span>
+            <label class="subcats-toggle">
+              Subcategorías
+              <input type="checkbox" id="set-subcats" ${useSubcats() ? 'checked' : ''}>
+            </label>
+          </h2>
+          <div style="display:grid;gap:16px">
             ${['gasto', 'ingreso'].map((type) => `
               <div>
                 <div class="hint" style="margin-bottom:6px">${type === 'gasto' ? 'De gastos' : 'De ingresos'}</div>
-                <div class="cat-list">
-                  ${S().categories.filter((c) => c.type === type).map((c) =>
-                    `<span class="cat-chip">${esc(c.name)}<button data-cdel="${esc(c.id)}" aria-label="Eliminar ${esc(c.name)}">✕</button></span>`).join('')}
+                <div class="cat-group-list">
+                  ${catGroups(type).map((g) => {
+                    const children = catChildren(g.id);
+                    return `<div class="cat-group-row">
+                      <div class="cat-group-main">
+                        <div><b>${esc(g.name)}</b>${children.length ? ` <span class="cell-sub">(${children.length})</span>` : ''}</div>
+                        ${children.length ? `<div class="cell-sub">${esc(children.map((c) => c.name).join(', '))}</div>` : ''}
+                      </div>
+                      <button class="btn btn-sm" data-editgroup="${esc(g.id)}" aria-label="Editar ${esc(g.name)}">✎</button>
+                    </div>`;
+                  }).join('') || '<div class="empty">Sin categorías todavía.</div>'}
                 </div>
+                <button class="link-btn" data-addgroup="${type}" style="margin-top:8px">+ Agregar categoría</button>
               </div>`).join('')}
-            <div class="inline-form">
-              <input type="text" id="new-cat-name" placeholder="Nueva categoría…" maxlength="30">
-              <select id="new-cat-type">
-                <option value="gasto">Gasto</option>
-                <option value="ingreso">Ingreso</option>
-              </select>
-              <button class="btn btn-sm" id="btn-cat-add">Agregar</button>
-            </div>
           </div>
         </div>
 
@@ -1571,25 +1733,14 @@
       render();
     });
 
-    $('#btn-cat-add', el).addEventListener('click', () => {
-      const name = $('#new-cat-name', el).value.trim();
-      if (!name) return;
-      S().categories.push({ id: Store.uid(), name, type: $('#new-cat-type', el).value });
+    $('#set-subcats', el).addEventListener('change', (e) => {
+      S().settings.useSubcategories = e.target.checked;
       Store.save();
       render();
     });
-    $$('[data-cdel]', el).forEach((b) => b.addEventListener('click', () => {
-      const id = b.dataset.cdel;
-      const used = S().transactions.some((t) => t.categoryId === id) ||
-        S().budgets.some((x) => x.categoryId === id) ||
-        S().recurring.some((r) => r.categoryId === id);
-      if (used) {
-        alert('Esta categoría está en uso (movimientos, presupuestos o fijos). Reasignalos primero.');
-        return;
-      }
-      S().categories = S().categories.filter((c) => c.id !== id);
-      Store.save();
-      render();
+    $$('[data-addgroup]', el).forEach((b) => b.addEventListener('click', () => categoryGroupForm(null, b.dataset.addgroup)));
+    $$('[data-editgroup]', el).forEach((b) => b.addEventListener('click', () => {
+      categoryGroupForm(catById(b.dataset.editgroup), null);
     }));
 
     $('#btn-export-json', el).addEventListener('click', () => {

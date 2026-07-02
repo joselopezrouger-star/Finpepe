@@ -37,9 +37,17 @@ una base de datos **Supabase**.
   además avisa al hogar compartido con el reparto que elijas (50/50 por
   defecto). La app calcula quién le debe a quién y permite registrar pagos
   para saldar la deuda.
-- **Carga rápida de movimientos**: pantalla con calculadora integrada para el
-  importe (podés sumar/restar varios gastos antes de guardar) y categoría /
-  cuenta por lista, no por combos.
+- **Carga rápida de movimientos**: una sola pantalla con calculadora integrada
+  para el importe (con puntos de miles mientras tipeás, y podés sumar/restar
+  varios montos antes de guardar) y categoría/cuenta que se eligen de una
+  lista que se despliega ahí mismo, sin cambiar de pantalla.
+- **Categorías con subcategorías**: cada categoría de gasto puede tener
+  subcategorías (por ejemplo "Casa" → Supermercado, Servicios, Alquiler). Se
+  gestionan desde Ajustes, con un interruptor para usar subcategorías o una
+  lista plana simple. Los reportes agrupan el gasto por la categoría madre.
+- **Todo en pesos, también en dólares**: cada gasto o ingreso cargado en ARS
+  guarda además su equivalente en USD a la cotización del momento, para que
+  el historial en dólares no se distorsione con la inflación entre medio.
 - **Tema claro y oscuro**, con el interruptor en el encabezado.
 - **Respaldo**: exportar/importar todos los datos en JSON y exportar
   movimientos a CSV (compatible con Excel).
