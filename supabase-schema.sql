@@ -122,9 +122,14 @@ as $$
   );
 $$;
 
+-- "OR created_by = auth.uid()" es necesario para poder crear un hogar: al
+-- insertar, el cliente pide de vuelta la fila creada (.select().single()),
+-- y en ese momento todavía no existe la fila en household_members (se
+-- inserta en un segundo paso) — sin este OR, esa relectura fallaría por RLS
+-- aunque el INSERT en sí mismo esté permitido.
 drop policy if exists "households_select" on public.households;
 create policy "households_select" on public.households
-  for select using (public.is_household_member(id));
+  for select using (public.is_household_member(id) or created_by = auth.uid());
 
 drop policy if exists "households_insert" on public.households;
 create policy "households_insert" on public.households
