@@ -601,12 +601,13 @@
           <input type="text" id="tx-note" maxlength="80" value="${editing ? esc(tx.note || '') : ''}">
         </div>
       </div>
+      ${!draft.expand ? `
       <div class="tx-keypad">
         <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-op="÷">÷</button>
         <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-op="×">×</button>
         <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-op="-">−</button>
         <button type="button" data-k=".">.</button><button type="button" data-k="0">0</button><button type="button" data-eq>=</button><button type="button" data-op="+">+</button>
-      </div>
+      </div>` : ''}
       <div class="dialog-foot">
         ${editing ? '<button type="button" class="btn btn-danger" data-del style="margin-right:auto">Eliminar</button>' : ''}
         <button type="button" class="btn btn-primary" data-save>Guardar</button>
@@ -657,7 +658,8 @@
       if (shareBox) shareBox.addEventListener('change', (e) => { draft.shareIt = e.target.checked; paint(); });
       $$('.tx-keypad [data-k]', dlg).forEach((b) => b.addEventListener('click', () => pressDigit(b.dataset.k)));
       $$('.tx-keypad [data-op]', dlg).forEach((b) => b.addEventListener('click', () => pressOp(b.dataset.op)));
-      $('[data-eq]', dlg).addEventListener('click', pressEquals);
+      const eqBtn = $('[data-eq]', dlg);
+      if (eqBtn) eqBtn.addEventListener('click', pressEquals);
       $('[data-back]', dlg).addEventListener('click', pressBack);
       $('[data-save]', dlg).addEventListener('click', onSave);
       const delBtn = $('[data-del]', dlg);
@@ -811,12 +813,8 @@
 
     el.innerHTML = `
       <div class="hero">
-        <div class="hero-label">⇄ Balance del mes</div>
+        <div class="hero-label">⇄ Balance del mes · ${esc(monthLabel(mk))}</div>
         <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
-        <div class="hero-split">
-          <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div></div>
-          <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div></div>
-        </div>
       </div>
 
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
