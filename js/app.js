@@ -150,7 +150,7 @@
   }
 
   const KIND_LABEL = {
-    efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', billetera: 'Billetera virtual',
+    efectivo: 'Efectivo', debito: 'Débito', caja_ahorro: 'Caja de ahorro', credito: 'Crédito', billetera: 'Billetera virtual',
   };
 
   /* ================= Iconos (SVG propios, sin depender de una librería externa) ================= */
@@ -190,7 +190,7 @@
     const c = catById(catId);
     return c && c.type === 'ingreso' ? 'dots' : 'tag';
   }
-  const METHOD_ICON = { efectivo: 'cash', debito: 'card', credito: 'card', billetera: 'wallet' };
+  const METHOD_ICON = { efectivo: 'cash', debito: 'card', caja_ahorro: 'wallet', credito: 'card', billetera: 'wallet' };
   function methodIconName(methodId) {
     const m = methodById(methodId);
     return (m && METHOD_ICON[m.kind]) || 'card';
@@ -533,12 +533,11 @@
         <button type="button" class="tx-tab ${draft.type === 'gasto' ? 'active tx-tab-expense' : ''}" data-ttype="gasto">Gasto</button>
       </div>
       <div class="tx-body">
-        <div class="tx-row" data-openrow="date">
+        <label class="tx-row tx-row-date">
           <span class="tx-row-label">Fecha</span>
-          <span class="tx-row-value">${esc(fmtDateFull(draft.date))}</span>
-          <span class="tx-row-chev" aria-hidden="true">›</span>
-        </div>
-        <input type="date" id="tx-date-input" class="tx-visually-hidden" value="${esc(draft.date)}">
+          <span class="tx-row-value tx-row-value-date">${esc(fmtDateFull(draft.date))}</span>
+          <input type="date" id="tx-date-input" class="tx-date-native" value="${esc(draft.date)}">
+        </label>
 
         <div class="tx-amount-block">
           <div class="tx-cur-toggle">
@@ -612,12 +611,6 @@
         draft.expand = null;
         paint();
       }));
-      $('[data-openrow="date"]', dlg).addEventListener('click', () => {
-        const input = $('#tx-date-input', dlg);
-        if (input.showPicker) { try { input.showPicker(); return; } catch (e) {} }
-        input.focus();
-        input.click();
-      });
       $('#tx-date-input', dlg).addEventListener('change', (e) => { draft.date = e.target.value; paint(); });
       $$('.cur-pill', dlg).forEach((b) => b.addEventListener('click', () => { draft.currency = b.dataset.cur; paint(); }));
       $$('[data-toggle]', dlg).forEach((row) => row.addEventListener('click', () => {
@@ -1019,7 +1012,7 @@
   /* ================= Vista: Tarjetas y medios ================= */
   function methodForm(method) {
     const editing = !!method;
-    const m = method || { name: '', kind: 'credito', closingDay: 25, dueDay: 5 };
+    const m = method || { name: '', kind: 'efectivo', closingDay: 25, dueDay: 5 };
     const body = `
       <div class="field">
         <label for="m-name">Nombre</label>
@@ -2092,7 +2085,7 @@
     function paint() {
       dlg.innerHTML = `
         <div class="auth-hero">
-          <div class="mark" aria-hidden="true">F</div>
+          <img class="mark" src="assets/logo.png" alt="" aria-hidden="true">
           <h2>${draft.mode === 'in' ? 'Ingresá a tu cuenta' : 'Creá tu cuenta'}</h2>
           <p>Para sincronizar tus datos entre tus dispositivos.</p>
         </div>
