@@ -100,6 +100,25 @@
     return r ? Math.round(FX.convert(amount, 'ARS', 'USD', r.value) * 100) / 100 : null;
   }
 
+  /* Igual que usdSnapshotFor, pero busca la cotización DEL DÍA del
+     movimiento (no la del momento en que se carga) — para que un gasto
+     viejo cargado hoy quede en USD a la cotización de su propia fecha, no a
+     la de hoy. Si no hay dato histórico para esa fecha/fuente (fecha
+     futura, feriado, fuente sin cobertura, sin conexión) o hay una
+     cotización manual fijada, cae de vuelta a usdSnapshotFor(). */
+  async function usdSnapshotForDate(amount, currency, dateStr) {
+    if (currency !== 'ARS') return null;
+    const s = S().settings;
+    if (typeof s.manualRate === 'number' && s.manualRate > 0) return usdSnapshotFor(amount, currency);
+    // Fechas futuras (ej. próximas cuotas de una compra en cuotas) no tienen
+    // cotización histórica todavía: ni vale la pena pedirla por red, se usa
+    // la vigente directo.
+    if (dateStr > todayStr()) return usdSnapshotFor(amount, currency);
+    const hist = await FX.fetchHistoricalRate(s.fxSource, dateStr);
+    if (hist && hist.venta > 0) return Math.round(FX.convert(amount, 'ARS', 'USD', hist.venta) * 100) / 100;
+    return usdSnapshotFor(amount, currency);
+  }
+
   // Número protagonista (ej. Patrimonio neto): parte entera grande + centavos
   // chicos en superíndice, como el saldo de una billetera/homebanking.
   function heroMoneyHTML(n, cur) {
@@ -745,6 +764,7 @@
     }
 
     async function onSave() {
+      if (draft._saving) return;
       const amount = Math.round(finalAmount() * 100) / 100;
       if (!(amount > 0)) { alert('Ingresá un monto mayor a 0.'); return; }
       if (!draft.methodId) { alert(draft.type === 'transferencia' ? 'Elegí la cuenta de origen.' : 'Elegí una cuenta.'); return; }
@@ -754,6 +774,11 @@
       } else if (!draft.categoryId) {
         alert('Elegí una categoría.'); return;
       }
+      // Buscar la cotización histórica es una llamada de red: evita que un
+      // doble click dispare el guardado dos veces mientras espera.
+      draft._saving = true;
+      const saveBtn = $('[data-save]', dlg);
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando…'; }
       const note = ($('#tx-note', dlg) || {}).value || '';
       const base = draft.type === 'transferencia'
         ? { date: draft.date, type: draft.type, amount, currency: draft.currency,
@@ -764,15 +789,16 @@
       if (editing) {
         // El equivalente en USD queda como estaba si el monto/moneda no
         // cambiaron (para no perder el valor histórico por editar la nota o
-        // la categoría); si cambian, se recalcula con la cotización actual.
+        // la categoría); si cambian, se recalcula a la cotización DE LA
+        // FECHA del movimiento (no la de hoy).
         const keepSnapshot = tx.currency === draft.currency && tx.amount === amount && tx.usdSnapshot != null;
-        base.usdSnapshot = keepSnapshot ? tx.usdSnapshot : usdSnapshotFor(amount, draft.currency);
+        base.usdSnapshot = keepSnapshot ? tx.usdSnapshot : await usdSnapshotForDate(amount, draft.currency, draft.date);
         Object.assign(tx, base);
       } else {
         const instEl = $('#tx-inst', dlg);
         const n = showInstallments() ? Math.max(1, parseInt((instEl && instEl.value) || '1', 10) || 1) : 1;
         if (n === 1) {
-          S().transactions.push({ id: Store.uid(), ...base, usdSnapshot: usdSnapshotFor(amount, draft.currency) });
+          S().transactions.push({ id: Store.uid(), ...base, usdSnapshot: await usdSnapshotForDate(amount, draft.currency, draft.date) });
         } else {
           const groupId = Store.uid();
           const per = Math.round((amount / n) * 100) / 100;
@@ -780,9 +806,10 @@
           for (let k = 1; k <= n; k++) {
             const cuota = (k === n) ? Math.round((amount - per * (n - 1)) * 100) / 100 : per;
             const dk = clampDate(start.getFullYear(), start.getMonth() + (k - 1), start.getDate());
+            const dkStr = dateToStr(dk);
             S().transactions.push({
-              id: Store.uid(), ...base, amount: cuota, date: dateToStr(dk),
-              groupId, installment: { k, n }, usdSnapshot: usdSnapshotFor(cuota, draft.currency),
+              id: Store.uid(), ...base, amount: cuota, date: dkStr,
+              groupId, installment: { k, n }, usdSnapshot: await usdSnapshotForDate(cuota, draft.currency, dkStr),
             });
           }
         }
