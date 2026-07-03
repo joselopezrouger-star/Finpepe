@@ -1075,6 +1075,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   margin: 2px 0 14px;
   color: var(--accent);
 }
+.hero-value.neg { color: var(--crit); }
 /* Entero grande + centavos chicos "flotando" arriba, como un saldo de
    billetera/homebanking — nunca tabular-nums acá, se ve suelto en tamaños
    grandes (ver marks-and-anatomy). */
