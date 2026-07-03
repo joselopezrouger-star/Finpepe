@@ -1057,21 +1057,35 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   gap: 14px;
 }
 .hero-main { position: relative; min-width: 0; flex: 1; }
+.hero-ring-col {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
 .hero-ring { position: relative; flex: none; }
-.hero-ring-pct {
-  position: absolute; inset: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font: 700 15px var(--font-heading);
-  color: var(--ink);
+.hero-ring-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
-.hero-ring-pct span {
-  font: 650 8.5px var(--font);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+.hero-ring-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
   color: var(--muted);
-  margin-top: 1px;
+  white-space: nowrap;
 }
-@media (max-width: 380px) { .hero-ring { display: none; } }
+.hero-ring-item b { color: var(--ink); font-weight: 700; }
+.hero-ring-item .dot {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+}
+.dot-accent { background: var(--accent); }
+.dot-warn { background: var(--warn); }
+@media (max-width: 380px) { .hero-ring-col { display: none; } }
 /* Antes usaba filter:blur() para el halo, pero Safari no recorta bien un
    hijo con filter dentro de un padre con overflow:hidden (más si hay un
    ancestro position:sticky, como nuestro header) — el halo se "escapaba"
