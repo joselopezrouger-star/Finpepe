@@ -76,6 +76,16 @@
 
 * { box-sizing: border-box; }
 
+/* Cualquier elemento con el atributo "hidden" tiene que desaparecer sí o
+   sí. Por default alcanza con el estilo nativo del navegador, pero si
+   ese elemento también tiene una clase nuestra que fija su display (por
+   ej. .field-row usa display:grid), esa clase empata en especificidad
+   con la regla nativa "[hidden] { display:none }" y gana por venir
+   después en la hoja de estilos: el elemento queda "hidden" en el DOM
+   pero se sigue viendo. Pasó con los días de cierre/vencimiento de
+   medios que no son tarjeta de crédito. Esto lo evita para siempre. */
+[hidden] { display: none !important; }
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -602,6 +612,41 @@ dialog[open].dialog {
 .tx-pick-row.indent { padding-left: 22px; }
 .tx-pick-row.sel { color: var(--accent); font-weight: 600; }
 .tx-pick-check { color: var(--accent); font-weight: 700; }
+
+/* Grilla de categorías/subcategorías (tarjetas en vez de lista). Tocar
+   una con hijos "entra" a una sub-grilla con las subcategorías. */
+.cat-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 4px 2px;
+}
+.cat-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 58px;
+  padding: 8px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  text-align: center;
+  cursor: pointer;
+}
+.cat-tile:hover { border-color: var(--border-strong); }
+.cat-tile.sel { border-color: var(--accent); background: var(--accent-wash); }
+.cat-tile-name { font-size: 12px; font-weight: 600; line-height: 1.25; }
+.cat-tile.sel .cat-tile-name { color: var(--accent); }
+.cat-tile-chev { font-size: 10px; color: var(--muted); }
+.cat-tile-crumb {
+  padding: 8px 8px 10px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--accent);
+  cursor: pointer;
+}
 
 /* ---------- Login (pantalla grande) ---------- */
 .dialog-auth { width: min(400px, calc(100vw - 24px)); }
