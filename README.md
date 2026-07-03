@@ -98,6 +98,35 @@ contraseña por email** (una dirección inventada no puede recibirlo) — si
 alguien la olvida, se resetea a mano desde el dashboard de Supabase
 (**Authentication → Users**).
 
+### Iniciar sesión con Google (opcional)
+
+Además de usuario/contraseña, se puede entrar con una cuenta de Google. Como
+esto involucra credenciales propias de cada proyecto, hay que configurarlo
+una vez a mano (no viene activado de fábrica como sí viene Supabase):
+
+1. En **Google Cloud Console** ([console.cloud.google.com](https://console.cloud.google.com))
+   → **APIs & Services → Credentials → Create Credentials → OAuth client ID**,
+   tipo **Web application**. En **Authorized redirect URIs** agregá:
+   `https://<tu-proyecto>.supabase.co/auth/v1/callback` (lo encontrás en
+   Supabase → **Authentication → Sign In / Providers → Google**, ya viene
+   armado ahí). Al terminar te da un **Client ID** y un **Client secret**.
+2. En Supabase → **Authentication → Sign In / Providers → Google**, activá el
+   proveedor y pegá ese Client ID y Client secret. Guardá.
+3. En Supabase → **Authentication → URL Configuration → Redirect URLs**,
+   agregá la URL donde vive la app publicada (por ejemplo
+   `https://<tu-usuario>.github.io/Finpepe/`) — si no está en esta lista,
+   Supabase rechaza la vuelta desde Google.
+
+Con eso, el botón **"Continuar con Google"** ya aparece funcional en la
+pantalla de inicio de sesión. Importante: una cuenta de Google es una
+**identidad distinta** a una cuenta usuario/contraseña — si ya veías tus
+datos entrando con usuario y contraseña, iniciar sesión con Google por
+primera vez te va a llevar a una cuenta nueva y vacía, no a la misma. Para
+sumar Google a la cuenta que ya tenés (y no perder de vista tus datos), andá
+a **Ajustes**, con tu sesión de usuario/contraseña iniciada, y tocá
+**"Vincular con Google"** en la tarjeta de sincronización — así ambas formas
+de entrar apuntan a la misma cuenta.
+
 ### Cuentas separadas y gastos compartidos
 
 Cada persona crea su **propia cuenta** (su usuario y contraseña) contra el
