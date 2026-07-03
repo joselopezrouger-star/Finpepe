@@ -187,20 +187,38 @@
     <path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.68 9c0-.593.102-1.17.284-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"/>
     <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"/>
   </svg>`;
-  // Anillo de progreso circular (ej. "% del mes que resta sin gastar").
-  function ringSvg(pct, size) {
-    size = size || 72;
-    const stroke = 7;
-    const r = size / 2 - stroke;
-    const c = 2 * Math.PI * r;
-    const p = Math.max(0, Math.min(100, pct));
-    const off = c * (1 - p / 100);
+  // Anillo doble: aro externo = % del ingreso que todavía no se gastó, aro
+  // interno = % del mes que todavía falta transcurrir. Comparar los dos de
+  // un vistazo muestra si el ritmo de gasto va por delante o por detrás del
+  // calendario (ej. "me queda 50% de plata pero 70% del mes", voy flojo).
+  function ringSvg2(pctOuter, pctInner, size) {
+    size = size || 76;
+    const arc = (r, stroke, pct, colorVar) => {
+      const c = 2 * Math.PI * r;
+      const p = Math.max(0, Math.min(100, pct));
+      const off = c * (1 - p / 100);
+      return `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(--border)" stroke-width="${stroke}"/>
+        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(${colorVar})" stroke-width="${stroke}"
+          stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
+          transform="rotate(-90 ${size / 2} ${size / 2})"/>`;
+    };
+    const strokeO = 7, strokeI = 6, gap = 3;
+    const rO = size / 2 - strokeO / 2 - 1;
+    const rI = rO - strokeO / 2 - gap - strokeI / 2;
     return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(--border)" stroke-width="${stroke}"/>
-      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(--accent)" stroke-width="${stroke}"
-        stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
-        transform="rotate(-90 ${size / 2} ${size / 2})"/>
+      ${arc(rO, strokeO, pctOuter, '--accent')}
+      ${arc(rI, strokeI, pctInner, '--warn')}
     </svg>`;
+  }
+  // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya terminó).
+  function monthLeftPct(mk) {
+    const cm = curMonth();
+    if (mk < cm) return 0;
+    if (mk > cm) return 100;
+    const [y, m] = mk.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const day = new Date().getDate();
+    return Math.max(0, Math.min(100, Math.round(((daysInMonth - day) / daysInMonth) * 100)));
   }
   const CAT_ICON = {
     'c-casa': 'home', 'c-comida': 'food', 'c-auto': 'car', 'c-salud': 'heart',
@@ -388,6 +406,17 @@
       : 'Tus datos se guardan únicamente en este navegador.';
   }
 
+  // El <dialog> nativo no bloquea por sí solo el scroll de la página que
+  // queda atrás (no es un CSS que se nos escapó, es una limitación real del
+  // elemento): sin esto, en el celular se puede arrastrar y scrollear lo de
+  // atrás mientras el modal está abierto (se nota sobre todo con el
+  // formulario de movimiento, que es el más alto). El listener de 'close'
+  // que restaura el overflow se registra una sola vez, en init().
+  function openModal(dlg) {
+    document.body.style.overflow = 'hidden';
+    dlg.showModal();
+  }
+
   /* ================= Diálogo genérico ================= */
   function openDialog(title, bodyHTML, { submitLabel = 'Guardar', onSubmit, footExtra = '' } = {}) {
     const dlg = $('#dialog');
@@ -417,7 +446,7 @@
       }
       if (onSubmit(data, dlg) !== false) dlg.close();
     });
-    dlg.showModal();
+    openModal(dlg);
     return dlg;
   }
 
@@ -588,8 +617,8 @@
 
         <div class="tx-amount-block">
           <div class="tx-cur-toggle">
-            <button type="button" class="cur-pill ${draft.currency === 'ARS' ? 'active' : ''}" data-cur="ARS">$</button>
-            <button type="button" class="cur-pill ${draft.currency === 'USD' ? 'active' : ''}" data-cur="USD">US$</button>
+            <button type="button" class="cur-pill ${draft.currency === 'ARS' ? 'active' : ''}" data-cur="ARS">ARS</button>
+            <button type="button" class="cur-pill ${draft.currency === 'USD' ? 'active' : ''}" data-cur="USD">USD</button>
           </div>
           <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : draft.type === 'gasto' ? 'is-expense' : ''}">
             <span>${esc(displayExpr())}</span>
@@ -779,7 +808,7 @@
     }
 
     paint();
-    dlg.showModal();
+    openModal(dlg);
   }
 
   function deleteTx(tx) {
@@ -867,6 +896,7 @@
     }).sort((a, b) => a.cy.due - b.cy.due);
 
     const pctLeft = exp <= 0 ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round(((inc - exp) / inc) * 100))) : 0);
+    const pctMonthLeft = monthLeftPct(mk);
 
     const sharedPartnerM = Cloud.user() ? sharedPartner() : null;
     const sharedWidget = (shared.household && sharedPartnerM) ? (() => {
@@ -891,9 +921,12 @@
             <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
           </div>
         </div>
-        <div class="hero-ring">
-          ${ringSvg(pctLeft)}
-          <div class="hero-ring-pct">${pctLeft}%<span>resta</span></div>
+        <div class="hero-ring-col">
+          <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft)}</div>
+          <div class="hero-ring-legend">
+            <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
+            <div class="hero-ring-item"><span class="dot dot-warn"></span>Del mes: <b>${pctMonthLeft}%</b></div>
+          </div>
         </div>
       </div>
 
@@ -2183,7 +2216,16 @@
     if (login) login.addEventListener('click', authDialog);
     const out = $('#btn-cloud-signout', root);
     if (out) out.addEventListener('click', async () => {
+      // Sube lo pendiente ANTES de cerrar sesión (una vez deslogueado,
+      // Cloud.push ya no tiene usuario y no podría subir nada).
+      try { await Cloud.push(S()); } catch (e) { console.error(e); }
       await Cloud.signOut();
+      // Si no se borrara lo local acá, quien abra la app después en este
+      // mismo navegador (por ejemplo tu pareja con su propia cuenta) vería
+      // — o peor, terminaría subiendo a su cuenta — los datos de la sesión
+      // anterior. Store.reset() ya no dispara sincronización porque para
+      // este momento Cloud.user() es null.
+      Store.reset();
       onAuthChanged();
     });
     const linkGoogle = $('#btn-cloud-link-google', root);
@@ -2213,7 +2255,7 @@
         <div class="auth-hero">
           <img class="mark" src="assets/logo.png" alt="" aria-hidden="true">
           <h2>${draft.mode === 'in' ? 'Ingresá a tu cuenta' : 'Creá tu cuenta'}</h2>
-          <p>Para sincronizar tus datos entre tus dispositivos.</p>
+          <p>Con Google o con usuario y contraseña: guardá tus datos y sincronizalos entre tus dispositivos.</p>
         </div>
         <div class="auth-tabs">
           <button type="button" class="auth-tab ${draft.mode === 'in' ? 'active' : ''}" data-amode="in">Ingresar</button>
@@ -2228,7 +2270,7 @@
                  placeholder="Contraseña (mínimo 6 caracteres)" value="${esc(draft.pass)}">
           <div class="auth-msg" id="au-msg"></div>
           <button type="button" class="btn btn-primary auth-submit" id="au-submit">${draft.mode === 'in' ? 'Ingresar' : 'Crear cuenta'}</button>
-          <button type="button" class="link-btn" data-close style="justify-self:center">Cancelar</button>
+          <button type="button" class="link-btn" data-close style="justify-self:center">Continuar sin cuenta</button>
         </div>`;
       wire();
     }
@@ -2253,7 +2295,7 @@
     }
 
     paint();
-    dlg.showModal();
+    openModal(dlg);
   }
 
   async function doAuth(mode, username, password, dlg) {
@@ -2347,6 +2389,11 @@
     try {
       await Cloud.init(onAuthChanged);
       await onAuthChanged();
+      // Lo primero que se ve al abrir la app (si no hay sesión): invitar a
+      // iniciar sesión o crear cuenta, con Google o usuario/contraseña. El
+      // diálogo tiene su propio botón para seguir sin cuenta, así que no
+      // bloquea el uso offline.
+      if (!Cloud.user()) authDialog();
     } catch (e) {
       console.error('Init nube', e);
       renderAccountChip();
@@ -2786,6 +2833,9 @@
       ui.view = 'ajustes';
       render();
     });
+    // Restaura el scroll de la página al cerrar el diálogo, sin importar
+    // cómo se cerró (botón, Escape, o dlg.close() desde código): ver openModal().
+    $('#dialog').addEventListener('close', () => { document.body.style.overflow = ''; });
 
     // Cada guardado local se sube a la nube (si hay sesión activa).
     Store.onSave((state) => Cloud.schedulePush(state));

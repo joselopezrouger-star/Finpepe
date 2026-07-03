@@ -1,4 +1,4 @@
-# Finpepe — Finanzas personales
+# FinPep — Finanzas personales
 
 Web app simple y profesional para ordenar tus finanzas: ingresos, gastos,
 tarjetas, ahorros y presupuestos, en **pesos argentinos y dólares**.
