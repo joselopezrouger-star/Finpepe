@@ -322,6 +322,7 @@
 
   function renderRateChip() {
     const chip = $('#rate-chip');
+    if (!chip) return;
     const r = rate();
     chip.classList.toggle('rate-missing', !r);
     chip.textContent = r
@@ -334,18 +335,11 @@
   function currentTheme() {
     return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
   }
-  function updateThemeButton() {
-    const btn = $('#theme-toggle');
-    const dark = currentTheme() === 'dark';
-    btn.textContent = dark ? '☀' : '◐';
-    btn.title = dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
-  }
   function toggleTheme() {
     const next = currentTheme() === 'dark' ? 'light' : 'dark';
     if (next === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
     else document.documentElement.removeAttribute('data-theme');
     localStorage.setItem(THEME_KEY, next);
-    updateThemeButton();
     render(); // Repinta los gráficos con los colores del nuevo tema.
   }
 
@@ -815,18 +809,13 @@
       };
     }).sort((a, b) => a.cy.due - b.cy.due);
 
-    // Patrimonio neto = activos (ahorros) − deudas (resúmenes de tarjeta a pagar)
-    const activos = savTotal;
-    const deudas = cardRows.reduce((a, r) => a + r.current + r.toPay, 0);
-    const neto = activos - deudas;
-
     el.innerHTML = `
       <div class="hero">
-        <div class="hero-label">◇ Patrimonio neto</div>
-        <div class="hero-value">${heroMoneyHTML(neto, disp())}</div>
+        <div class="hero-label">⇄ Balance del mes</div>
+        <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
         <div class="hero-split">
-          <div><div class="k">Activos (ahorros)</div><div class="v">${fmtDisp(activos)}</div></div>
-          <div><div class="k">Deudas (tarjetas)</div><div class="v">${fmtDisp(deudas)}</div></div>
+          <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div></div>
+          <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div></div>
         </div>
       </div>
 
@@ -851,10 +840,6 @@
           <div class="tile-label"><span class="tile-badge tile-badge-expense">↑</span>Gastos</div>
           <div class="tile-value">${fmtDisp(exp)}</div>
           ${delta(exp, expPrev, false)}
-        </div>
-        <div class="card tile">
-          <div class="tile-label"><span class="tile-badge tile-badge-neutral">⇄</span>Balance del mes</div>
-          <div class="tile-value ${balance > 0 ? 'pos' : balance < 0 ? 'neg' : ''}">${fmtDisp(balance)}</div>
         </div>
         <div class="card tile">
           <div class="tile-label"><span class="tile-badge tile-badge-neutral">◆</span>Ahorros totales</div>
@@ -1868,6 +1853,15 @@
         <div class="card" id="account-card">${accountCardHTML()}</div>
 
         <div class="card">
+          <h2 class="card-title">Apariencia</h2>
+          <div class="inline-form">
+            <button class="btn btn-sm" id="btn-theme-toggle" type="button">
+              ${currentTheme() === 'dark' ? '☀ Cambiar a modo claro' : '◐ Cambiar a modo oscuro'}
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
           <h2 class="card-title">Cotización del dólar</h2>
           <div class="inline-form" style="margin-bottom:10px">
             <label for="set-fx" class="hint">Tipo de cambio:</label>
@@ -1938,6 +1932,7 @@
       </div>`;
 
     wireAccountCard(el);
+    $('#btn-theme-toggle', el).addEventListener('click', toggleTheme);
     $('#set-fx', el).addEventListener('change', (e) => {
       S().settings.fxSource = e.target.value;
       Store.save();
@@ -2024,10 +2019,6 @@
     }
   }
 
-  function onAccountChip() {
-    if (Cloud.isConfigured() && !Cloud.user()) authDialog();
-    else { ui.view = 'ajustes'; render(); }
-  }
 
   function accountCardHTML() {
     const c = Cloud.config();
@@ -2652,11 +2643,6 @@
       Store.save();
       render();
     }));
-    $('#btn-new-tx').addEventListener('click', () => txForm(null));
-    $('#rate-chip').addEventListener('click', refreshRates);
-    $('#account-chip').addEventListener('click', onAccountChip);
-    $('#theme-toggle').addEventListener('click', toggleTheme);
-    updateThemeButton();
     $('#footer-backup').addEventListener('click', (e) => {
       e.preventDefault();
       ui.view = 'ajustes';
