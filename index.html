@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow:wght@500;600;700;800&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=20260703a">
 <script>
   // Aplica el tema guardado antes de pintar la página, para evitar el
   // parpadeo de pasar de un tema a otro un instante después de cargar.
@@ -65,11 +65,16 @@
 
 <dialog id="dialog" class="dialog"></dialog>
 
+<!-- El "?v=" en los archivos locales de acá abajo (y en styles.css más
+     arriba) es para forzar a que el navegador pida la versión nueva en
+     vez de servir una copia vieja en caché: sin esto, actualizar el
+     código en GitHub Pages no siempre se nota enseguida en el celular.
+     Subí este número (fecha + letra) cada vez que cambie algún .js o .css. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/store.js"></script>
-<script src="js/fx.js"></script>
-<script src="js/cloud.js"></script>
-<script src="js/charts.js"></script>
-<script src="js/app.js"></script>
+<script src="js/store.js?v=20260703a"></script>
+<script src="js/fx.js?v=20260703a"></script>
+<script src="js/cloud.js?v=20260703a"></script>
+<script src="js/charts.js?v=20260703a"></script>
+<script src="js/app.js?v=20260703a"></script>
 </body>
 </html>
