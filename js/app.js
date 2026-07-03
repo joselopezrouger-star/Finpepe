@@ -46,6 +46,28 @@
     const s = dateFullFmt.format(parseDate(str));
     return s.charAt(0).toUpperCase() + s.slice(1);
   };
+  const weekdayFmt = new Intl.DateTimeFormat('es-AR', { weekday: 'long' });
+  function dayGroupLabel(dateStr) {
+    const yesterday = new Date(); yesterday.setHours(0, 0, 0, 0); yesterday.setDate(yesterday.getDate() - 1);
+    let rel;
+    if (dateStr === todayStr()) rel = 'Hoy';
+    else if (dateStr === dateToStr(yesterday)) rel = 'Ayer';
+    else {
+      const w = weekdayFmt.format(parseDate(dateStr));
+      rel = w.charAt(0).toUpperCase() + w.slice(1);
+    }
+    return `${rel}, ${fmtDay(parseDate(dateStr))}`;
+  }
+  /* Agrupa una lista ya ordenada por fecha (desc) en bloques por día. */
+  function dayGroups(list) {
+    const groups = [];
+    for (const t of list) {
+      const last = groups[groups.length - 1];
+      if (last && last.dateStr === t.date) last.items.push(t);
+      else groups.push({ dateStr: t.date, items: [t] });
+    }
+    return groups;
+  }
 
   const nfARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
   const nfUSD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -130,6 +152,49 @@
   const KIND_LABEL = {
     efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', billetera: 'Billetera virtual',
   };
+
+  /* ================= Iconos (SVG propios, sin depender de una librería externa) ================= */
+  const ICON_PATHS = {
+    home: '<path d="M3 9.5 10 3l7 6.5"/><path d="M5 8v9h10V8"/><path d="M8.3 17v-4.3h3.4V17"/>',
+    food: '<path d="M6 3v6a2 2 0 0 0 4 0V3"/><path d="M8 9v8"/><path d="M14 3c-1.5 0-2 2-2 4s.9 3 2 3v7"/>',
+    car: '<path d="M4 12l1.4-4.4A2 2 0 0 1 7.3 6.2h5.4a2 2 0 0 1 1.9 1.4L16 12"/><rect x="3" y="12" width="14" height="4" rx="1.4"/><circle cx="6.6" cy="17" r="1.2"/><circle cx="13.4" cy="17" r="1.2"/>',
+    heart: '<path d="M10 17s-6-3.7-6-8.2A3.8 3.8 0 0 1 10 6a3.8 3.8 0 0 1 6 2.8C16 13.3 10 17 10 17z"/>',
+    film: '<rect x="3" y="4" width="14" height="12" rx="2"/><path d="M8.3 7.3v5.4l4.3-2.7-4.3-2.7z"/>',
+    shirt: '<path d="M7 3 4 5.5 5.5 8 7 6.8V17h6V6.8L14.5 8 16 5.5 13 3l-1.4 1.4a2.2 2.2 0 0 1-3 0L7 3z"/>',
+    book: '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H10v14H5.5A1.5 1.5 0 0 0 4 18.5z"/><path d="M16 4.5A1.5 1.5 0 0 0 14.5 3H10v14h4.5a1.5 1.5 0 0 1 1.5 1.5z"/>',
+    plane: '<path d="M10 3v6l6 3v2l-6-1.5V17l2 1.4v1L10 19l-2 .4v-1l2-1.4v-4.6l-6 1.5v-2l6-3V3z"/>',
+    receipt: '<path d="M5 3h10v14l-2-1.3L11 17l-2-1.3L7 17l-2-1.3z"/><path d="M7.5 8h5M7.5 11h3"/>',
+    tag: '<path d="M11 3 17 9l-8 8-6-6 8-8z"/><circle cx="13" cy="6" r="1" fill="currentColor" stroke="none"/>',
+    wallet: '<rect x="3" y="6" width="14" height="10" rx="2"/><path d="M3 9h14"/><circle cx="14" cy="12.5" r="1.1" fill="currentColor" stroke="none"/>',
+    briefcase: '<rect x="3" y="7" width="14" height="9" rx="1.5"/><path d="M7 7V5.5A1.5 1.5 0 0 1 8.5 4h3A1.5 1.5 0 0 1 13 5.5V7"/><path d="M3 11h14"/>',
+    trend: '<path d="M3 13l5-5 3 3 6-6"/><path d="M13 4h4v4"/>',
+    bag: '<path d="M5 7h10l1 10a1.5 1.5 0 0 1-1.5 1.7h-9A1.5 1.5 0 0 1 4 17z"/><path d="M7 7V5.5a3 3 0 0 1 6 0V7"/>',
+    dots: '<circle cx="6" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="14" cy="10" r="1.2" fill="currentColor" stroke="none"/>',
+    card: '<rect x="3" y="5" width="14" height="10" rx="2"/><path d="M3 8.5h14"/><path d="M6 12h3"/>',
+    cash: '<rect x="2.5" y="5.5" width="15" height="9" rx="1.5"/><circle cx="10" cy="10" r="2.2"/>',
+    plus: '<circle cx="10" cy="10" r="7.2"/><path d="M10 6.8v6.4M6.8 10h6.4"/>',
+  };
+  function iconSvg(name, cls) {
+    const body = ICON_PATHS[name] || ICON_PATHS.tag;
+    return `<svg class="${cls || ''}" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  }
+  const CAT_ICON = {
+    'c-casa': 'home', 'c-comida': 'food', 'c-auto': 'car', 'c-salud': 'heart',
+    'c-entret': 'film', 'c-ropa': 'shirt', 'c-educ': 'book', 'c-viajes': 'plane',
+    'c-impuestos': 'receipt', 'c-otros-g': 'tag',
+    'c-sueldo': 'wallet', 'c-free': 'briefcase', 'c-invers': 'trend', 'c-ventas': 'bag', 'c-otros-i': 'dots',
+  };
+  function categoryIconName(catId) {
+    const top = topCategoryOf(catId);
+    if (CAT_ICON[top]) return CAT_ICON[top];
+    const c = catById(catId);
+    return c && c.type === 'ingreso' ? 'dots' : 'tag';
+  }
+  const METHOD_ICON = { efectivo: 'cash', debito: 'card', credito: 'card', billetera: 'wallet' };
+  function methodIconName(methodId) {
+    const m = methodById(methodId);
+    return (m && METHOD_ICON[m.kind]) || 'card';
+  }
 
   /* ================= Estado de la interfaz ================= */
   const ui = {
@@ -738,6 +803,8 @@
         </div>
       </div>
 
+      <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
+
       <div class="toolbar">
         <div class="month-nav">
           <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
@@ -787,25 +854,27 @@
       </div>
 
       <div class="card">
-        <h2 class="card-title">Tarjetas de crédito · cierres y vencimientos</h2>
+        <h2 class="card-title">Próximos vencimientos</h2>
         ${cards.length ? `
-        <div class="table-scroll"><table class="data">
-          <thead><tr>
-            <th>Tarjeta</th><th>Cierre actual</th><th>Resumen en curso</th>
-            <th>Último resumen</th><th>Vencimiento</th>
-          </tr></thead>
-          <tbody>
-            ${cardRows.map((r) => `
-              <tr>
-                <td><b>${esc(r.card.name)}</b></td>
-                <td>${esc(fmtDay(r.cy.close))}</td>
-                <td class="num">${fmtDisp(r.current)}</td>
-                <td class="num">${fmtDisp(r.toPay)}</td>
-                <td>${esc(fmtDay(r.cy.prevDue))}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table></div>
-        <div class="hint" style="margin-top:8px">“Último resumen” es lo facturado en el período ya cerrado, que vence en la fecha indicada. “Resumen en curso” es lo que se está acumulando para el próximo cierre.</div>`
+        <div class="due-card-list">
+          ${cardRows.slice().sort((a, b) => a.cy.prevDue - b.cy.prevDue).map((r) => {
+            const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+            const days = Math.round((r.cy.prevDue - today0) / DAY_MS);
+            const daysLabel = days < 0 ? `Venció hace ${-days} día${-days === 1 ? '' : 's'}`
+              : days === 0 ? 'Vence hoy' : `Vence en ${days} día${days === 1 ? '' : 's'}`;
+            return `<div class="due-card-row" data-goto-card="${esc(r.card.id)}">
+              <div class="row-icon row-icon-due">${iconSvg('card')}</div>
+              <div class="due-card-main">
+                <div class="due-card-title">${esc(r.card.name)}</div>
+                <div class="due-card-sub">${esc(daysLabel)} · ${esc(fmtDay(r.cy.prevDue))}</div>
+              </div>
+              <div class="due-card-amount">
+                <div class="v">${fmtDisp(r.toPay)}</div>
+                <span class="due-card-pill">Ver</span>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`
         : '<div class="empty">Agregá tus tarjetas de crédito en “Tarjetas y medios” para ver cierres, vencimientos y cuánto vas a pagar.</div>'}
       </div>`;
 
@@ -841,6 +910,11 @@
       ui.trendTable = !ui.trendTable;
       render();
     });
+    $('#btn-cta-tx', el).addEventListener('click', () => txForm(null));
+    $$('[data-goto-card]', el).forEach((row) => row.addEventListener('click', () => {
+      ui.view = 'tarjetas';
+      render();
+    }));
   }
 
   /* ================= Vista: Movimientos ================= */
@@ -886,31 +960,33 @@
         </div>
 
         ${list.length ? `
-        <div class="table-scroll"><table class="data">
-          <thead><tr>
-            <th>Fecha</th><th>Detalle</th><th>Categoría</th><th>Medio</th>
-            <th class="num">Monto</th><th></th>
-          </tr></thead>
-          <tbody>
-            ${list.map((t) => {
-              const inst = t.installment ? ` <span class="badge">cuota ${t.installment.k}/${t.installment.n}</span>` : '';
-              const rec = t.recurringId ? ' <span class="badge">fijo</span>' : '';
-              const cur = t.currency === 'USD' ? ' <span class="badge badge-cur">USD</span>' : '';
-              const sign = t.type === 'gasto' ? '−' : '+';
-              const cls = t.type === 'gasto' ? 'amount-out' : 'amount-in';
-              const usdLine = (t.currency === 'ARS' && t.usdSnapshot != null)
-                ? `<div class="cell-sub">≈ ${esc(fmtMoney(t.usdSnapshot, 'USD'))}</div>` : '';
-              return `<tr class="rowlink" data-tx="${esc(t.id)}">
-                <td class="cell-sub">${esc(fmtDateShort(t.date))}</td>
-                <td>${esc(t.note || catName(t.categoryId))}${inst}${rec}${cur}</td>
-                <td class="cell-sub">${esc(catName(t.categoryId))}</td>
-                <td class="cell-sub">${esc(methodName(t.methodId))}</td>
-                <td class="num ${cls}">${sign} ${fmtMoney(t.amount, t.currency)}${usdLine}</td>
-                <td><button class="row-del" data-del="${esc(t.id)}" aria-label="Eliminar">✕</button></td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table></div>
+        ${dayGroups(list).map(({ dateStr, items }) => `
+          <div class="tx-day-group">
+            <div class="tx-day-label">${esc(dayGroupLabel(dateStr))}</div>
+            <div class="tx-card-list">
+              ${items.map((t) => {
+                const inst = t.installment ? ` · cuota ${t.installment.k}/${t.installment.n}` : '';
+                const rec = t.recurringId ? ' · fijo' : '';
+                const cur = t.currency === 'USD' ? ' · USD' : '';
+                const isIncome = t.type === 'ingreso';
+                const sign = isIncome ? '+' : '−';
+                const usdLine = (t.currency === 'ARS' && t.usdSnapshot != null)
+                  ? `<div class="usd">≈ ${esc(fmtMoney(t.usdSnapshot, 'USD'))}</div>` : '';
+                return `<div class="tx-card-row" data-tx="${esc(t.id)}">
+                  <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(categoryIconName(t.categoryId))}</div>
+                  <div class="tx-card-main">
+                    <div class="tx-card-title">${esc(t.note || catName(t.categoryId))}</div>
+                    <div class="tx-card-sub">${esc(catName(t.categoryId))} · ${esc(methodName(t.methodId))}${inst}${rec}${cur}</div>
+                  </div>
+                  <div class="tx-card-amount">
+                    <div class="v ${isIncome ? 'pos' : ''}">${sign} ${fmtMoney(t.amount, t.currency)}</div>
+                    ${usdLine}
+                  </div>
+                  <button class="tx-card-del" data-del="${esc(t.id)}" aria-label="Eliminar">✕</button>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>`).join('')}
         <div class="totals-row">
           <span>Movimientos: <b>${list.length}</b></span>
           <span>Ingresos: <b class="amount-in">${fmtDisp(inc)}</b></span>
@@ -926,14 +1002,15 @@
     $('#fil-method', el).addEventListener('change', (e) => { ui.fMethod = e.target.value; render(); });
     $('#btn-add-tx', el).addEventListener('click', () => txForm(null));
 
-    $$('tr[data-tx]', el).forEach((row) => {
+    $$('.tx-card-row', el).forEach((row) => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('[data-del]')) return;
         const tx = S().transactions.find((t) => t.id === row.dataset.tx);
         if (tx) txForm(tx);
       });
     });
-    $$('[data-del]', el).forEach((b) => b.addEventListener('click', () => {
+    $$('[data-del]', el).forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
       const tx = S().transactions.find((t) => t.id === b.dataset.del);
       if (tx) deleteTx(tx);
     }));
