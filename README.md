@@ -59,8 +59,11 @@ una base de datos **Supabase**.
   gestionan desde Ajustes, con un interruptor para usar subcategorías o una
   lista plana simple. Los reportes agrupan el gasto por la categoría madre.
 - **Todo en pesos, también en dólares**: cada gasto o ingreso cargado en ARS
-  guarda además su equivalente en USD a la cotización del momento, para que
-  el historial en dólares no se distorsione con la inflación entre medio.
+  guarda además su equivalente en USD a la cotización **de la fecha del
+  movimiento** (no la del día en que lo cargás), para que el historial en
+  dólares no se distorsione con la inflación entre medio. Si no hay dato
+  histórico disponible para esa fecha (fecha futura, feriado, o sin
+  conexión), usa la cotización vigente como respaldo.
 - **Tema claro y oscuro**, con el interruptor en el encabezado.
 - **Respaldo**: exportar/importar todos los datos en JSON y exportar
   movimientos a CSV (compatible con Excel).
