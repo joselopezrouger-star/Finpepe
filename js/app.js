@@ -173,10 +173,26 @@
     card: '<rect x="3" y="5" width="14" height="10" rx="2"/><path d="M3 8.5h14"/><path d="M6 12h3"/>',
     cash: '<rect x="2.5" y="5.5" width="15" height="9" rx="1.5"/><circle cx="10" cy="10" r="2.2"/>',
     plus: '<circle cx="10" cy="10" r="7.2"/><path d="M10 6.8v6.4M6.8 10h6.4"/>',
+    swap: '<path d="M4 7h10.5M12 4.2 15 7l-3 2.8"/><path d="M16 13H5.5M8 10.2 5 13l3 2.8"/>',
   };
   function iconSvg(name, cls) {
     const body = ICON_PATHS[name] || ICON_PATHS.tag;
     return `<svg class="${cls || ''}" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  }
+  // Anillo de progreso circular (ej. "% del mes que resta sin gastar").
+  function ringSvg(pct, size) {
+    size = size || 72;
+    const stroke = 7;
+    const r = size / 2 - stroke;
+    const c = 2 * Math.PI * r;
+    const p = Math.max(0, Math.min(100, pct));
+    const off = c * (1 - p / 100);
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(--border)" stroke-width="${stroke}"/>
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(--accent)" stroke-width="${stroke}"
+        stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
+        transform="rotate(-90 ${size / 2} ${size / 2})"/>
+    </svg>`;
   }
   const CAT_ICON = {
     'c-casa': 'home', 'c-comida': 'food', 'c-auto': 'car', 'c-salud': 'heart',
@@ -356,6 +372,14 @@
     }
   }
 
+  function renderFooter() {
+    const el = $('#footer-storage');
+    if (!el) return;
+    el.textContent = Cloud.user()
+      ? 'Tus datos se guardan en este navegador y se sincronizan con tu cuenta en la nube.'
+      : 'Tus datos se guardan únicamente en este navegador.';
+  }
+
   /* ================= Diálogo genérico ================= */
   function openDialog(title, bodyHTML, { submitLabel = 'Guardar', onSubmit, footExtra = '' } = {}) {
     const dlg = $('#dialog');
@@ -401,7 +425,7 @@
   function txForm(tx) {
     const editing = !!tx;
     const partner = sharedPartner();
-    const canShare = !editing && !!partner && !!(shared.household);
+    const canShare = () => !editing && draft.type !== 'transferencia' && !!partner && !!(shared.household);
 
     const draft = {
       type: editing ? tx.type : 'gasto',
@@ -409,12 +433,13 @@
       currency: editing ? tx.currency : 'ARS',
       categoryId: editing ? tx.categoryId : '',
       methodId: editing ? tx.methodId : (S().methods[0] ? S().methods[0].id : ''),
+      toMethodId: editing ? (tx.toMethodId || '') : '',
       shareIt: false,
       sharePct: 50,
       acc: editing ? tx.amount : null,
       op: null,
       cur: '',
-      expand: null, // null | 'category' | 'method' — qué lista está desplegada
+      expand: null, // null | 'category' | 'method' | 'methodTo' — qué lista está desplegada
       catGroupExpand: null, // id del grupo de categoría "abierto" en la grilla, o null (nivel superior)
     };
 
@@ -490,14 +515,10 @@
       return !editing && draft.type === 'gasto' && m && m.kind === 'credito';
     }
 
-    function pickRowHTML(item, selId, indent) {
-      return `<div class="tx-pick-row ${indent ? 'indent' : ''} ${item.id === selId ? 'sel' : ''}" data-pickid="${esc(item.id)}">
-        <span>${esc(item.name)}</span>${item.id === selId ? '<span class="tx-pick-check">✓</span>' : ''}
-      </div>`;
-    }
     // Grilla de tarjetas (categoría/subcategoría), con las que tienen hijos
     // llevando a una "sub-grilla" en vez de mostrar todo mezclado en una lista.
-    function catTileGridHTML(items, checkChildren) {
+    function catTileGridHTML(items, checkChildren, selId) {
+      selId = selId === undefined ? draft.categoryId : selId;
       return `<div class="cat-tile-grid">${items.map((item) => {
         const hasKids = checkChildren && catChildren(item.id).length > 0;
         if (hasKids) {
@@ -506,7 +527,7 @@
             <span class="cat-tile-chev">⌄</span>
           </div>`;
         }
-        const sel = item.id === draft.categoryId;
+        const sel = item.id === selId;
         return `<div class="cat-tile ${sel ? 'sel' : ''}" data-pickid="${esc(item.id)}">
           <span class="cat-tile-name">${esc(item.name)}</span>
         </div>`;
@@ -530,22 +551,25 @@
       }
       return catTileGridHTML(groups, true);
     }
-    function methodOptionsHTML() {
-      const items = S().methods;
-      return items.length ? items.map((i) => pickRowHTML(i, draft.methodId)).join('')
+    function methodOptionsHTML(selId, excludeId) {
+      let items = S().methods;
+      if (excludeId) items = items.filter((m) => m.id !== excludeId);
+      return items.length ? catTileGridHTML(items, false, selId)
         : '<div class="empty">No hay medios. Agregá uno desde Tarjetas y medios.</div>';
     }
 
     function formHTML() {
+      const titles = { gasto: 'Gasto', ingreso: 'Ingreso', transferencia: 'Transferencia' };
       return `
       <div class="dialog-head tx-head">
         <button type="button" class="row-del" data-close aria-label="Cerrar">✕</button>
-        <span class="tx-head-title">${draft.type === 'gasto' ? 'Gasto' : 'Ingreso'}</span>
+        <span class="tx-head-title">${titles[draft.type]}</span>
         <span></span>
       </div>
       <div class="tx-tabs">
         <button type="button" class="tx-tab ${draft.type === 'ingreso' ? 'active tx-tab-income' : ''}" data-ttype="ingreso">Ingreso</button>
         <button type="button" class="tx-tab ${draft.type === 'gasto' ? 'active tx-tab-expense' : ''}" data-ttype="gasto">Gasto</button>
+        <button type="button" class="tx-tab ${draft.type === 'transferencia' ? 'active tx-tab-transfer' : ''}" data-ttype="transferencia">Transferencia</button>
       </div>
       <div class="tx-body">
         <label class="tx-row tx-row-date">
@@ -559,12 +583,27 @@
             <button type="button" class="cur-pill ${draft.currency === 'ARS' ? 'active' : ''}" data-cur="ARS">$</button>
             <button type="button" class="cur-pill ${draft.currency === 'USD' ? 'active' : ''}" data-cur="USD">US$</button>
           </div>
-          <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : 'is-expense'}">
+          <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : draft.type === 'gasto' ? 'is-expense' : ''}">
             <span>${esc(displayExpr())}</span>
             <button type="button" class="tx-amount-back" data-back aria-label="Borrar">⌫</button>
           </div>
         </div>
 
+        ${draft.type === 'transferencia' ? `
+        <div class="tx-row" data-toggle="method">
+          <span class="tx-row-label">Desde</span>
+          <span class="tx-row-value">${draft.methodId ? esc(methodName(draft.methodId)) : 'Elegir'}</span>
+          <span class="tx-row-chev ${draft.expand === 'method' ? 'open' : ''}">›</span>
+        </div>
+        ${draft.expand === 'method' ? `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML(draft.methodId, draft.toMethodId)}</div>` : ''}
+
+        <div class="tx-row" data-toggle="methodTo">
+          <span class="tx-row-label">Hacia</span>
+          <span class="tx-row-value">${draft.toMethodId ? esc(methodName(draft.toMethodId)) : 'Elegir'}</span>
+          <span class="tx-row-chev ${draft.expand === 'methodTo' ? 'open' : ''}">›</span>
+        </div>
+        ${draft.expand === 'methodTo' ? `<div class="tx-pick-inline" data-kind="methodTo">${methodOptionsHTML(draft.toMethodId, draft.methodId)}</div>` : ''}
+        ` : `
         <div class="tx-row" data-toggle="category">
           <span class="tx-row-label">Categoría</span>
           <span class="tx-row-value">${draft.categoryId ? esc(catName(draft.categoryId)) : 'Elegir'}</span>
@@ -577,7 +616,8 @@
           <span class="tx-row-value">${draft.methodId ? esc(methodName(draft.methodId)) : 'Elegir'}</span>
           <span class="tx-row-chev ${draft.expand === 'method' ? 'open' : ''}">›</span>
         </div>
-        ${draft.expand === 'method' ? `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML()}</div>` : ''}
+        ${draft.expand === 'method' ? `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML(draft.methodId)}</div>` : ''}
+        `}
 
         ${showInstallments() ? `
         <div class="tx-row-note">
@@ -585,7 +625,7 @@
           <input type="number" id="tx-inst" min="1" max="36" step="1" value="1">
         </div>` : ''}
 
-        ${canShare ? `
+        ${canShare() ? `
         <label class="tx-check-row">
           <input type="checkbox" id="tx-share" ${draft.shareIt ? 'checked' : ''}>
           <span>Es un gasto compartido con ${esc(partnerLabel(partner))}</span>
@@ -649,6 +689,7 @@
       $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
         const kind = row.closest('.tx-pick-inline').dataset.kind;
         if (kind === 'category') draft.categoryId = row.dataset.pickid;
+        else if (kind === 'methodTo') draft.toMethodId = row.dataset.pickid;
         else draft.methodId = row.dataset.pickid;
         draft.expand = null;
         draft.catGroupExpand = null;
@@ -669,13 +710,19 @@
     async function onSave() {
       const amount = Math.round(finalAmount() * 100) / 100;
       if (!(amount > 0)) { alert('Ingresá un monto mayor a 0.'); return; }
-      if (!draft.categoryId) { alert('Elegí una categoría.'); return; }
-      if (!draft.methodId) { alert('Elegí una cuenta.'); return; }
+      if (!draft.methodId) { alert(draft.type === 'transferencia' ? 'Elegí la cuenta de origen.' : 'Elegí una cuenta.'); return; }
+      if (draft.type === 'transferencia') {
+        if (!draft.toMethodId) { alert('Elegí la cuenta de destino.'); return; }
+        if (draft.toMethodId === draft.methodId) { alert('Elegí dos cuentas distintas para transferir.'); return; }
+      } else if (!draft.categoryId) {
+        alert('Elegí una categoría.'); return;
+      }
       const note = ($('#tx-note', dlg) || {}).value || '';
-      const base = {
-        date: draft.date, type: draft.type, amount, currency: draft.currency,
-        categoryId: draft.categoryId, methodId: draft.methodId, note: note.trim(),
-      };
+      const base = draft.type === 'transferencia'
+        ? { date: draft.date, type: draft.type, amount, currency: draft.currency,
+            methodId: draft.methodId, toMethodId: draft.toMethodId, note: note.trim() }
+        : { date: draft.date, type: draft.type, amount, currency: draft.currency,
+            categoryId: draft.categoryId, methodId: draft.methodId, note: note.trim() };
 
       if (editing) {
         // El equivalente en USD queda como estaba si el monto/moneda no
@@ -705,7 +752,7 @@
       }
       Store.save();
 
-      if (canShare && draft.shareIt) {
+      if (canShare() && draft.shareIt) {
         const pctEl = $('#tx-share-pct', dlg);
         const pct = Math.min(100, Math.max(0, parseFloat((pctEl && pctEl.value) || '50')));
         try {
@@ -811,13 +858,39 @@
       };
     }).sort((a, b) => a.cy.due - b.cy.due);
 
+    const pctLeft = exp <= 0 ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round(((inc - exp) / inc) * 100))) : 0);
+
+    const sharedPartnerM = Cloud.user() ? sharedPartner() : null;
+    const sharedWidget = (shared.household && sharedPartnerM) ? (() => {
+      const bal = sharedBalance();
+      const balAbs = Math.abs(bal);
+      const balTxt = balAbs < 0.01 ? 'Están a mano'
+        : (bal > 0 ? `${esc(partnerLabel(sharedPartnerM))} te debe ${fmtDisp(balAbs)}`
+                   : `Le debés a ${esc(partnerLabel(sharedPartnerM))} ${fmtDisp(balAbs)}`);
+      return `<div class="shared-mini" data-goto-shared>
+        <span class="shared-mini-label">Compartido con ${esc(partnerLabel(sharedPartnerM))}</span>
+        <span class="shared-mini-value ${bal > 0 ? 'pos' : bal < 0 ? 'neg' : ''}">${esc(balTxt)}</span>
+      </div>`;
+    })() : '';
+
     el.innerHTML = `
       <div class="hero">
-        <div class="hero-label">⇄ Balance del mes · ${esc(monthLabel(mk))}</div>
-        <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
+        <div class="hero-main">
+          <div class="hero-label">⇄ Balance del mes · ${esc(monthLabel(mk))}</div>
+          <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
+          <div class="hero-split">
+            <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
+            <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
+          </div>
+        </div>
+        <div class="hero-ring">
+          ${ringSvg(pctLeft)}
+          <div class="hero-ring-pct">${pctLeft}%<span>resta</span></div>
+        </div>
       </div>
 
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
+      ${sharedWidget}
 
       <div class="toolbar">
         <div class="month-nav">
@@ -828,21 +901,9 @@
         ${mk !== curMonth() ? '<button class="link-btn" data-mtoday>volver al mes actual</button>' : ''}
       </div>
 
-      <div class="grid-tiles">
-        <div class="card tile">
-          <div class="tile-label"><span class="tile-badge tile-badge-income">↓</span>Ingresos</div>
-          <div class="tile-value pos">${fmtDisp(inc)}</div>
-          ${delta(inc, incPrev, true)}
-        </div>
-        <div class="card tile">
-          <div class="tile-label"><span class="tile-badge tile-badge-expense">↑</span>Gastos</div>
-          <div class="tile-value">${fmtDisp(exp)}</div>
-          ${delta(exp, expPrev, false)}
-        </div>
-        <div class="card tile">
-          <div class="tile-label"><span class="tile-badge tile-badge-neutral">◆</span>Ahorros totales</div>
-          <div class="tile-value">${fmtDisp(savTotal)}</div>
-        </div>
+      <div class="card tile">
+        <div class="tile-label"><span class="tile-badge tile-badge-neutral">◆</span>Ahorros totales</div>
+        <div class="tile-value">${fmtDisp(savTotal)}</div>
       </div>
 
       <div class="grid-2">
@@ -925,6 +986,12 @@
       ui.view = 'tarjetas';
       render();
     }));
+    const gotoShared = $('[data-goto-shared]', el);
+    if (gotoShared) gotoShared.addEventListener('click', () => {
+      ui.view = 'compartido';
+      shared.loaded = false;
+      render();
+    });
   }
 
   /* ================= Vista: Movimientos ================= */
@@ -956,6 +1023,7 @@
             <option value="">Ingresos y gastos</option>
             <option value="ingreso" ${ui.fType === 'ingreso' ? 'selected' : ''}>Solo ingresos</option>
             <option value="gasto" ${ui.fType === 'gasto' ? 'selected' : ''}>Solo gastos</option>
+            <option value="transferencia" ${ui.fType === 'transferencia' ? 'selected' : ''}>Solo transferencias</option>
           </select>
           <select id="fil-cat" aria-label="Categoría">
             <option value="">Todas las categorías</option>
@@ -975,6 +1043,22 @@
             <div class="tx-day-label">${esc(dayGroupLabel(dateStr))}</div>
             <div class="tx-card-list">
               ${items.map((t) => {
+                if (t.type === 'transferencia') {
+                  const usdLineT = (t.currency === 'ARS' && t.usdSnapshot != null)
+                    ? `<div class="usd">≈ ${esc(fmtMoney(t.usdSnapshot, 'USD'))}</div>` : '';
+                  return `<div class="tx-card-row" data-tx="${esc(t.id)}">
+                    <div class="row-icon row-icon-transfer">${iconSvg('swap')}</div>
+                    <div class="tx-card-main">
+                      <div class="tx-card-title">${esc(t.note || 'Transferencia')}</div>
+                      <div class="tx-card-sub">${esc(methodName(t.methodId))} → ${esc(methodName(t.toMethodId))}</div>
+                    </div>
+                    <div class="tx-card-amount">
+                      <div class="v">${fmtMoney(t.amount, t.currency)}</div>
+                      ${usdLineT}
+                    </div>
+                    <button class="tx-card-del" data-del="${esc(t.id)}" aria-label="Eliminar">✕</button>
+                  </div>`;
+                }
                 const inst = t.installment ? ` · cuota ${t.installment.k}/${t.installment.n}` : '';
                 const rec = t.recurringId ? ' · fijo' : '';
                 const cur = t.currency === 'USD' ? ' · USD' : '';
@@ -1733,9 +1817,10 @@
     const lines = ['fecha;tipo;monto;moneda;categoria;medio;detalle;cuota'];
     const txs = S().transactions.slice().sort((a, b) => a.date.localeCompare(b.date));
     for (const t of txs) {
+      const catCol = t.type === 'transferencia' ? `→ ${methodName(t.toMethodId)}` : catName(t.categoryId);
       lines.push([
         t.date, t.type, String(t.amount).replace('.', ','), t.currency,
-        q(catName(t.categoryId)), q(methodName(t.methodId)), q(t.note || ''),
+        q(catCol), q(methodName(t.methodId)), q(t.note || ''),
         t.installment ? `${t.installment.k}/${t.installment.n}` : '',
       ].join(sep));
     }
@@ -2613,6 +2698,7 @@
     renderRateChip();
     renderAccountChip();
     renderBanner();
+    renderFooter();
     const el = $('#view');
     el.innerHTML = grp.views.length > 1
       ? `<div class="subtabs">${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}</div><div class="view-content"></div>`

@@ -482,6 +482,7 @@ dialog[open].dialog {
 }
 .tx-tab.active.tx-tab-expense { border-color: var(--crit); color: var(--crit); background: var(--danger-bg); }
 .tx-tab.active.tx-tab-income { border-color: var(--good); color: var(--good); background: var(--accent-wash); }
+.tx-tab.active.tx-tab-transfer { border-color: var(--ink-2); color: var(--ink); background: var(--surface-2); }
 
 .tx-body { flex: 1; overflow-y: auto; padding: 4px 14px 10px; }
 
@@ -591,28 +592,6 @@ dialog[open].dialog {
   margin: 0 -2px;
   padding: 2px 2px;
 }
-.tx-pick-group {
-  padding: 8px 10px 4px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.tx-pick-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 11px 10px;
-  border-radius: var(--radius-s);
-  font-size: 14px;
-  cursor: pointer;
-}
-.tx-pick-row:hover { background: var(--surface); }
-.tx-pick-row.indent { padding-left: 22px; }
-.tx-pick-row.sel { color: var(--accent); font-weight: 600; }
-.tx-pick-check { color: var(--accent); font-weight: 700; }
-
 /* Grilla de categorías/subcategorías (tarjetas en vez de lista). Tocar
    una con hijos "entra" a una sub-grilla con las subcategorías. */
 .cat-tile-grid {
@@ -860,6 +839,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 }
 .row-icon-income { background: var(--accent-wash); color: var(--accent); }
 .row-icon-expense { background: var(--surface-2); color: var(--ink-2); }
+.row-icon-transfer { background: var(--surface-2); color: var(--ink-2); }
 .row-icon-due { background: var(--danger-bg); color: var(--crit); }
 
 /* ---------- Movimientos como lista de tarjetas agrupada por día ---------- */
@@ -923,6 +903,20 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   cursor: pointer;
 }
 .pill-cta:hover { background: var(--accent-strong); }
+
+/* ---------- Mini resumen de Compartido (Resumen) ---------- */
+.shared-mini {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.shared-mini-label { font-size: 12.5px; color: var(--ink-2); font-weight: 550; }
+.shared-mini-value { font-size: 13px; font-weight: 700; color: var(--ink); }
+.shared-mini-value.pos { color: var(--income); }
+.shared-mini-value.neg { color: var(--crit); }
 
 /* ---------- Línea de tiempo de ciclo de tarjeta ---------- */
 .cycle-card {
@@ -1042,7 +1036,27 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   border-radius: 12px;
   padding: 20px 22px;
   color: var(--ink);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
 }
+.hero-main { position: relative; min-width: 0; flex: 1; }
+.hero-ring { position: relative; flex: none; }
+.hero-ring-pct {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font: 700 15px var(--font-heading);
+  color: var(--ink);
+}
+.hero-ring-pct span {
+  font: 650 8.5px var(--font);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin-top: 1px;
+}
+@media (max-width: 380px) { .hero-ring { display: none; } }
 /* Antes usaba filter:blur() para el halo, pero Safari no recorta bien un
    hijo con filter dentro de un padre con overflow:hidden (más si hay un
    ancestro position:sticky, como nuestro header) — el halo se "escapaba"

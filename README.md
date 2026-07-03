@@ -14,11 +14,15 @@ una base de datos **Supabase**.
   las secciones que no entran en esos 4 viven adentro como sub-pestañas (por
   ejemplo Calendario adentro de Movimientos, o Planificar/Compartido/Ajustes
   adentro de Más).
-- **Patrimonio neto** (activos vs. deudas) destacado en el Resumen.
-- **Movimientos** de ingresos y gastos con categorías editables, en ARS o USD,
-  con **fecha elegible** (por defecto hoy, pero se puede tocar y elegir
-  cualquier otra desde el selector nativo).
-- **Medios de pago**: efectivo, débito, crédito y billeteras (Mercado Pago, etc.).
+- **Balance del mes** destacado en el Resumen, con un anillo que muestra qué
+  porcentaje de tu ingreso todavía no gastaste.
+- **Movimientos** de ingresos, gastos y **transferencias entre tus propias
+  cuentas** (por ejemplo de efectivo a una caja de ahorro), con categorías
+  editables, en ARS o USD, con **fecha elegible** (por defecto hoy, pero se
+  puede tocar y elegir cualquier otra desde el selector nativo). Las
+  transferencias no se cuentan como ingreso ni gasto.
+- **Medios de pago**: efectivo, débito, caja de ahorro, crédito y billeteras
+  (Mercado Pago, etc.).
 - **Tarjetas de crédito** con día de **cierre** y de **vencimiento**: la app
   calcula el resumen en curso, lo que vas a pagar y las próximas fechas.
   Además, si el banco corre la fecha un mes puntual, se puede cargar un
