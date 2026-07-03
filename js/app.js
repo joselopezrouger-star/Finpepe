@@ -340,6 +340,30 @@
     ));
   }
 
+  /* Igual que cardCycle(), pero para el cierre/vencimiento que le toca a una
+     COMPRA puntual (no a "hoy"): a qué resumen cae y cuándo vence ese resumen. */
+  function cardCycleFor(card, purchaseDate) {
+    const p = new Date(purchaseDate); p.setHours(0, 0, 0, 0);
+    let close = cardDate(card, 'closingDay', p.getFullYear(), p.getMonth());
+    if (close < p) close = cardDate(card, 'closingDay', p.getFullYear(), p.getMonth() + 1);
+    let due = cardDate(card, 'dueDay', close.getFullYear(), close.getMonth());
+    if (due <= close) due = cardDate(card, 'dueDay', close.getFullYear(), close.getMonth() + 1);
+    return { close, due };
+  }
+
+  /* Mes en el que un gasto "pega" en los totales mensuales (Balance del mes,
+     filtro de Movimientos, presupuestos). Por defecto es el mes de la fecha
+     de compra; si en Ajustes se eligió "vencimiento", un gasto con tarjeta
+     de crédito cuenta en el mes en que vence ese resumen en vez del mes en
+     que se hizo la compra (decisión del usuario, ver settings.cardMonthBasis). */
+  function effectiveMonthOf(t) {
+    if (t.type === 'gasto' && S().settings.cardMonthBasis === 'vencimiento') {
+      const m = methodById(t.methodId);
+      if (m && m.kind === 'credito') return monthKeyOf(dateToStr(cardCycleFor(m, parseDate(t.date)).due));
+    }
+    return monthKeyOf(t.date);
+  }
+
   /* ================= Recurrentes: generación automática ================= */
   function generateRecurring() {
     const cm = curMonth();
@@ -855,9 +879,9 @@
   function vResumen(el) {
     const mk = ui.month;
     const txs = S().transactions;
-    const inMonth = txs.filter((t) => monthKeyOf(t.date) === mk);
+    const inMonth = txs.filter((t) => effectiveMonthOf(t) === mk);
     const prevMk = addMonthsKey(mk, -1);
-    const inPrev = txs.filter((t) => monthKeyOf(t.date) === prevMk);
+    const inPrev = txs.filter((t) => effectiveMonthOf(t) === prevMk);
 
     const inc = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
     const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
@@ -895,7 +919,7 @@
     const months = [];
     for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
     const trendRows = months.map((m) => {
-      const list = txs.filter((t) => monthKeyOf(t.date) === m);
+      const list = txs.filter((t) => effectiveMonthOf(t) === m);
       const [y, mo] = m.split('-').map(Number);
       return {
         label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
@@ -1053,13 +1077,13 @@
   /* ================= Vista: Movimientos ================= */
   function vMovimientos(el) {
     const txs = S().transactions;
-    const monthsPresent = [...new Set(txs.map((t) => monthKeyOf(t.date)))];
+    const monthsPresent = [...new Set(txs.map((t) => effectiveMonthOf(t)))];
     if (!monthsPresent.includes(curMonth())) monthsPresent.push(curMonth());
     monthsPresent.sort().reverse();
     if (ui.fMonth && !monthsPresent.includes(ui.fMonth)) ui.fMonth = curMonth();
 
     let list = txs.slice();
-    if (ui.fMonth) list = list.filter((t) => monthKeyOf(t.date) === ui.fMonth);
+    if (ui.fMonth) list = list.filter((t) => effectiveMonthOf(t) === ui.fMonth);
     if (ui.fType) list = list.filter((t) => t.type === ui.fType);
     if (ui.fCat) list = list.filter((t) => t.categoryId === ui.fCat);
     if (ui.fMethod) list = list.filter((t) => t.methodId === ui.fMethod);
@@ -1780,7 +1804,7 @@
   function vPlan(el) {
     const mk = curMonth();
     const monthTx = S().transactions.filter(
-      (t) => t.type === 'gasto' && monthKeyOf(t.date) === mk);
+      (t) => t.type === 'gasto' && effectiveMonthOf(t) === mk);
 
     const budgetRows = S().budgets.map((b) => {
       const spent = sumDisp(monthTx.filter((t) => topCategoryOf(t.categoryId) === b.categoryId));
@@ -2024,6 +2048,23 @@
         </div>
 
         <div class="card">
+          <h2 class="card-title">Tarjetas de crédito</h2>
+          <div class="inline-form">
+            <label for="set-cardmonth" class="hint">Un gasto con tarjeta de crédito cuenta en el balance del mes de:</label>
+            <select id="set-cardmonth">
+              <option value="compra" ${s.cardMonthBasis === 'compra' ? 'selected' : ''}>la compra</option>
+              <option value="vencimiento" ${s.cardMonthBasis === 'vencimiento' ? 'selected' : ''}>el vencimiento del resumen</option>
+            </select>
+          </div>
+          <div class="hint" style="margin-top:10px">
+            ${s.cardMonthBasis === 'vencimiento'
+              ? 'Un gasto con tarjeta pega en el balance del mes en que vence ese resumen (cuando efectivamente lo pagás), no en el mes en que compraste.'
+              : 'Un gasto con tarjeta pega en el balance del mes en que lo compraste, aunque el resumen recién venza el mes siguiente.'}
+            Solo afecta a los medios de pago tipo "Crédito"; el resto siempre cuenta por su fecha.
+          </div>
+        </div>
+
+        <div class="card">
           <h2 class="card-title">
             <span>Categorías</span>
             <label class="subcats-toggle">
@@ -2091,6 +2132,11 @@
       render();
     });
 
+    $('#set-cardmonth', el).addEventListener('change', (e) => {
+      S().settings.cardMonthBasis = e.target.value;
+      Store.save();
+      render();
+    });
     $('#set-subcats', el).addEventListener('change', (e) => {
       S().settings.useSubcategories = e.target.checked;
       Store.save();

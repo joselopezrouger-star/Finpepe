@@ -62,6 +62,7 @@ const Store = (() => {
       cachedRates: null,        // { casa: {compra, venta, nombre} }
       ratesUpdatedAt: null,     // ISO string
       useSubcategories: true,   // false = todas las categorías en una sola lista plana
+      cardMonthBasis: 'compra', // 'compra' | 'vencimiento' — en qué mes cuenta un gasto con tarjeta de crédito
     },
     categories: seedCategories(),
     methods: seedMethods(),
