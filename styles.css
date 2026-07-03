@@ -347,6 +347,7 @@ a { color: var(--accent-down); }
   flex-wrap: wrap;
 }
 .toolbar .spacer { flex: 1; }
+.toolbar-center { justify-content: center; }
 
 /* ---------- Botones ---------- */
 .btn {
