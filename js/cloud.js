@@ -110,6 +110,39 @@ const Cloud = (() => {
     session = null;
   }
 
+  // La URL actual sin hash/query: adonde tiene que volver Google después del
+  // login. Tiene que estar agregada en Supabase → Authentication → URL
+  // Configuration → Redirect URLs (además de configurar el provider Google).
+  const currentUrl = () => window.location.href.split('#')[0].split('?')[0];
+
+  async function signInWithGoogle() {
+    const cl = ensureClient();
+    if (!cl) throw new Error('Supabase no está configurado.');
+    const { error } = await cl.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: currentUrl() },
+    });
+    if (error) throw error;
+  }
+
+  // Vincula Google a la cuenta YA logueada (en vez de crear una cuenta
+  // nueva separada) para no perder los datos que ya están asociados al
+  // usuario/contraseña actual.
+  async function linkGoogle() {
+    const cl = ensureClient();
+    if (!cl || !user()) throw new Error('Iniciá sesión primero.');
+    const { error } = await cl.auth.linkIdentity({
+      provider: 'google',
+      options: { redirectTo: currentUrl() },
+    });
+    if (error) throw error;
+  }
+
+  function hasGoogle() {
+    const u = user();
+    return !!(u && u.identities && u.identities.some((i) => i.provider === 'google'));
+  }
+
   /* Trae el documento remoto del usuario, o null si todavía no existe. */
   async function pull() {
     const cl = ensureClient();
@@ -262,7 +295,7 @@ const Cloud = (() => {
 
   return {
     available, config, saveConfig, clearConfig, isConfigured, hasDefaults,
-    init, user, signUp, signIn, signOut, pull, push, schedulePush,
+    init, user, signUp, signIn, signOut, signInWithGoogle, linkGoogle, hasGoogle, pull, push, schedulePush,
     getHousehold, createHousehold, createInvite, redeemInvite, leaveHousehold,
     listSharedExpenses, addSharedExpense, deleteSharedExpense,
     listSettlements, addSettlement, deleteSettlement,

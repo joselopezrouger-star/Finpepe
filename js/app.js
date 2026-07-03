@@ -179,6 +179,14 @@
     const body = ICON_PATHS[name] || ICON_PATHS.tag;
     return `<svg class="${cls || ''}" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
   }
+  // El logo de Google es multicolor (no monocromo como los íconos de arriba),
+  // así que va como su propio SVG fijo en vez de sumarse a ICON_PATHS.
+  const GOOGLE_G_SVG = `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+    <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+    <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+    <path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.68 9c0-.593.102-1.17.284-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"/>
+    <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"/>
+  </svg>`;
   // Anillo de progreso circular (ej. "% del mes que resta sin gastar").
   function ringSvg(pct, size) {
     size = size || 72;
@@ -2113,6 +2121,11 @@
       return `<h2 class="card-title">Sincronización en la nube</h2>
         <div class="auth-status"><span class="dot"></span> Conectado como <b>${esc(usernameOf(Cloud.user().email))}</b></div>
         <div class="hint" style="margin-bottom:10px">Tus datos se guardan en tu proyecto de Supabase y se sincronizan en todos tus dispositivos donde inicies sesión.</div>
+        ${Cloud.hasGoogle()
+          ? '<div class="hint" style="margin-bottom:10px">✓ Google vinculado: también podés entrar con esa cuenta.</div>'
+          : `<div class="inline-form" style="margin-bottom:10px">
+               <button class="btn btn-sm" id="btn-cloud-link-google">${GOOGLE_G_SVG}Vincular con Google</button>
+             </div>`}
         <div class="inline-form">
           <button class="btn btn-sm" id="btn-cloud-pull">Traer datos de la nube</button>
           <button class="btn btn-sm btn-danger" id="btn-cloud-signout">Cerrar sesión</button>
@@ -2173,6 +2186,11 @@
       await Cloud.signOut();
       onAuthChanged();
     });
+    const linkGoogle = $('#btn-cloud-link-google', root);
+    if (linkGoogle) linkGoogle.addEventListener('click', async () => {
+      try { await Cloud.linkGoogle(); }
+      catch (e) { alert('No se pudo vincular: ' + friendlyCloudError(e)); }
+    });
     const pull = $('#btn-cloud-pull', root);
     if (pull) pull.addEventListener('click', async () => {
       try {
@@ -2202,6 +2220,8 @@
           <button type="button" class="auth-tab ${draft.mode === 'up' ? 'active' : ''}" data-amode="up">Crear cuenta</button>
         </div>
         <div class="auth-body">
+          <button type="button" class="btn btn-google" id="au-google">${GOOGLE_G_SVG}Continuar con Google</button>
+          <div class="auth-divider"><span>o con usuario</span></div>
           <input type="text" id="au-user" autocomplete="username" placeholder="Usuario, no tu email (por ej. jose)" value="${esc(draft.user)}">
           ${draft.mode === 'up' ? '<span class="hint">Elegí un nombre corto, no hace falta que sea tu email.</span>' : ''}
           <input type="password" id="au-pass" autocomplete="${draft.mode === 'in' ? 'current-password' : 'new-password'}"
@@ -2228,6 +2248,8 @@
       const submit = () => { readInputs(); doAuth(draft.mode, draft.user, draft.pass, dlg); };
       $('#au-submit', dlg).addEventListener('click', submit);
       $('#au-pass', dlg).addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+      const google = $('#au-google', dlg);
+      if (google) google.addEventListener('click', doGoogleAuth);
     }
 
     paint();
@@ -2267,6 +2289,18 @@
         : 'No se pudo: ' + raw;
     }
     cloudBusy = false;
+  }
+
+  // Inicia sesión con Google: el navegador redirige a Google y vuelve a esta
+  // misma URL, donde Supabase retoma la sesión sola (ver Cloud.init). No usa
+  // cloudBusy: si por algo la redirección no llega a pasar, no queremos que
+  // el formulario de usuario/contraseña quede trabado para siempre.
+  async function doGoogleAuth() {
+    try {
+      await Cloud.signInWithGoogle();
+    } catch (e) {
+      alert('No se pudo iniciar sesión con Google: ' + friendlyCloudError(e));
+    }
   }
 
   // Al cambiar el estado de sesión: traer datos remotos o subir los locales.
