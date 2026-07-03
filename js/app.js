@@ -421,6 +421,7 @@
       op: null,
       cur: '',
       expand: null, // null | 'category' | 'method' — qué lista está desplegada
+      catGroupExpand: null, // id del grupo de categoría "abierto" en la grilla, o null (nivel superior)
     };
 
     const dlg = $('#dialog');
@@ -500,20 +501,40 @@
         <span>${esc(item.name)}</span>${item.id === selId ? '<span class="tx-pick-check">✓</span>' : ''}
       </div>`;
     }
+    // Grilla de tarjetas (categoría/subcategoría), con las que tienen hijos
+    // llevando a una "sub-grilla" en vez de mostrar todo mezclado en una lista.
+    function catTileGridHTML(items, checkChildren) {
+      return `<div class="cat-tile-grid">${items.map((item) => {
+        const hasKids = checkChildren && catChildren(item.id).length > 0;
+        if (hasKids) {
+          return `<div class="cat-tile" data-catgroup="${esc(item.id)}">
+            <span class="cat-tile-name">${esc(item.name)}</span>
+            <span class="cat-tile-chev">⌄</span>
+          </div>`;
+        }
+        const sel = item.id === draft.categoryId;
+        return `<div class="cat-tile ${sel ? 'sel' : ''}" data-pickid="${esc(item.id)}">
+          <span class="cat-tile-name">${esc(item.name)}</span>
+        </div>`;
+      }).join('')}</div>`;
+    }
     function categoryOptionsHTML() {
       if (!useSubcats()) {
         const items = S().categories.filter((c) => c.type === draft.type);
-        return items.length ? items.map((i) => pickRowHTML(i, draft.categoryId)).join('')
+        return items.length ? catTileGridHTML(items)
           : '<div class="empty">No hay categorías. Agregá una desde Ajustes.</div>';
       }
       const groups = catGroups(draft.type);
       if (!groups.length) return '<div class="empty">No hay categorías. Agregá una desde Ajustes.</div>';
-      return groups.map((g) => {
-        const children = catChildren(g.id);
-        if (!children.length) return pickRowHTML(g, draft.categoryId);
-        return `<div class="tx-pick-group">${esc(g.name)}</div>` +
-          children.map((c) => pickRowHTML(c, draft.categoryId, true)).join('');
-      }).join('');
+      if (draft.catGroupExpand) {
+        const g = groups.find((x) => x.id === draft.catGroupExpand);
+        const children = g ? catChildren(g.id) : [];
+        if (g && children.length) {
+          return `<div class="cat-tile-crumb" data-catback>‹ ${esc(g.name)}</div>${catTileGridHTML(children)}`;
+        }
+        draft.catGroupExpand = null;
+      }
+      return catTileGridHTML(groups, true);
     }
     function methodOptionsHTML() {
       const items = S().methods;
@@ -609,6 +630,7 @@
         draft.type = b.dataset.ttype;
         if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
         draft.expand = null;
+        draft.catGroupExpand = null;
         paint();
       }));
       $('#tx-date-input', dlg).addEventListener('change', (e) => { draft.date = e.target.value; paint(); });
@@ -616,6 +638,17 @@
       $$('[data-toggle]', dlg).forEach((row) => row.addEventListener('click', () => {
         const k = row.dataset.toggle;
         draft.expand = draft.expand === k ? null : k;
+        if (k === 'category') draft.catGroupExpand = null;
+        paint();
+      }));
+      $$('[data-catgroup]', dlg).forEach((el) => el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        draft.catGroupExpand = el.dataset.catgroup;
+        paint();
+      }));
+      $$('[data-catback]', dlg).forEach((el) => el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        draft.catGroupExpand = null;
         paint();
       }));
       $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
@@ -623,6 +656,7 @@
         if (kind === 'category') draft.categoryId = row.dataset.pickid;
         else draft.methodId = row.dataset.pickid;
         draft.expand = null;
+        draft.catGroupExpand = null;
         paint();
       }));
       const shareBox = $('#tx-share', dlg);
