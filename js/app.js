@@ -2312,6 +2312,19 @@
     }
   }
 
+  // Cuando falta correr (o falta actualizar) supabase-schema.sql en el
+  // proyecto, Postgres rechaza el insert con este mensaje — lo detectamos
+  // para dar una pista accionable en vez de mostrar el error crudo.
+  function friendlyCloudError(e) {
+    const raw = (e && (e.message || String(e))) || 'Error desconocido.';
+    if (/row-level security/i.test(raw)) {
+      return raw + '\n\nProbablemente falta correr (o está desactualizado) el script supabase-schema.sql ' +
+        'en tu proyecto de Supabase: Supabase → SQL Editor → pegá todo el contenido de ese archivo → Run. ' +
+        'Es seguro volver a correrlo, no borra datos existentes.';
+    }
+    return raw;
+  }
+
   /* ================= Vista: Compartido (gastos en pareja) ================= */
   // Caché en memoria: esta vista vive en Supabase, no en Store (la usan dos
   // cuentas distintas a la vez), así que se carga aparte de forma asíncrona.
@@ -2384,7 +2397,7 @@
           await Cloud.createHousehold(d.name.trim());
           shared.loaded = false;
           await loadShared();
-        } catch (e) { alert('No se pudo crear: ' + e.message); }
+        } catch (e) { alert('No se pudo crear: ' + friendlyCloudError(e)); }
       },
     });
   }
@@ -2403,7 +2416,7 @@
           shared.loaded = false;
           await loadShared();
           dlg.close();
-        }).catch((e) => { $('#j-msg', dlg).textContent = e.message || 'Código inválido.'; });
+        }).catch((e) => { $('#j-msg', dlg).textContent = friendlyCloudError(e); });
         return false;
       },
     });
@@ -2462,7 +2475,7 @@
           });
           shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
           render();
-        } catch (e) { alert('No se pudo guardar: ' + e.message); return false; }
+        } catch (e) { alert('No se pudo guardar: ' + friendlyCloudError(e)); return false; }
       },
     });
   }
@@ -2515,7 +2528,7 @@
           });
           shared.settlements = await Cloud.listSettlements(shared.household.id);
           render();
-        } catch (e) { alert('No se pudo guardar: ' + e.message); return false; }
+        } catch (e) { alert('No se pudo guardar: ' + friendlyCloudError(e)); return false; }
       },
     });
   }
@@ -2639,7 +2652,7 @@
           <div class="hint">Compartile este código a tu pareja (vale 7 días). Lo carga en <b>Compartido → Ya tengo un código</b>:</div>
           <div class="tile-value" style="letter-spacing:0.08em;margin-top:6px">${esc(code)}</div>
         </div>`;
-      } catch (e) { alert('No se pudo generar el código: ' + e.message); }
+      } catch (e) { alert('No se pudo generar el código: ' + friendlyCloudError(e)); }
     });
     $('#btn-leave-house', el).addEventListener('click', async () => {
       if (!confirm('¿Salir de este hogar compartido? Vas a dejar de ver el historial de gastos en común.')) return;
@@ -2647,7 +2660,7 @@
         await Cloud.leaveHousehold(shared.household.id);
         shared.loaded = false;
         await loadShared();
-      } catch (e) { alert('No se pudo salir: ' + e.message); }
+      } catch (e) { alert('No se pudo salir: ' + friendlyCloudError(e)); }
     });
     $$('[data-delexp]', el).forEach((b) => b.addEventListener('click', async () => {
       if (!confirm('¿Eliminar este gasto compartido?')) return;
