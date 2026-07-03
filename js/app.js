@@ -838,13 +838,6 @@
     const expPrev = sumDisp(inPrev.filter((t) => t.type === 'gasto'));
     const balance = inc - exp;
 
-    let savTotal = 0;
-    for (const s of S().savings) {
-      const bal = s.entries.reduce((a, e) => a + e.amount, 0);
-      const v = convOrNull(bal, s.currency);
-      if (v != null) savTotal += v;
-    }
-
     const delta = (cur, prev, upIsGood) => {
       if (!(prev > 0)) return '';
       const pct = Math.round(((cur - prev) / prev) * 100);
@@ -912,6 +905,15 @@
     })() : '';
 
     el.innerHTML = `
+      <div class="toolbar toolbar-center">
+        <div class="month-nav">
+          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
+          <span class="month-label">${esc(monthLabel(mk))}</span>
+          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
+        </div>
+        ${mk !== curMonth() ? '<button class="link-btn" data-mtoday>volver al mes actual</button>' : ''}
+      </div>
+
       <div class="hero">
         <div class="hero-main">
           <div class="hero-label">⇄ Balance del mes · ${esc(monthLabel(mk))}</div>
@@ -932,20 +934,6 @@
 
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
       ${sharedWidget}
-
-      <div class="toolbar">
-        <div class="month-nav">
-          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
-          <span class="month-label">${esc(monthLabel(mk))}</span>
-          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
-        </div>
-        ${mk !== curMonth() ? '<button class="link-btn" data-mtoday>volver al mes actual</button>' : ''}
-      </div>
-
-      <div class="card tile">
-        <div class="tile-label"><span class="tile-badge tile-badge-neutral">◆</span>Ahorros totales</div>
-        <div class="tile-value">${fmtDisp(savTotal)}</div>
-      </div>
 
       <div class="grid-2">
         <div class="card">
