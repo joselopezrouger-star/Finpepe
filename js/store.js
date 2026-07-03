@@ -122,6 +122,17 @@ const Store = (() => {
 
   function onSave(cb) { saveHooks.push(cb); }
 
+  // Guardado de datos que no son "del usuario" (por ejemplo la cotización
+  // cacheada, que se re-consulta sola cada tanto): solo escribe en este
+  // navegador, sin tocar _updatedAt ni subir nada a la nube. Si esto usara
+  // save(), cualquier dispositivo viejo/inactivo que simplemente esté
+  // abierto y actualice la cotización automáticamente pisaría con su
+  // timestamp "más nuevo" los datos reales de otro dispositivo al
+  // sincronizar, aunque no tenga ningún cambio real que subir.
+  function saveLocal() {
+    persist();
+  }
+
   function replace(next) {
     state = migrate(next);
     save();
@@ -144,6 +155,6 @@ const Store = (() => {
 
   return {
     get state() { return state; },
-    uid, save, onSave, replace, applyRemote, reset, exportJSON, defaults,
+    uid, save, saveLocal, onSave, replace, applyRemote, reset, exportJSON, defaults,
   };
 })();
