@@ -328,7 +328,7 @@
       const map = await FX.fetchRates();
       S().settings.cachedRates = map;
       S().settings.ratesUpdatedAt = new Date().toISOString();
-      Store.save();
+      Store.saveLocal();
     } catch (e) {
       console.warn('No se pudo actualizar la cotización', e);
     }
@@ -2284,8 +2284,15 @@
         if (remote && remote.data && Array.isArray(remote.data.transactions)) {
           const localTs = S()._updatedAt || 0;
           const remoteTs = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+          const localEmpty = !S().transactions.length;
+          // Si lo local tiene movimientos y la nube trae menos, no la
+          // dejamos mandar aunque su timestamp sea "más nuevo": eso pasa
+          // cuando otro dispositivo viejo/inactivo queda con menos datos
+          // pero de todos modos sincroniza (ver Store.saveLocal). Preferimos
+          // no perder datos en vez de confiar ciegamente en el reloj.
+          const remoteLooksStale = !localEmpty && remote.data.transactions.length < S().transactions.length;
           // La nube manda salvo que lo local sea más nuevo y la nube esté vacía de cambios.
-          if (remoteTs >= localTs || !S().transactions.length) {
+          if (localEmpty || (remoteTs >= localTs && !remoteLooksStale)) {
             Store.applyRemote(remote.data);
           } else {
             await Cloud.push(S());
