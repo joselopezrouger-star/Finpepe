@@ -584,7 +584,7 @@ dialog[open].dialog {
 
 /* Lista de categoría/cuenta desplegada ahí mismo, sin cambiar de hoja. */
 .tx-pick-inline {
-  max-height: 260px;
+  max-height: 46vh;
   overflow-y: auto;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
