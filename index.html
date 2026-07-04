@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow:wght@500;600;700;800&display=swap">
-<link rel="stylesheet" href="styles.css?v=20260703l">
+<link rel="stylesheet" href="styles.css?v=20260703m">
 <script>
   // Aplica el tema guardado antes de pintar la página, para evitar el
   // parpadeo de pasar de un tema a otro un instante después de cargar.
@@ -32,9 +32,11 @@
       <span class="brand-name">FinPep</span>
     </div>
     <div class="seg" role="group" aria-label="Moneda de visualización">
+      <span class="seg-thumb" aria-hidden="true"></span>
       <button type="button" data-cur="ARS" class="seg-btn">ARS</button>
       <button type="button" data-cur="USD" class="seg-btn">USD</button>
     </div>
+    <button type="button" class="icon-btn topbar-settings" id="btn-open-settings" aria-label="Ajustes"></button>
   </div>
 </header>
 
@@ -43,7 +45,6 @@
 <main id="view" class="view"></main>
 
 <footer class="footer">
-  <span id="footer-storage">Tus datos se guardan únicamente en este navegador.</span>
   Hacé copias de seguridad desde
   <a href="#" id="footer-backup">Ajustes → Datos</a>.
 </footer>
@@ -63,10 +64,10 @@
      código en GitHub Pages no siempre se nota enseguida en el celular.
      Subí este número (fecha + letra) cada vez que cambie algún .js o .css. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/store.js?v=20260703l"></script>
-<script src="js/fx.js?v=20260703l"></script>
-<script src="js/cloud.js?v=20260703l"></script>
-<script src="js/charts.js?v=20260703l"></script>
-<script src="js/app.js?v=20260703l"></script>
+<script src="js/store.js?v=20260703m"></script>
+<script src="js/fx.js?v=20260703m"></script>
+<script src="js/cloud.js?v=20260703m"></script>
+<script src="js/charts.js?v=20260703m"></script>
+<script src="js/app.js?v=20260703m"></script>
 </body>
 </html>

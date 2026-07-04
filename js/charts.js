@@ -96,18 +96,16 @@ const Charts = (() => {
   }
 
   /* ---------- Barras horizontales (una serie) ----------
-     items: [{label, value}] · opts: {fmt, color, shareOf} */
+     items: [{label, value}] · opts: {fmt, color} */
   function hBars(el, items, opts) {
     el.replaceChildren();
     if (!items.length) return;
     const max = Math.max(...items.map((i) => i.value));
-    const total = opts.shareOf || items.reduce((a, i) => a + i.value, 0);
     const color = opts.color || COLORS.expense;
 
     for (const it of items) {
       const row = document.createElement('div');
       row.className = 'hbar-row';
-      row.tabIndex = 0;
 
       const label = document.createElement('span');
       label.className = 'hbar-label';
@@ -128,19 +126,6 @@ const Charts = (() => {
       row.appendChild(label);
       row.appendChild(track);
       row.appendChild(value);
-
-      const share = total > 0 ? Math.round((it.value / total) * 100) : 0;
-      const show = (x, y) =>
-        tipShow(it.label, [
-          { swatch: color, label: share + '% del total', value: opts.fmt(it.value) },
-        ], x, y);
-      row.addEventListener('pointermove', (e) => show(e.clientX, e.clientY));
-      row.addEventListener('pointerleave', tipHide);
-      row.addEventListener('focus', () => {
-        const r = row.getBoundingClientRect();
-        show(r.left + r.width / 2, r.top);
-      });
-      row.addEventListener('blur', tipHide);
 
       el.appendChild(row);
     }
