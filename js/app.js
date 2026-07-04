@@ -258,6 +258,10 @@
     if (mk > cm) return daysInMonth;
     return Math.max(0, daysInMonth - new Date().getDate());
   }
+  // Paleta fija para diferenciar categorías en "Gastos por categoría" (barras
+  // + anillo de participación): distinta de los colores semánticos
+  // (ingreso/gasto/acento), que ya están reservados para otras cosas.
+  const CAT_PALETTE = ['#08d59d', '#f5d142', '#ff8a5c', '#5b8def', '#c77dff', '#ff5e5b', '#4dd0e1', '#94a3b8'];
   const CAT_ICON = {
     'c-casa': 'home', 'c-comida': 'food', 'c-auto': 'car', 'c-salud': 'heart',
     'c-entret': 'film', 'c-ropa': 'shirt', 'c-educ': 'book', 'c-viajes': 'plane',
@@ -938,6 +942,7 @@
       catItems = catItems.slice(0, 7);
       catItems.push({ label: `Otras (${rest.length})`, value: rest.reduce((a, i) => a + i.value, 0) });
     }
+    catItems = catItems.map((it, i) => ({ ...it, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
 
     // Tendencia: últimos 6 meses hasta el mes elegido
     const months = [];
@@ -994,17 +999,21 @@
           </div>
         </div>
         <div class="hero-ring-col">
-          <div class="hero-ring-month">
-            <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
-            <span class="month-label">${esc(monthLabel(mk))}</span>
-            <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
+          <div class="hero-month-group">
+            <div class="hero-ring-month">
+              <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
+              <span class="month-label">${esc(monthLabel(mk))}</span>
+              <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
+            </div>
+            ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
           </div>
-          <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft)}</div>
-          <div class="hero-ring-legend">
-            <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
-            <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
+          <div class="hero-ring-bottom">
+            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft)}</div>
+            <div class="hero-ring-legend">
+              <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
+              <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
+            </div>
           </div>
-          ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
         </div>
       </div>
 
@@ -1014,7 +1023,11 @@
       <div class="grid-2">
         <div class="card">
           <h2 class="card-title">Gastos por categoría · ${esc(monthLabel(mk))}</h2>
-          <div id="chart-cats">${catItems.length ? '' : '<div class="empty">Sin gastos registrados este mes.</div>'}</div>
+          ${catItems.length ? `
+          <div class="cats-chart-row">
+            <div id="chart-cats" class="cats-bars"></div>
+            <div id="chart-cats-donut" class="cats-donut"></div>
+          </div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
         </div>
         <div class="card">
           <h2 class="card-title">
@@ -1059,6 +1072,7 @@
       Charts.hBars($('#chart-cats', el), catItems, {
         fmt: fmtDisp, color: Charts.COLORS.category,
       });
+      Charts.donut($('#chart-cats-donut', el), catItems, { size: 92, stroke: 13 });
     }
     const trendEl = $('#chart-trend', el);
     if (ui.trendTable) {
@@ -1119,7 +1133,7 @@
 
     el.innerHTML = `
       <div class="card">
-        <div class="toolbar" style="margin-bottom:12px">
+        <div class="mov-filters">
           <select id="fil-month" aria-label="Mes">
             <option value="">Todos los meses</option>
             ${monthsPresent.map((m) => `<option value="${m}" ${m === ui.fMonth ? 'selected' : ''}>${esc(monthLabel(m))}</option>`).join('')}
@@ -1138,9 +1152,8 @@
             <option value="">Todos los medios</option>
             ${selOptions(S().methods, ui.fMethod)}
           </select>
-          <div class="spacer"></div>
-          <button class="btn btn-primary btn-sm" id="btn-add-tx">+ Movimiento</button>
         </div>
+        <button class="btn btn-primary btn-sm mov-add" id="btn-add-tx">+ Movimiento</button>
 
         ${list.length ? `
         ${dayGroups(list).map(({ dateStr, items }) => `
@@ -2582,7 +2595,10 @@
     }
     shared.loaded = true;
     shared.loading = false;
-    if (ui.view === 'compartido') render();
+    // No solo la pestaña "Compartido" muestra datos de shared.* -- el
+    // mini resumen de Resumen también depende de esto, y antes se quedaba
+    // sin aparecer nunca si en ese momento no estabas en "Compartido".
+    render();
   }
 
   function sharedBalance() {

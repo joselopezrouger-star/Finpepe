@@ -96,20 +96,29 @@ const Charts = (() => {
   }
 
   /* ---------- Barras horizontales (una serie) ----------
-     items: [{label, value}] · opts: {fmt, color} */
+     items: [{label, value, color?}] · opts: {fmt, color} — color por ítem
+     pisa el color general (para diferenciar categorías, emparejado con el
+     mismo orden de colores que Charts.donut). */
   function hBars(el, items, opts) {
     el.replaceChildren();
     if (!items.length) return;
     const max = Math.max(...items.map((i) => i.value));
-    const color = opts.color || COLORS.expense;
+    const fallbackColor = opts.color || COLORS.expense;
 
     for (const it of items) {
+      const color = it.color || fallbackColor;
       const row = document.createElement('div');
       row.className = 'hbar-row';
 
       const label = document.createElement('span');
       label.className = 'hbar-label';
-      label.textContent = it.label;
+      if (it.color) {
+        const dot = document.createElement('span');
+        dot.className = 'hbar-dot';
+        dot.style.background = color;
+        label.appendChild(dot);
+      }
+      label.appendChild(document.createTextNode(it.label));
 
       const track = document.createElement('span');
       track.className = 'hbar-track';
@@ -129,6 +138,54 @@ const Charts = (() => {
 
       el.appendChild(row);
     }
+  }
+
+  /* ---------- Anillo de participación (donut, sin interacción: el reparto
+     se lee por el tamaño de cada arco, no por hover/tap) ----------
+     items: [{label, value, color?}] · opts: {size, stroke, color} */
+  function donut(el, items, opts) {
+    el.replaceChildren();
+    const o = opts || {};
+    const total = items.reduce((a, i) => a + i.value, 0);
+    if (!items.length || total <= 0) return;
+    const size = o.size || 104;
+    const stroke = o.stroke || 14;
+    const r = size / 2 - stroke / 2;
+    const c = 2 * Math.PI * r;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+    svg.setAttribute('width', size);
+    svg.setAttribute('height', size);
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', o.ariaLabel || 'Participación de cada categoría en el total');
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const add = (attrs) => {
+      const n = document.createElementNS(NS, 'circle');
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      svg.appendChild(n);
+      return n;
+    };
+
+    const gap = items.length > 1 ? 2 : 0; // separación chica entre arcos
+    let acc = 0;
+    items.forEach((it, i) => {
+      const frac = it.value / total;
+      const dash = Math.max(0, c * frac - gap);
+      add({
+        cx: size / 2, cy: size / 2, r, fill: 'none',
+        stroke: it.color || COLORS.category,
+        'stroke-width': stroke,
+        'stroke-linecap': items.length > 1 ? 'round' : 'butt',
+        'stroke-dasharray': `${dash} ${c - dash}`,
+        'stroke-dashoffset': c * (1 - acc),
+        transform: `rotate(-90 ${size / 2} ${size / 2})`,
+      });
+      acc += frac;
+    });
+
+    el.appendChild(svg);
   }
 
   /* ---------- Columnas agrupadas: ingresos vs gastos por mes ----------
@@ -227,5 +284,5 @@ const Charts = (() => {
     return (Math.round(x * 10) / 10).toString().replace('.', ',');
   }
 
-  return { COLORS, hBars, trend, tipHide };
+  return { COLORS, hBars, donut, trend, tipHide };
 })();
