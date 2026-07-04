@@ -1104,11 +1104,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   flex: none;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* flex-end (no center): así el anillo y la píldora del mes comparten el
+     mismo borde derecho en vez de quedar centrados dentro de una columna
+     más ancha que ellos (la píldora del mes suele ser el elemento más
+     ancho), que se veía descuadrado. */
+  align-items: flex-end;
   justify-content: space-between;
   gap: 10px;
 }
-.hero-month-group { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.hero-month-group { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 /* Píldora como el resto de los controles de la app (segmented control de
    moneda, nav inferior), en vez de tres elementos sueltos sin fondo. */
 .hero-ring-month {
@@ -1124,7 +1128,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .hero-ring-month .icon-btn:hover { background: var(--surface); }
 .hero-ring-month .month-label { min-width: 0; font-size: 11.5px; font-weight: 700; white-space: nowrap; padding: 0 4px; }
 .hero-mtoday { position: relative; display: block; font-size: 11px; }
-.hero-ring-bottom { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.hero-ring-bottom { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .hero-ring { position: relative; flex: none; }
 .hero-ring-legend {
   display: flex;
@@ -1149,12 +1153,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
    hijo con filter dentro de un padre con overflow:hidden (más si hay un
    ancestro position:sticky, como nuestro header) — el halo se "escapaba"
    del card y aparecía flotando cerca del encabezado. Un radial-gradient
-   da el mismo efecto suave sin ese bug. */
-.hero::before {
+   da el mismo efecto suave sin ese bug.
+   El halo vive en hero-ring-col (no en .hero) para quedar reservado a la
+   sección de la derecha (anillo + selector de mes) en vez de teñir toda
+   la tarjeta; overflow:hidden en .hero recorta lo que se pase del borde. */
+.hero-ring-col::before {
   content: '';
   position: absolute;
-  top: -60px; right: -60px;
-  width: 220px; height: 220px;
+  top: -30px; right: -30px;
+  width: 180px; height: 180px;
   background: radial-gradient(circle, var(--accent) 0%, transparent 72%);
   opacity: 0.18;
   border-radius: 50%;
