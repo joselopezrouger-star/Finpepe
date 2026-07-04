@@ -374,7 +374,6 @@ a { color: var(--accent-down); }
   flex-wrap: wrap;
 }
 .toolbar .spacer { flex: 1; }
-.toolbar-center { justify-content: center; }
 
 /* ---------- Botones ---------- */
 .btn {
@@ -946,30 +945,19 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 }
 .pill-cta:hover { background: var(--accent-strong); }
 
-/* ---------- Resumen de Compartido, relleno dentro de "Gastos por
-   categoría" (Resumen): esa tarjeta queda más baja que "Ingresos vs.
-   gastos" (misma fila del grid), así que el resumen ocupa el espacio que
-   le sobra en vez de dejarlo vacío. .card-cats en flex-column + margin-top
-   auto en .shared-fill son lo que empuja el bloque al fondo de esa tarjeta
-   sin tocar el .card genérico (usado por decenas de otras vistas). ---------- */
-.card-cats { display: flex; flex-direction: column; }
-.shared-fill {
-  margin-top: auto;
+/* ---------- Mini resumen de Compartido (Resumen) ---------- */
+.shared-mini {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
-  padding: 14px;
+  padding: 10px 14px;
   cursor: pointer;
-  text-align: center;
 }
-.shared-fill-name {
-  font-size: 11.5px; color: var(--ink-2); font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.03em;
-  margin-bottom: 6px;
-}
-.shared-fill-value { font-size: 17px; font-weight: 700; color: var(--ink); }
-.shared-fill-value.pos { color: var(--income); }
-.shared-fill-value.neg { color: var(--crit); }
+.shared-mini-label { font-size: 12.5px; color: var(--ink-2); font-weight: 550; }
+.shared-mini-value { font-size: 13px; font-weight: 700; color: var(--ink); }
+.shared-mini-value.pos { color: var(--income); }
+.shared-mini-value.neg { color: var(--crit); }
 
 /* ---------- Línea de tiempo de ciclo de tarjeta ---------- */
 .cycle-card {
@@ -1089,31 +1077,42 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   border-radius: 12px;
   padding: 20px 22px;
   color: var(--ink);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
 }
-.hero-main { position: relative; min-width: 0; flex: 1; }
-.hero-ring-col {
+/* El selector de mes vive arriba de todo, en la fila del título — el
+   anillo con el balance y los días restantes bajó más abajo, después del
+   desglose de ingresos/gastos, para dejarle ese lugar. */
+.hero-top {
   position: relative;
-  flex: none;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
-.hero-ring { position: relative; flex: none; }
+.hero-top .month-nav { flex: none; }
+.hero-top .month-nav .month-label { min-width: 92px; font-size: 12.5px; }
+.hero-top .icon-btn { width: 24px; height: 24px; }
+.hero-mtoday { position: relative; display: block; margin-top: 2px; }
+.hero-ring-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.hero-ring { flex: none; }
 .hero-ring-legend {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .hero-ring-item {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
+  gap: 6px;
+  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -1123,7 +1122,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 }
 .dot-accent { background: var(--accent); }
 .dot-warn { background: var(--warn); }
-@media (max-width: 380px) { .hero-ring-col { display: none; } }
 /* Antes usaba filter:blur() para el halo, pero Safari no recorta bien un
    hijo con filter dentro de un padre con overflow:hidden (más si hay un
    ancestro position:sticky, como nuestro header) — el halo se "escapaba"
