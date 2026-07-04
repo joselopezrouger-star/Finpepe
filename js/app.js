@@ -193,6 +193,7 @@
     cash: '<rect x="2.5" y="5.5" width="15" height="9" rx="1.5"/><circle cx="10" cy="10" r="2.2"/>',
     plus: '<circle cx="10" cy="10" r="7.2"/><path d="M10 6.8v6.4M6.8 10h6.4"/>',
     swap: '<path d="M4 7h10.5M12 4.2 15 7l-3 2.8"/><path d="M16 13H5.5M8 10.2 5 13l3 2.8"/>',
+    settings: '<path d="M4 6h7M15 6h1"/><circle cx="12" cy="6" r="2"/><path d="M4 10h1M9 10h7"/><circle cx="7" cy="10" r="2"/><path d="M4 14h9M17 14h-1"/><circle cx="14" cy="14" r="2"/>',
   };
   function iconSvg(name, cls) {
     const body = ICON_PATHS[name] || ICON_PATHS.tag;
@@ -441,14 +442,6 @@
     }
   }
 
-  function renderFooter() {
-    const el = $('#footer-storage');
-    if (!el) return;
-    el.textContent = Cloud.user()
-      ? 'Tus datos se guardan en este navegador y se sincronizan con tu cuenta en la nube.'
-      : 'Tus datos se guardan únicamente en este navegador.';
-  }
-
   // El <dialog> nativo no bloquea por sí solo el scroll de la página que
   // queda atrás (no es un CSS que se nos escapó, es una limitación real del
   // elemento): sin esto, en el celular se puede arrastrar y scrollear lo de
@@ -496,6 +489,19 @@
   const selOptions = (items, sel) => items
     .map((i) => `<option value="${esc(i.id)}" ${i.id === sel ? 'selected' : ''}>${esc(i.name)}</option>`)
     .join('');
+
+  // Como selOptions(), pero agrupando las subcategorías bajo su categoría
+  // madre con <optgroup>: en un <select> plano (sin la grilla con drill-down
+  // que tiene la carga de movimientos) una subcategoría suelta como
+  // "Alquiler" es difícil de ubicar si no se ve que depende de "Casa".
+  function catSelectOptionsHTML(type, selId) {
+    if (!useSubcats()) return selOptions(S().categories.filter((c) => c.type === type), selId);
+    return catGroups(type).map((g) => {
+      const children = catChildren(g.id);
+      if (!children.length) return `<option value="${esc(g.id)}" ${g.id === selId ? 'selected' : ''}>${esc(g.name)}</option>`;
+      return `<optgroup label="${esc(g.name)}">${selOptions(children, selId)}</optgroup>`;
+    }).join('');
+  }
 
   /* ================= Formulario de movimiento ================= */
 
@@ -967,7 +973,7 @@
 
       <div class="hero">
         <div class="hero-main">
-          <div class="hero-label">⇄ Balance del mes · ${esc(monthLabel(mk))}</div>
+          <div class="hero-label">⇄ Balance del mes</div>
           <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
           <div class="hero-split">
             <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
@@ -1769,7 +1775,7 @@
       </div>
       <div class="field">
         <label for="r-cat">Categoría</label>
-        <select name="categoryId" id="r-cat" required>${selOptions(selectableCats(r.type), r.categoryId)}</select>
+        <select name="categoryId" id="r-cat" required>${catSelectOptionsHTML(r.type, r.categoryId)}</select>
       </div>
       <div class="field">
         <label for="r-method">Medio de pago</label>
@@ -1797,14 +1803,43 @@
     });
     $('#r-type', dlg).addEventListener('change', () => {
       const sel = $('#r-cat', dlg);
-      sel.innerHTML = selOptions(selectableCats($('#r-type', dlg).value), sel.value);
+      sel.innerHTML = catSelectOptionsHTML($('#r-type', dlg).value, sel.value);
     });
+  }
+
+  // Agrupa las cuotas activas (compras en cuotas) por groupId: junta todas
+  // las cuotas de una misma compra para saber en cuál va y cuánto falta.
+  // Los grupos que ya terminaron de pagarse (todas las cuotas con fecha
+  // pasada) no se muestran.
+  function activeInstallmentGroups() {
+    const groups = new Map();
+    for (const t of S().transactions) {
+      if (!t.groupId || !t.installment) continue;
+      if (!groups.has(t.groupId)) groups.set(t.groupId, []);
+      groups.get(t.groupId).push(t);
+    }
+    const today = todayStr();
+    const rows = [];
+    for (const txs of groups.values()) {
+      txs.sort((a, b) => a.installment.k - b.installment.k);
+      const pending = txs.filter((t) => t.date > today);
+      if (!pending.length) continue;
+      const next = pending[0];
+      const totalPending = pending.reduce((a, t) => a + t.amount, 0);
+      rows.push({
+        groupId: txs[0].groupId, note: txs[0].note, categoryId: txs[0].categoryId,
+        methodId: txs[0].methodId, currency: txs[0].currency,
+        n: next.installment.n, nextK: next.installment.k, next, totalPending,
+      });
+    }
+    return rows.sort((a, b) => a.next.date.localeCompare(b.next.date));
   }
 
   function vPlan(el) {
     const mk = curMonth();
     const monthTx = S().transactions.filter(
       (t) => t.type === 'gasto' && effectiveMonthOf(t) === mk);
+    const instRows = activeInstallmentGroups();
 
     const budgetRows = S().budgets.map((b) => {
       const spent = sumDisp(monthTx.filter((t) => topCategoryOf(t.categoryId) === b.categoryId));
@@ -1865,8 +1900,31 @@
         </table></div>
         <div class="hint" style="margin-top:8px">Al abrir la app en un mes nuevo, estos movimientos se cargan solos. Los ya generados se pueden editar o borrar como cualquier movimiento.</div>`
         : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos cada mes.</div>'}
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Compras en cuotas</h2>
+        ${instRows.length ? `
+        <div class="table-scroll"><table class="data">
+          <thead><tr>
+            <th>Compra</th><th>Cuota</th><th class="num">Monto de la cuota</th><th>Próximo cargo</th><th class="num">Restan pagar</th>
+          </tr></thead>
+          <tbody>${instRows.map((r) => `
+            <tr class="rowlink" data-instgroup="${esc(r.groupId)}">
+              <td><b>${esc(r.note || catName(r.categoryId))}</b><div class="cell-sub">${esc(methodName(r.methodId))}</div></td>
+              <td class="cell-sub">${r.nextK}/${r.n}</td>
+              <td class="num">${fmtMoney(r.next.amount, r.currency)}</td>
+              <td class="cell-sub">${esc(fmtDateShort(r.next.date))}</td>
+              <td class="num">${fmtMoney(r.totalPending, r.currency)}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>`
+        : '<div class="empty">Cuando cargues una compra en cuotas desde "+ Movimiento", la vas a ver acá con cuántas cuotas faltan.</div>'}
       </div>`;
 
+    $$('tr[data-instgroup]', el).forEach((row) => row.addEventListener('click', () => {
+      const g = instRows.find((r) => r.groupId === row.dataset.instgroup);
+      if (g) txForm(g.next);
+    }));
     $('#btn-add-budget', el).addEventListener('click', () => budgetForm(null));
     $('#btn-add-rec', el).addEventListener('click', () => recurringForm(null));
     $$('tr[data-bid]', el).forEach((row) => row.addEventListener('click', (e) => {
@@ -2843,26 +2901,30 @@
     { key: 'inicio', views: ['resumen'] },
     { key: 'movimientos', views: ['movimientos', 'calendario'] },
     { key: 'cuentas', views: ['tarjetas', 'ahorros'] },
-    { key: 'mas', views: ['plan', 'compartido', 'ajustes'] },
+    { key: 'mas', views: ['plan', 'compartido'] },
   ];
   const VIEW_LABELS = {
     resumen: 'Resumen', movimientos: 'Movimientos', calendario: 'Calendario',
     tarjetas: 'Tarjetas y medios', ahorros: 'Ahorros', plan: 'Planificar',
     compartido: 'Compartido', ajustes: 'Ajustes',
   };
-  function groupOf(view) { return GROUPS.find((g) => g.views.includes(view)) || GROUPS[0]; }
+  // Ajustes ya no vive dentro de ningún grupo de la nav inferior — se abre
+  // directo con el botón del encabezado, así que groupOf() puede no
+  // encontrar nada para esa vista (y para ninguna otra que se agregue suelta).
+  function groupOf(view) { return GROUPS.find((g) => g.views.includes(view)) || null; }
 
   function render() {
     Charts.tipHide();
     const grp = groupOf(ui.view);
-    $$('.bottom-nav button').forEach((b) => b.classList.toggle('active', b.dataset.group === grp.key));
+    $$('.bottom-nav button').forEach((b) => b.classList.toggle('active', !!grp && b.dataset.group === grp.key));
     $$('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.cur === disp()));
+    const thumb = $('.seg-thumb');
+    if (thumb) thumb.classList.toggle('pos-usd', disp() === 'USD');
     renderRateChip();
     renderAccountChip();
     renderBanner();
-    renderFooter();
     const el = $('#view');
-    el.innerHTML = grp.views.length > 1
+    el.innerHTML = (grp && grp.views.length > 1)
       ? `<div class="subtabs">${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}</div><div class="view-content"></div>`
       : '<div class="view-content"></div>';
     $$('[data-subview]', el).forEach((b) => b.addEventListener('click', () => {
@@ -2894,6 +2956,9 @@
       ui.view = 'ajustes';
       render();
     });
+    const settingsBtn = $('#btn-open-settings');
+    settingsBtn.innerHTML = iconSvg('settings');
+    settingsBtn.addEventListener('click', () => { ui.view = 'ajustes'; render(); });
     // Restaura el scroll de la página al cerrar el diálogo, sin importar
     // cómo se cerró (botón, Escape, o dlg.close() desde código): ver openModal().
     $('#dialog').addEventListener('close', () => { document.body.style.overflow = ''; });
