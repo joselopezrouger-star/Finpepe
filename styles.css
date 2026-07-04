@@ -748,6 +748,31 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .amount-in { color: var(--income); font: 600 13px var(--font-heading); }
 .amount-out { font: 600 13px var(--font-heading); }
 .cell-sub { color: var(--muted); font-size: 12px; }
+tr.cat-sub-row td:first-child { padding-left: 26px; }
+/* Densa: 4 columnas numéricas no entran cómodas con el padding normal de
+   table.data en una tarjeta de ancho mobile, terminaban desbordando (había
+   que hacer scroll horizontal para ver "% ingresos"). */
+table.data.cat-breakdown-table th, table.data.cat-breakdown-table td { padding: 7px 5px; }
+table.data.cat-breakdown-table th:first-child, table.data.cat-breakdown-table td:first-child { padding-left: 0; }
+table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20px; }
+
+/* Selector de mes de "Categorías": misma píldora que la tarjeta principal
+   pero suelta (no dentro de una columna de anillo). */
+.cat-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: fit-content;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  margin-bottom: 14px;
+}
+.cat-month-nav .icon-btn { width: 26px; height: 26px; border: 0; background: transparent; }
+.cat-month-nav .icon-btn:hover { background: var(--surface); }
+.cat-month-nav .month-label { min-width: 0; font-size: 13px; font-weight: 700; white-space: nowrap; padding: 0 6px; }
+.cat-month-nav .link-btn { margin-left: 8px; font-size: 12px; }
 
 .badge {
   display: inline-block;
@@ -1156,12 +1181,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
    da el mismo efecto suave sin ese bug.
    El halo vive en hero-ring-col (no en .hero) para quedar reservado a la
    sección de la derecha (anillo + selector de mes) en vez de teñir toda
-   la tarjeta; overflow:hidden en .hero recorta lo que se pase del borde. */
+   la tarjeta. Offsets positivos (no negativos): así el círculo queda
+   contenido dentro de esa columna, sin invadir hero-main ni tocar la
+   esquina redondeada de la tarjeta (un offset negativo ahí se recortaba
+   de forma rara contra el border-radius). */
 .hero-ring-col::before {
   content: '';
   position: absolute;
-  top: -30px; right: -30px;
-  width: 180px; height: 180px;
+  top: 4px; right: 4px;
+  width: 148px; height: 148px;
   background: radial-gradient(circle, var(--accent) 0%, transparent 72%);
   opacity: 0.18;
   border-radius: 50%;

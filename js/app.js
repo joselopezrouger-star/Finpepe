@@ -290,6 +290,7 @@
     openSavings: {},          // id -> bool (historial expandido)
     calMonth: curMonth(),     // mes del calendario
     calSel: null,             // 'YYYY-MM-DD' día seleccionado en el calendario
+    catAnalysisId: null,      // categoría elegida para el gráfico de evolución
   };
 
   /* ================= Ciclo de tarjetas de crédito ================= */
@@ -1008,7 +1009,7 @@
             ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
           </div>
           <div class="hero-ring-bottom">
-            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft)}</div>
+            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 92)}</div>
             <div class="hero-ring-legend">
               <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
               <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
@@ -1022,7 +1023,10 @@
 
       <div class="grid-2">
         <div class="card">
-          <h2 class="card-title">Gastos por categoría · ${esc(monthLabel(mk))}</h2>
+          <h2 class="card-title">
+            <span>Gastos por categoría · ${esc(monthLabel(mk))}</span>
+            <button class="link-btn" data-goto-categorias>Ver análisis</button>
+          </h2>
           ${catItems.length ? `
           <div class="cats-chart-row">
             <div id="chart-cats" class="cats-bars"></div>
@@ -1109,6 +1113,11 @@
     if (gotoShared) gotoShared.addEventListener('click', () => {
       ui.view = 'compartido';
       loadShared();
+      render();
+    });
+    const gotoCats = $('[data-goto-categorias]', el);
+    if (gotoCats) gotoCats.addEventListener('click', () => {
+      ui.view = 'categorias';
       render();
     });
   }
@@ -1226,6 +1235,160 @@
       const tx = S().transactions.find((t) => t.id === b.dataset.del);
       if (tx) deleteTx(tx);
     }));
+  }
+
+  /* ================= Vista: Categorías (análisis) ================= */
+  // A qué "grupo" pertenece un gasto para el análisis: el id del grupo de
+  // más arriba, o '__sin' si no tiene categoría asignada (o se borró).
+  function topCatKeyOf(t) {
+    return (t.categoryId && catById(t.categoryId)) ? topCategoryOf(t.categoryId) : '__sin';
+  }
+
+  // Agrupa una lista de gastos por categoría de nivel superior, con el
+  // detalle de subcategorías debajo de cada una (fusionando movimientos
+  // repetidos de la misma subcategoría en una sola fila).
+  function categoryBreakdown(list) {
+    const groups = new Map();
+    for (const t of list) {
+      const v = txDispAmount(t);
+      if (v == null) continue;
+      const topId = topCatKeyOf(t);
+      if (!groups.has(topId)) {
+        groups.set(topId, { id: topId, name: topId === '__sin' ? 'Sin categoría' : catName(topId), total: 0, subs: [], direct: 0 });
+      }
+      const g = groups.get(topId);
+      g.total += v;
+      if (topId !== '__sin' && t.categoryId !== topId) {
+        g.subs.push({ id: t.categoryId, value: v });
+      } else {
+        g.direct += v;
+      }
+    }
+    for (const g of groups.values()) {
+      const merged = new Map();
+      for (const s of g.subs) merged.set(s.id, (merged.get(s.id) || 0) + s.value);
+      g.subs = [...merged.entries()].map(([id, value]) => ({ id, name: catName(id), value }));
+      // Si además hay gasto cargado directo en el grupo (sin subcategoría
+      // hija) se suma como una fila "Otros"; si el grupo no tiene
+      // subcategorías reales, ese monto directo ES el total del grupo y no
+      // hace falta desglosarlo en una fila aparte.
+      if (g.direct > 0 && g.subs.length) {
+        g.subs.push({ id: g.id + ':directo', name: 'Otros (sin subcategoría)', value: g.direct });
+      }
+      g.subs.sort((a, b) => b.value - a.value);
+    }
+    return [...groups.values()].sort((a, b) => b.total - a.total);
+  }
+
+  function vCategorias(el) {
+    const mk = ui.month;
+    const txs = S().transactions;
+    const inMonth = txs.filter((t) => effectiveMonthOf(t) === mk);
+    const inc = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
+    const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
+    const breakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'gasto'));
+
+    // Últimos 6 meses hasta el mes elegido, para el selector y el gráfico
+    // de evolución (una categoría sin gasto este mes puede igual mostrarse
+    // si tuvo peso en algún mes reciente).
+    const months = [];
+    for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
+    const windowBreakdown = categoryBreakdown(txs.filter((t) => t.type === 'gasto' && months.includes(effectiveMonthOf(t))));
+
+    if (!windowBreakdown.some((g) => g.id === ui.catAnalysisId)) {
+      ui.catAnalysisId = windowBreakdown[0] ? windowBreakdown[0].id : null;
+    }
+    const selId = ui.catAnalysisId;
+    const selGroup = windowBreakdown.find((g) => g.id === selId) || null;
+
+    const monthLabels = months.map((m) => {
+      const [y, mo] = m.split('-').map(Number);
+      return monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', '');
+    });
+    const pctExpSeries = [];
+    const pctIncSeries = [];
+    months.forEach((m) => {
+      const listM = txs.filter((t) => effectiveMonthOf(t) === m);
+      const gastoM = listM.filter((t) => t.type === 'gasto');
+      const expM = sumDisp(gastoM);
+      const incM = sumDisp(listM.filter((t) => t.type === 'ingreso'));
+      const catValM = selGroup ? sumDisp(gastoM.filter((t) => topCatKeyOf(t) === selId)) : 0;
+      pctExpSeries.push(expM > 0 ? (catValM / expM) * 100 : 0);
+      pctIncSeries.push(incM > 0 ? (catValM / incM) * 100 : 0);
+    });
+
+    const pct = (v, total) => (total > 0 ? ((v / total) * 100).toFixed(1) : '0,0').replace('.', ',');
+
+    const rowsHtml = breakdown.map((g) => {
+      const showSubs = g.subs.length && !(g.subs.length === 1 && g.total === g.direct && g.subs[0].name === 'Otros (sin subcategoría)');
+      const subsHtml = showSubs ? g.subs.map((s) => `
+        <tr class="cat-sub-row">
+          <td class="cell-sub">${esc(s.name)}</td>
+          <td class="num cell-sub">${fmtDisp(s.value)}</td>
+          <td class="num cell-sub">${pct(s.value, exp)}%</td>
+          <td class="num cell-sub">${pct(s.value, inc)}%</td>
+        </tr>`).join('') : '';
+      return `<tr>
+        <td>${esc(g.name)}</td>
+        <td class="num amount-out">${fmtDisp(g.total)}</td>
+        <td class="num">${pct(g.total, exp)}%</td>
+        <td class="num">${pct(g.total, inc)}%</td>
+      </tr>${subsHtml}`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="card">
+        <h2 class="card-title"><span>Análisis de categorías</span></h2>
+        <div class="cat-month-nav">
+          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
+          <span class="month-label">${esc(monthLabel(mk))}</span>
+          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
+          ${mk !== curMonth() ? '<button class="link-btn" data-mtoday>volver al mes actual</button>' : ''}
+        </div>
+        ${breakdown.length ? `
+        <div class="table-scroll"><table class="data cat-breakdown-table">
+          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">% gastos</th><th class="num">% ingr.</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
+      </div>
+
+      <div class="card">
+        <h2 class="card-title"><span>Evolución del peso por categoría · últimos 6 meses</span></h2>
+        ${windowBreakdown.length ? `
+        <div class="field">
+          <select id="cat-analysis-sel" aria-label="Categoría a graficar">
+            ${windowBreakdown.map((g) => `<option value="${esc(g.id)}" ${g.id === selId ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="chart-legend">
+          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>% de tus gastos</span>
+          <span><span class="key" style="background:${Charts.COLORS.income}"></span>% de tus ingresos</span>
+        </div>
+        <div id="chart-cat-evo"></div>` : '<div class="empty">Todavía no hay suficientes movimientos para ver una evolución.</div>'}
+      </div>`;
+
+    if (windowBreakdown.length) {
+      Charts.lines($('#chart-cat-evo', el), monthLabels, [
+        { label: '% de tus gastos', color: Charts.COLORS.expense, values: pctExpSeries },
+        { label: '% de tus ingresos', color: Charts.COLORS.income, values: pctIncSeries },
+      ], {
+        fmt: (v) => v.toFixed(1).replace('.', ',') + '%',
+        fmtAxis: (v) => Math.round(v) + '%',
+        ariaLabel: `Evolución del peso de ${selGroup ? selGroup.name : ''} sobre ingresos y gastos`,
+      });
+    }
+
+    $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
+      ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
+      render();
+    }));
+    const btnToday = $('[data-mtoday]', el);
+    if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
+    const sel = $('#cat-analysis-sel', el);
+    if (sel) sel.addEventListener('change', (e) => {
+      ui.catAnalysisId = e.target.value;
+      render();
+    });
   }
 
   /* ================= Vista: Tarjetas y medios ================= */
@@ -2936,6 +3099,7 @@
     resumen: vResumen,
     movimientos: vMovimientos,
     calendario: vCalendario,
+    categorias: vCategorias,
     compartido: vCompartido,
     tarjetas: vTarjetas,
     ahorros: vAhorros,
@@ -2947,14 +3111,14 @@
   // una vista, que se elige con una sub-pestaña dentro de la sección.
   const GROUPS = [
     { key: 'inicio', views: ['resumen'] },
-    { key: 'movimientos', views: ['movimientos', 'calendario'] },
+    { key: 'movimientos', views: ['movimientos', 'calendario', 'categorias'] },
     { key: 'cuentas', views: ['tarjetas', 'ahorros'] },
     { key: 'mas', views: ['plan', 'compartido'] },
   ];
   const VIEW_LABELS = {
     resumen: 'Resumen', movimientos: 'Movimientos', calendario: 'Calendario',
-    tarjetas: 'Tarjetas y medios', ahorros: 'Ahorros', plan: 'Planificar',
-    compartido: 'Compartido', ajustes: 'Ajustes',
+    categorias: 'Categorías', tarjetas: 'Tarjetas y medios', ahorros: 'Ahorros',
+    plan: 'Planificar', compartido: 'Compartido', ajustes: 'Ajustes',
   };
   // Ajustes ya no vive dentro de ningún grupo de la nav inferior — se abre
   // directo con el botón del encabezado, así que groupOf() puede no
