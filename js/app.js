@@ -2496,15 +2496,28 @@
     }
   }
 
+  // Supabase dispara onAuthStateChange no solo en login/logout sino también
+  // en cada TOKEN_REFRESHED periódico (autoRefreshToken: true). Antes,
+  // onAuthChanged() vaciaba shared.* en cada llamada sin distinguir el
+  // motivo, así que un simple refresh de token borraba de la vista el
+  // hogar/gastos compartidos hasta que loadShared() terminara de volver a
+  // traerlos — y si esa recarga se demoraba o fallaba, parecía que el
+  // historial se había "borrado". Ahora solo se invalida cuando realmente
+  // cambió la cuenta (login/logout/otra persona).
+  let lastAuthUserId; // undefined = todavía no se llamó ni una vez
   // Al cambiar el estado de sesión: traer datos remotos o subir los locales.
   async function onAuthChanged() {
     renderAccountChip();
-    // Cambió la sesión (login/logout/otra cuenta): invalida la caché de
-    // "Compartido" para no arrastrar el hogar de una cuenta anterior.
-    shared.loaded = false;
-    shared.household = null;
-    shared.expenses = [];
-    shared.settlements = [];
+    const uid = Cloud.user() ? Cloud.user().id : null;
+    if (lastAuthUserId !== undefined && uid !== lastAuthUserId) {
+      // Cambió de cuenta (login/logout/otra cuenta): invalida la caché de
+      // "Compartido" para no arrastrar el hogar de una cuenta anterior.
+      shared.loaded = false;
+      shared.household = null;
+      shared.expenses = [];
+      shared.settlements = [];
+    }
+    lastAuthUserId = uid;
     if (Cloud.user()) {
       try {
         const remote = await Cloud.pull();
