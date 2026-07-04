@@ -193,7 +193,7 @@
     cash: '<rect x="2.5" y="5.5" width="15" height="9" rx="1.5"/><circle cx="10" cy="10" r="2.2"/>',
     plus: '<circle cx="10" cy="10" r="7.2"/><path d="M10 6.8v6.4M6.8 10h6.4"/>',
     swap: '<path d="M4 7h10.5M12 4.2 15 7l-3 2.8"/><path d="M16 13H5.5M8 10.2 5 13l3 2.8"/>',
-    settings: '<path d="M4 6h7M15 6h1"/><circle cx="12" cy="6" r="2"/><path d="M4 10h1M9 10h7"/><circle cx="7" cy="10" r="2"/><path d="M4 14h9M17 14h-1"/><circle cx="14" cy="14" r="2"/>',
+    settings: '<circle cx="10" cy="10" r="3"/><path d="M10 2.6v2.5M10 14.9v2.5M17.4 10h-2.5M5.1 10H2.6M15.1 4.9l-1.8 1.8M6.7 13.3l-1.8 1.8M15.1 15.1l-1.8-1.8M6.7 6.7 4.9 4.9"/>',
   };
   function iconSvg(name, cls) {
     const body = ICON_PATHS[name] || ICON_PATHS.tag;
@@ -230,7 +230,8 @@
       ${arc(rI, strokeI, pctInner, '--warn')}
     </svg>`;
   }
-  // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya terminó).
+  // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
+  // terminó) — para dibujar el arco del anillo, que necesita una escala 0-100.
   function monthLeftPct(mk) {
     const cm = curMonth();
     if (mk < cm) return 0;
@@ -239,6 +240,16 @@
     const daysInMonth = new Date(y, m, 0).getDate();
     const day = new Date().getDate();
     return Math.max(0, Math.min(100, Math.round(((daysInMonth - day) / daysInMonth) * 100)));
+  }
+  // Días que faltan para que termine el mes elegido, en nominal (no %):
+  // lo que se muestra en la leyenda, más fácil de leer que un porcentaje.
+  function daysLeftInMonth(mk) {
+    const cm = curMonth();
+    const [y, m] = mk.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    if (mk < cm) return 0;
+    if (mk > cm) return daysInMonth;
+    return Math.max(0, daysInMonth - new Date().getDate());
   }
   const CAT_ICON = {
     'c-casa': 'home', 'c-comida': 'food', 'c-auto': 'car', 'c-salud': 'heart',
@@ -947,17 +958,21 @@
 
     const pctLeft = exp <= 0 ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round(((inc - exp) / inc) * 100))) : 0);
     const pctMonthLeft = monthLeftPct(mk);
+    const daysLeft = daysLeftInMonth(mk);
 
+    // Este resumen de Compartido rellena el espacio que le sobra a la
+    // tarjeta "Gastos por categoría" (queda más baja que la de al lado,
+    // Ingresos vs. gastos, con la que comparte fila en el grid).
     const sharedPartnerM = Cloud.user() ? sharedPartner() : null;
-    const sharedWidget = (shared.household && sharedPartnerM) ? (() => {
+    const sharedFillHTML = (shared.household && sharedPartnerM) ? (() => {
       const bal = sharedBalance();
       const balAbs = Math.abs(bal);
       const balTxt = balAbs < 0.01 ? 'Están a mano'
         : (bal > 0 ? `${esc(partnerLabel(sharedPartnerM))} te debe ${fmtDisp(balAbs)}`
                    : `Le debés a ${esc(partnerLabel(sharedPartnerM))} ${fmtDisp(balAbs)}`);
-      return `<div class="shared-mini" data-goto-shared>
-        <span class="shared-mini-label">Compartido con ${esc(partnerLabel(sharedPartnerM))}</span>
-        <span class="shared-mini-value ${bal > 0 ? 'pos' : bal < 0 ? 'neg' : ''}">${esc(balTxt)}</span>
+      return `<div class="shared-fill" data-goto-shared>
+        <div class="shared-fill-name">${esc(shared.household.name || 'Hogar compartido')}</div>
+        <div class="shared-fill-value ${bal > 0 ? 'pos' : bal < 0 ? 'neg' : ''}">${esc(balTxt)}</div>
       </div>`;
     })() : '';
 
@@ -984,18 +999,18 @@
           <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft)}</div>
           <div class="hero-ring-legend">
             <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
-            <div class="hero-ring-item"><span class="dot dot-warn"></span>Del mes: <b>${pctMonthLeft}%</b></div>
+            <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
           </div>
         </div>
       </div>
 
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
-      ${sharedWidget}
 
       <div class="grid-2">
-        <div class="card">
+        <div class="card card-cats">
           <h2 class="card-title">Gastos por categoría · ${esc(monthLabel(mk))}</h2>
           <div id="chart-cats">${catItems.length ? '' : '<div class="empty">Sin gastos registrados este mes.</div>'}</div>
+          ${sharedFillHTML}
         </div>
         <div class="card">
           <h2 class="card-title">

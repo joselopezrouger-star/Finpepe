@@ -117,7 +117,12 @@ a { color: var(--accent-down); }
 }
 
 .brand { display: flex; align-items: center; gap: 10px; justify-self: start; }
-.topbar-settings { justify-self: end; }
+.topbar-settings {
+  justify-self: end;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
 
 .brand-mark {
   width: 32px; height: 32px;
@@ -356,6 +361,9 @@ a { color: var(--accent-down); }
   color: var(--ink-2);
   cursor: pointer;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .icon-btn:hover { border-color: var(--border-strong); color: var(--ink); }
 
@@ -938,19 +946,30 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 }
 .pill-cta:hover { background: var(--accent-strong); }
 
-/* ---------- Mini resumen de Compartido (Resumen) ---------- */
-.shared-mini {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+/* ---------- Resumen de Compartido, relleno dentro de "Gastos por
+   categoría" (Resumen): esa tarjeta queda más baja que "Ingresos vs.
+   gastos" (misma fila del grid), así que el resumen ocupa el espacio que
+   le sobra en vez de dejarlo vacío. .card-cats en flex-column + margin-top
+   auto en .shared-fill son lo que empuja el bloque al fondo de esa tarjeta
+   sin tocar el .card genérico (usado por decenas de otras vistas). ---------- */
+.card-cats { display: flex; flex-direction: column; }
+.shared-fill {
+  margin-top: auto;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
-  padding: 10px 14px;
+  padding: 14px;
   cursor: pointer;
+  text-align: center;
 }
-.shared-mini-label { font-size: 12.5px; color: var(--ink-2); font-weight: 550; }
-.shared-mini-value { font-size: 13px; font-weight: 700; color: var(--ink); }
-.shared-mini-value.pos { color: var(--income); }
-.shared-mini-value.neg { color: var(--crit); }
+.shared-fill-name {
+  font-size: 11.5px; color: var(--ink-2); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+.shared-fill-value { font-size: 17px; font-weight: 700; color: var(--ink); }
+.shared-fill-value.pos { color: var(--income); }
+.shared-fill-value.neg { color: var(--crit); }
 
 /* ---------- Línea de tiempo de ciclo de tarjeta ---------- */
 .cycle-card {
