@@ -189,7 +189,7 @@ const Charts = (() => {
   }
 
   /* ---------- Columnas agrupadas: ingresos vs gastos por mes ----------
-     rows: [{label, income, expense}] · opts: {fmt} */
+     rows: [{label, income, expense}] · opts: {ariaLabel} */
   function trend(el, rows, opts) {
     el.replaceChildren();
     const W = 640, H = 236;
@@ -252,24 +252,6 @@ const Charts = (() => {
       add(svg, 'text', {
         x: cx, y: H - 8, 'text-anchor': 'middle', class: 'tick-label',
       }, r.label);
-
-      // Zona de hover por mes: un solo tooltip con las dos series
-      const hit = add(svg, 'rect', {
-        x: m.l + band * i, y: m.t, width: band, height: ih,
-        fill: 'transparent', tabindex: 0,
-      });
-      const show = (x, yy) =>
-        tipShow(r.label, [
-          { swatch: COLORS.income, label: 'Ingresos', value: opts.fmt(r.income) },
-          { swatch: COLORS.expense, label: 'Gastos', value: opts.fmt(r.expense) },
-        ], x, yy);
-      hit.addEventListener('pointermove', (e) => show(e.clientX, e.clientY));
-      hit.addEventListener('pointerleave', tipHide);
-      hit.addEventListener('focus', () => {
-        const b = hit.getBoundingClientRect();
-        show(b.left + b.width / 2, b.top + 30);
-      });
-      hit.addEventListener('blur', tipHide);
     });
 
     el.appendChild(svg);
@@ -355,12 +337,9 @@ const Charts = (() => {
   }
 
   function compact(n) {
-    if (n >= 1e6) return trim(n / 1e6) + ' M';
-    if (n >= 1e3) return trim(n / 1e3) + ' mil';
+    if (n >= 1e6) return Math.round(n / 1e6) + ' M';
+    if (n >= 1e3) return Math.round(n / 1e3) + ' mil';
     return String(Math.round(n));
-  }
-  function trim(x) {
-    return (Math.round(x * 10) / 10).toString().replace('.', ',');
   }
 
   return { COLORS, hBars, donut, trend, lines, tipHide };
