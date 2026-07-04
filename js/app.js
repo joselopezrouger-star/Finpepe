@@ -960,42 +960,39 @@
     const pctMonthLeft = monthLeftPct(mk);
     const daysLeft = daysLeftInMonth(mk);
 
-    // Este resumen de Compartido rellena el espacio que le sobra a la
-    // tarjeta "Gastos por categoría" (queda más baja que la de al lado,
-    // Ingresos vs. gastos, con la que comparte fila en el grid).
+    // Muestra el nombre del hogar (no "Compartido con {pareja}"): el nombre
+    // de la pareja ya aparece en el balance de al lado ("ana te debe..."),
+    // repetirlo en el título quedaba redundante.
     const sharedPartnerM = Cloud.user() ? sharedPartner() : null;
-    const sharedFillHTML = (shared.household && sharedPartnerM) ? (() => {
+    const sharedWidget = (shared.household && sharedPartnerM) ? (() => {
       const bal = sharedBalance();
       const balAbs = Math.abs(bal);
       const balTxt = balAbs < 0.01 ? 'Están a mano'
         : (bal > 0 ? `${esc(partnerLabel(sharedPartnerM))} te debe ${fmtDisp(balAbs)}`
                    : `Le debés a ${esc(partnerLabel(sharedPartnerM))} ${fmtDisp(balAbs)}`);
-      return `<div class="shared-fill" data-goto-shared>
-        <div class="shared-fill-name">${esc(shared.household.name || 'Hogar compartido')}</div>
-        <div class="shared-fill-value ${bal > 0 ? 'pos' : bal < 0 ? 'neg' : ''}">${esc(balTxt)}</div>
+      return `<div class="shared-mini" data-goto-shared>
+        <span class="shared-mini-label">${esc(shared.household.name || 'Hogar compartido')}</span>
+        <span class="shared-mini-value ${bal > 0 ? 'pos' : bal < 0 ? 'neg' : ''}">${esc(balTxt)}</span>
       </div>`;
     })() : '';
 
     el.innerHTML = `
-      <div class="toolbar toolbar-center">
-        <div class="month-nav">
-          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
-          <span class="month-label">${esc(monthLabel(mk))}</span>
-          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
-        </div>
-        ${mk !== curMonth() ? '<button class="link-btn" data-mtoday>volver al mes actual</button>' : ''}
-      </div>
-
       <div class="hero">
-        <div class="hero-main">
+        <div class="hero-top">
           <div class="hero-label">⇄ Balance del mes</div>
-          <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
-          <div class="hero-split">
-            <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
-            <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
+          <div class="month-nav">
+            <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
+            <span class="month-label">${esc(monthLabel(mk))}</span>
+            <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
           </div>
         </div>
-        <div class="hero-ring-col">
+        ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
+        <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
+        <div class="hero-split">
+          <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
+          <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
+        </div>
+        <div class="hero-ring-row">
           <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft)}</div>
           <div class="hero-ring-legend">
             <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
@@ -1005,12 +1002,12 @@
       </div>
 
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
+      ${sharedWidget}
 
       <div class="grid-2">
-        <div class="card card-cats">
+        <div class="card">
           <h2 class="card-title">Gastos por categoría · ${esc(monthLabel(mk))}</h2>
           <div id="chart-cats">${catItems.length ? '' : '<div class="empty">Sin gastos registrados este mes.</div>'}</div>
-          ${sharedFillHTML}
         </div>
         <div class="card">
           <h2 class="card-title">
