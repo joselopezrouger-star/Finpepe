@@ -493,6 +493,18 @@ dialog[open].dialog {
   display: flex;
   flex-direction: column;
 }
+/* El alta nueva (de a etapas) no necesita la altura fija del formulario
+   completo: cada paso muestra poco contenido. height:auto no alcanza acá
+   porque la red de seguridad "dialog[open].dialog { position:fixed; inset:0
+   }" (ver más abajo, tiene más especificidad por el atributo [open]) fuerza
+   a estirarse a los cuatro bordes del viewport sin importar height. Acá se
+   la puntualmente con un selector más específico para que cada paso quede
+   del alto de su contenido en vez de ocupar toda la pantalla. */
+dialog[open].dialog-tx.dialog-tx-wiz {
+  bottom: auto;
+  height: auto;
+}
+.tx-wiz-body { flex: 0 1 auto; max-height: 55vh; }
 .tx-head {
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
@@ -520,6 +532,33 @@ dialog[open].dialog {
 .tx-tab.active.tx-tab-expense { border-color: var(--crit); color: var(--crit); background: var(--danger-bg); }
 .tx-tab.active.tx-tab-income { border-color: var(--good); color: var(--good); background: var(--accent-wash); }
 .tx-tab.active.tx-tab-transfer { border-color: var(--ink-2); color: var(--ink); background: var(--surface-2); }
+
+/* ---------- Alta de movimiento: de a una etapa (tipo, fecha, monto,
+   categoría, cuenta...) en vez de un formulario largo todo junto ---------- */
+.tx-wiz-progress { display: flex; justify-content: center; gap: 6px; padding: 12px 0 0; }
+.tx-wiz-dot { width: 6px; height: 6px; border-radius: 3px; background: var(--border-strong); }
+.tx-wiz-dot.done { background: var(--muted); }
+.tx-wiz-dot.active { width: 16px; background: var(--accent); }
+.tx-wiz-summary { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 0; }
+.tx-wiz-chip {
+  font-size: 11.5px; font-weight: 600; color: var(--ink-2);
+  background: var(--surface-2); border-radius: 999px; padding: 3px 10px;
+}
+.tx-wiz-body { display: flex; flex-direction: column; }
+.tx-wiz-type-options { display: grid; gap: 10px; padding: 10px 2px; }
+.tx-wiz-type-opt {
+  display: flex; align-items: center; justify-content: center;
+  padding: 18px 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: var(--radius);
+  font: 600 15px var(--font);
+  color: var(--ink);
+  cursor: pointer;
+}
+.tx-wiz-type-opt.sel.type-income { border-color: var(--good); color: var(--good); background: var(--accent-wash); }
+.tx-wiz-type-opt.sel.type-expense { border-color: var(--crit); color: var(--crit); background: var(--danger-bg); }
+.tx-wiz-type-opt.sel.type-transfer { border-color: var(--ink-2); color: var(--ink); background: var(--surface-2); }
 
 .tx-body { flex: 1; overflow-y: auto; padding: 4px 14px 10px; }
 
@@ -911,7 +950,7 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 
 /* ---------- Ícono circular (movimientos, próximos vencimientos) ---------- */
 .row-icon {
-  width: 38px; height: 38px; flex: none;
+  width: 32px; height: 32px; flex: none;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
 }
@@ -923,26 +962,30 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 /* ---------- Movimientos como lista de tarjetas agrupada por día ---------- */
 .tx-day-label {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--muted); margin: 4px 2px 8px;
+  color: var(--muted); margin: 4px 2px 6px;
 }
-.tx-day-group + .tx-day-group { margin-top: 18px; }
-.tx-card-list { display: grid; gap: 8px; }
+.tx-day-group + .tx-day-group { margin-top: 12px; }
+.tx-card-list { display: grid; gap: 6px; }
 .tx-card-row {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 11px 12px;
+  padding: 8px 10px;
   cursor: pointer;
   min-width: 0;
 }
 .tx-card-row:hover { border-color: var(--border-strong); }
 .tx-card-main { flex: 1; min-width: 0; }
-.tx-card-title { font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tx-card-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tx-card-title { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tx-card-sub { font-size: 11px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tx-card-amount { text-align: right; flex: none; white-space: nowrap; }
-.tx-card-amount .v { font: 700 14.5px var(--font-heading); font-variant-numeric: tabular-nums; }
+.tx-card-amount .v { font: 700 14px var(--font-heading); font-variant-numeric: tabular-nums; }
 .tx-card-amount .v.pos { color: var(--income); }
+/* Gastos grandes (relativo al máximo de la lista que se está viendo): más
+   rojos cuanto más grandes, para identificarlos de un vistazo. */
+.tx-card-amount .v.amount-big { color: var(--crit); }
+.tx-card-amount .v.amount-huge { color: var(--crit); font-weight: 800; }
 .tx-card-amount .usd { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
 .tx-card-del {
   border: 0; background: none; color: var(--muted);
@@ -1163,6 +1206,12 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .hero-ring-item {
   display: flex;
   align-items: center;
+  /* flex-end: la fila "Balance: 75%" y la fila "Faltan 27 días" tienen
+     distinto largo de texto; sin esto, hero-ring-legend las estira parejo
+     (stretch) pero cada una queda anclada a la izquierda dentro de esa
+     franja, así que sus números no coinciden en el borde derecho entre sí
+     ni con el anillo/píldora del mes. Ancladas a la derecha, coinciden. */
+  justify-content: flex-end;
   gap: 5px;
   font-size: 10.5px;
   color: var(--muted);
@@ -1213,17 +1262,8 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
   color: var(--accent);
 }
 .hero-value.neg { color: var(--crit); }
-/* Entero grande + centavos chicos "flotando" arriba, como un saldo de
-   billetera/homebanking — nunca tabular-nums acá, se ve suelto en tamaños
-   grandes (ver marks-and-anatomy). */
 .hero-amount-sym { font-size: 0.55em; font-weight: 600; margin-right: 5px; }
 .hero-amount-int { font-weight: 800; }
-.hero-amount-dec {
-  font-size: 0.42em;
-  font-weight: 700;
-  vertical-align: super;
-  margin-left: 2px;
-}
 .hero-split {
   position: relative;
   display: flex;

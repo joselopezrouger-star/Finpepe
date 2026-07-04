@@ -70,9 +70,9 @@
   }
 
   const nfARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
-  const nfUSD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const nfUSD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   const fmtMoney = (n, cur) => (cur === 'USD' ? nfUSD : nfARS).format(n);
-  const nfHero = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const nfHero = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
 
   const disp = () => S().settings.displayCurrency;
   const rate = () => FX.currentRate(S());
@@ -119,15 +119,14 @@
     return usdSnapshotFor(amount, currency);
   }
 
-  // Número protagonista (ej. Patrimonio neto): parte entera grande + centavos
-  // chicos en superíndice, como el saldo de una billetera/homebanking.
+  // Número protagonista (ej. Patrimonio neto): sin decimales, como el resto
+  // de los montos de la app.
   function heroMoneyHTML(n, cur) {
     if (n == null || !isFinite(n)) return '—';
     const symbol = cur === 'USD' ? 'US$' : '$';
     const sign = n < 0 ? '−' : '';
-    const [intPart, decPart] = nfHero.format(Math.abs(n)).split(',');
     return `<span class="hero-amount">
-      <span class="hero-amount-sym">${symbol}</span>${sign}<span class="hero-amount-int">${esc(intPart)}</span><sup class="hero-amount-dec">${esc(decPart)}</sup>
+      <span class="hero-amount-sym">${symbol}</span>${sign}<span class="hero-amount-int">${esc(nfHero.format(Math.abs(n)))}</span>
     </span>`;
   }
 
@@ -550,10 +549,18 @@
       cur: '',
       expand: null, // null | 'category' | 'method' | 'methodTo' — qué lista está desplegada
       catGroupExpand: null, // id del grupo de categoría "abierto" en la grilla, o null (nivel superior)
+      note: editing ? (tx.note || '') : '',
+      inst: 1,
+      // Al cargar un movimiento nuevo se pide de a una cosa por vez (tipo,
+      // fecha, monto, categoría, cuenta...) en vez de mostrar todo el
+      // formulario junto; wstep es el índice dentro de wizardSteps(). Editar
+      // uno existente sigue siendo un formulario único (ahí sí conviene ver
+      // todo para poder corregir cualquier campo sin pasos de por medio).
+      wstep: 0,
     };
 
     const dlg = $('#dialog');
-    dlg.className = 'dialog dialog-tx';
+    dlg.className = editing ? 'dialog dialog-tx' : 'dialog dialog-tx dialog-tx-wiz';
 
     function applyOp(a, op, b) {
       a = a || 0;
@@ -731,7 +738,7 @@
         ${showInstallments() ? `
         <div class="tx-row-note">
           <label>Cuotas</label>
-          <input type="number" id="tx-inst" min="1" max="36" step="1" value="1">
+          <input type="number" id="tx-inst" min="1" max="36" step="1" value="${draft.inst}">
         </div>` : ''}
 
         ${canShare() ? `
@@ -747,25 +754,226 @@
 
         <div class="tx-row-note">
           <label>Nota <span class="hint">(opcional)</span></label>
-          <input type="text" id="tx-note" maxlength="80" value="${editing ? esc(tx.note || '') : ''}">
+          <input type="text" id="tx-note" maxlength="80" value="${esc(draft.note)}">
         </div>
       </div>
-      ${!draft.expand ? `
-      <div class="tx-keypad">
-        <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-op="÷">÷</button>
-        <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-op="×">×</button>
-        <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-op="-">−</button>
-        <button type="button" data-k=".">.</button><button type="button" data-k="0">0</button><button type="button" data-eq>=</button><button type="button" data-op="+">+</button>
-      </div>` : ''}
+      ${!draft.expand ? keypadHTML() : ''}
       <div class="dialog-foot">
         ${editing ? '<button type="button" class="btn btn-danger" data-del style="margin-right:auto">Eliminar</button>' : ''}
         <button type="button" class="btn btn-primary" data-save>Guardar</button>
       </div>`;
     }
 
+    function keypadHTML() {
+      return `
+      <div class="tx-keypad">
+        <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-op="÷">÷</button>
+        <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-op="×">×</button>
+        <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-op="-">−</button>
+        <button type="button" data-k=".">.</button><button type="button" data-k="0">0</button><button type="button" data-eq>=</button><button type="button" data-op="+">+</button>
+      </div>`;
+    }
+
+    function wireKeypad() {
+      $$('.tx-keypad [data-k]', dlg).forEach((b) => b.addEventListener('click', () => pressDigit(b.dataset.k)));
+      $$('.tx-keypad [data-op]', dlg).forEach((b) => b.addEventListener('click', () => pressOp(b.dataset.op)));
+      const eqBtn = $('[data-eq]', dlg);
+      if (eqBtn) eqBtn.addEventListener('click', pressEquals);
+    }
+
     function paint() {
-      dlg.innerHTML = formHTML();
-      wire();
+      dlg.innerHTML = editing ? formHTML() : wizardHTML();
+      if (editing) wire(); else wizardWire();
+    }
+
+    /* ---------- Alta de movimiento nuevo: de a una etapa por vez ---------- */
+    const STEP_TITLE = {
+      type: 'Tipo de movimiento', date: 'Fecha', amount: 'Monto',
+      category: 'Categoría', method: 'Cuenta', from: 'Desde', to: 'Hacia', extra: 'Detalles',
+    };
+    function wizardSteps() {
+      return draft.type === 'transferencia'
+        ? ['type', 'date', 'amount', 'from', 'to', 'extra']
+        : ['type', 'date', 'amount', 'category', 'method', 'extra'];
+    }
+    function wizardSummaryHTML() {
+      const steps = wizardSteps();
+      const chips = [{ gasto: 'Gasto', ingreso: 'Ingreso', transferencia: 'Transferencia' }[draft.type]];
+      const past = (k) => steps.indexOf(k) < draft.wstep;
+      if (past('date')) chips.push(fmtDateFull(draft.date));
+      if (past('amount') && finalAmount() > 0) chips.push(fmtMoney(finalAmount(), draft.currency));
+      if (draft.type === 'transferencia') {
+        if (past('from') && draft.methodId) chips.push(methodName(draft.methodId));
+        if (past('to') && draft.toMethodId) chips.push(methodName(draft.toMethodId));
+      } else {
+        if (past('category') && draft.categoryId) chips.push(catName(draft.categoryId));
+        if (past('method') && draft.methodId) chips.push(methodName(draft.methodId));
+      }
+      return chips.map((c) => `<span class="tx-wiz-chip">${esc(c)}</span>`).join('');
+    }
+    function wizardStepBodyHTML(key) {
+      if (key === 'type') {
+        const opts = [
+          { t: 'ingreso', label: 'Ingreso', cls: 'type-income' },
+          { t: 'gasto', label: 'Gasto', cls: 'type-expense' },
+          { t: 'transferencia', label: 'Transferencia', cls: 'type-transfer' },
+        ];
+        return `<div class="tx-wiz-type-options">${opts.map((o) => `
+          <button type="button" class="tx-wiz-type-opt ${o.cls} ${draft.type === o.t ? 'sel' : ''}" data-wtype="${o.t}">
+            <span>${esc(o.label)}</span>
+          </button>`).join('')}</div>`;
+      }
+      if (key === 'date') {
+        return `
+          <label class="tx-row tx-row-date">
+            <span class="tx-row-label">Fecha</span>
+            <span class="tx-row-value tx-row-value-date">${esc(fmtDateFull(draft.date))}</span>
+            <input type="date" id="tx-date-input" class="tx-date-native" value="${esc(draft.date)}">
+          </label>
+          ${draft.date !== todayStr() ? '<button type="button" class="link-btn" data-wtoday>Usar hoy</button>' : ''}`;
+      }
+      if (key === 'amount') {
+        return `
+          <div class="tx-amount-block">
+            <div class="tx-cur-toggle">
+              <button type="button" class="cur-pill ${draft.currency === 'ARS' ? 'active' : ''}" data-cur="ARS">ARS</button>
+              <button type="button" class="cur-pill ${draft.currency === 'USD' ? 'active' : ''}" data-cur="USD">USD</button>
+            </div>
+            <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : draft.type === 'gasto' ? 'is-expense' : ''}">
+              <span>${esc(displayExpr())}</span>
+              <button type="button" class="tx-amount-back" data-back aria-label="Borrar">⌫</button>
+            </div>
+          </div>`;
+      }
+      if (key === 'category') {
+        return `<div class="tx-pick-inline" data-kind="category">${categoryOptionsHTML()}</div>`;
+      }
+      if (key === 'method') {
+        return `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML(draft.methodId)}</div>`;
+      }
+      if (key === 'from') {
+        return `<div class="tx-pick-inline" data-kind="from">${methodOptionsHTML(draft.methodId, draft.toMethodId)}</div>`;
+      }
+      if (key === 'to') {
+        return `<div class="tx-pick-inline" data-kind="to">${methodOptionsHTML(draft.toMethodId, draft.methodId)}</div>`;
+      }
+      // 'extra': cuotas (si aplica) + compartido (si aplica) + nota, antes de guardar.
+      return `
+        ${showInstallments() ? `
+        <div class="tx-row-note">
+          <label>Cuotas</label>
+          <input type="number" id="tx-inst" min="1" max="36" step="1" value="${draft.inst}">
+        </div>` : ''}
+        ${canShare() ? `
+        <label class="tx-check-row">
+          <input type="checkbox" id="tx-share" ${draft.shareIt ? 'checked' : ''}>
+          <span>Es un gasto compartido con ${esc(partnerLabel(partner))}</span>
+        </label>
+        ${draft.shareIt ? `
+        <div class="tx-row-note">
+          <label>Vos te quedás con este % del gasto (el resto le corresponde a ${esc(partnerLabel(partner))})</label>
+          <input type="number" id="tx-share-pct" min="0" max="100" step="1" value="${draft.sharePct}">
+        </div>` : ''}` : ''}
+        <div class="tx-row-note">
+          <label>Nota <span class="hint">(opcional)</span></label>
+          <input type="text" id="tx-note" maxlength="80" value="${esc(draft.note)}">
+        </div>`;
+    }
+    function wizardFootHTML(key) {
+      if (key === 'date') {
+        return '<div class="dialog-foot"><button type="button" class="btn btn-primary" data-wnext>Siguiente</button></div>';
+      }
+      if (key === 'amount') {
+        return `<div class="dialog-foot"><button type="button" class="btn btn-primary" data-wnext ${finalAmount() > 0 ? '' : 'disabled'}>Siguiente</button></div>`;
+      }
+      if (key === 'extra') {
+        return '<div class="dialog-foot"><button type="button" class="btn btn-primary" data-save>Guardar</button></div>';
+      }
+      return ''; // type/category/method/from/to: avanzan solos al tocar una opción
+    }
+    function wizardHTML() {
+      const steps = wizardSteps();
+      draft.wstep = Math.min(draft.wstep, steps.length - 1);
+      const key = steps[draft.wstep];
+      return `
+      <div class="dialog-head tx-head">
+        <button type="button" class="row-del" data-wiz-back aria-label="${draft.wstep === 0 ? 'Cerrar' : 'Atrás'}">${draft.wstep === 0 ? '✕' : '‹'}</button>
+        <span class="tx-head-title">${esc(STEP_TITLE[key])}</span>
+        <span></span>
+      </div>
+      <div class="tx-wiz-progress">${steps.map((_, i) => `<span class="tx-wiz-dot ${i === draft.wstep ? 'active' : i < draft.wstep ? 'done' : ''}"></span>`).join('')}</div>
+      ${draft.wstep > 0 ? `<div class="tx-wiz-summary">${wizardSummaryHTML()}</div>` : ''}
+      <div class="tx-body tx-wiz-body">${wizardStepBodyHTML(key)}</div>
+      ${key === 'amount' ? keypadHTML() : ''}
+      ${wizardFootHTML(key)}`;
+    }
+    function wireCatGroupNav() {
+      $$('[data-catgroup]', dlg).forEach((elx) => elx.addEventListener('click', (e) => {
+        e.stopPropagation();
+        draft.catGroupExpand = elx.dataset.catgroup;
+        paint();
+      }));
+      $$('[data-catback]', dlg).forEach((elx) => elx.addEventListener('click', (e) => {
+        e.stopPropagation();
+        draft.catGroupExpand = null;
+        paint();
+      }));
+    }
+    function wizardWire() {
+      const backBtn = $('[data-wiz-back]', dlg);
+      if (backBtn) backBtn.addEventListener('click', () => {
+        if (draft.wstep === 0) { dlg.close(); return; }
+        draft.wstep -= 1;
+        paint();
+      });
+      const key = wizardSteps()[draft.wstep];
+      if (key === 'type') {
+        $$('[data-wtype]', dlg).forEach((b) => b.addEventListener('click', () => {
+          draft.type = b.dataset.wtype;
+          if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
+          draft.catGroupExpand = null;
+          draft.wstep = 1;
+          paint();
+        }));
+      } else if (key === 'date') {
+        $('#tx-date-input', dlg).addEventListener('change', (e) => { draft.date = e.target.value; paint(); });
+        const todayBtn = $('[data-wtoday]', dlg);
+        if (todayBtn) todayBtn.addEventListener('click', () => { draft.date = todayStr(); paint(); });
+        $('[data-wnext]', dlg).addEventListener('click', () => { draft.wstep += 1; paint(); });
+      } else if (key === 'amount') {
+        $$('.cur-pill', dlg).forEach((b) => b.addEventListener('click', () => { draft.currency = b.dataset.cur; paint(); }));
+        wireKeypad();
+        $('[data-back]', dlg).addEventListener('click', pressBack);
+        const nextBtn = $('[data-wnext]', dlg);
+        if (nextBtn) nextBtn.addEventListener('click', () => {
+          if (!(finalAmount() > 0)) return;
+          draft.acc = finalAmount();
+          draft.op = null;
+          draft.cur = '';
+          draft.wstep += 1;
+          paint();
+        });
+      } else if (key === 'category') {
+        wireCatGroupNav();
+        $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
+          draft.categoryId = row.dataset.pickid;
+          draft.catGroupExpand = null;
+          draft.wstep += 1;
+          paint();
+        }));
+      } else if (key === 'method' || key === 'from' || key === 'to') {
+        $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
+          if (key === 'to') draft.toMethodId = row.dataset.pickid;
+          else draft.methodId = row.dataset.pickid;
+          draft.wstep += 1;
+          paint();
+        }));
+      } else if (key === 'extra') {
+        const shareBox = $('#tx-share', dlg);
+        if (shareBox) shareBox.addEventListener('change', (e) => { draft.shareIt = e.target.checked; paint(); });
+        wireDraftInputs();
+        $('[data-save]', dlg).addEventListener('click', onSave);
+      }
     }
 
     function wire() {
@@ -785,16 +993,7 @@
         if (k === 'category') draft.catGroupExpand = null;
         paint();
       }));
-      $$('[data-catgroup]', dlg).forEach((el) => el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        draft.catGroupExpand = el.dataset.catgroup;
-        paint();
-      }));
-      $$('[data-catback]', dlg).forEach((el) => el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        draft.catGroupExpand = null;
-        paint();
-      }));
+      wireCatGroupNav();
       $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
         const kind = row.closest('.tx-pick-inline').dataset.kind;
         if (kind === 'category') draft.categoryId = row.dataset.pickid;
@@ -806,14 +1005,24 @@
       }));
       const shareBox = $('#tx-share', dlg);
       if (shareBox) shareBox.addEventListener('change', (e) => { draft.shareIt = e.target.checked; paint(); });
-      $$('.tx-keypad [data-k]', dlg).forEach((b) => b.addEventListener('click', () => pressDigit(b.dataset.k)));
-      $$('.tx-keypad [data-op]', dlg).forEach((b) => b.addEventListener('click', () => pressOp(b.dataset.op)));
-      const eqBtn = $('[data-eq]', dlg);
-      if (eqBtn) eqBtn.addEventListener('click', pressEquals);
+      wireKeypad();
       $('[data-back]', dlg).addEventListener('click', pressBack);
+      wireDraftInputs();
       $('[data-save]', dlg).addEventListener('click', onSave);
       const delBtn = $('[data-del]', dlg);
       if (delBtn) delBtn.addEventListener('click', () => { dlg.close(); deleteTx(tx); });
+    }
+
+    // Nota/cuotas/% compartido se guardan en draft en cada tecla (no solo al
+    // guardar): tocar el checkbox de "compartido" repinta el diálogo, y sin
+    // esto se perdía lo ya tipeado en esos campos.
+    function wireDraftInputs() {
+      const noteEl = $('#tx-note', dlg);
+      if (noteEl) noteEl.addEventListener('input', (e) => { draft.note = e.target.value; });
+      const instEl = $('#tx-inst', dlg);
+      if (instEl) instEl.addEventListener('input', (e) => { draft.inst = e.target.value; });
+      const pctEl = $('#tx-share-pct', dlg);
+      if (pctEl) pctEl.addEventListener('input', (e) => { draft.sharePct = e.target.value; });
     }
 
     async function onSave() {
@@ -832,7 +1041,7 @@
       draft._saving = true;
       const saveBtn = $('[data-save]', dlg);
       if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando…'; }
-      const note = ($('#tx-note', dlg) || {}).value || '';
+      const note = draft.note || '';
       const base = draft.type === 'transferencia'
         ? { date: draft.date, type: draft.type, amount, currency: draft.currency,
             methodId: draft.methodId, toMethodId: draft.toMethodId, note: note.trim() }
@@ -848,8 +1057,7 @@
         base.usdSnapshot = keepSnapshot ? tx.usdSnapshot : await usdSnapshotForDate(amount, draft.currency, draft.date);
         Object.assign(tx, base);
       } else {
-        const instEl = $('#tx-inst', dlg);
-        const n = showInstallments() ? Math.max(1, parseInt((instEl && instEl.value) || '1', 10) || 1) : 1;
+        const n = showInstallments() ? Math.max(1, parseInt(draft.inst || '1', 10) || 1) : 1;
         if (n === 1) {
           S().transactions.push({ id: Store.uid(), ...base, usdSnapshot: await usdSnapshotForDate(amount, draft.currency, draft.date) });
         } else {
@@ -870,8 +1078,7 @@
       Store.save();
 
       if (canShare() && draft.shareIt) {
-        const pctEl = $('#tx-share-pct', dlg);
-        const pct = Math.min(100, Math.max(0, parseFloat((pctEl && pctEl.value) || '50')));
+        const pct = Math.min(100, Math.max(0, parseFloat(draft.sharePct || '50')));
         try {
           await Cloud.addSharedExpense({
             household_id: shared.household.id, paid_by: sharedMe().id,
@@ -1091,7 +1298,7 @@
           </tbody>
         </table></div>`;
     } else {
-      Charts.trend(trendEl, trendRows, { fmt: fmtDisp });
+      Charts.trend(trendEl, trendRows, {});
     }
 
     $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
@@ -1139,6 +1346,17 @@
 
     const inc = sumDisp(list.filter((t) => t.type === 'ingreso'));
     const exp = sumDisp(list.filter((t) => t.type === 'gasto'));
+
+    // Para resaltar gastos grandes en la lista: relativo al gasto más alto
+    // de lo que se está viendo (con los filtros actuales), no a un monto
+    // fijo, así se adapta a la escala de cada quien.
+    const gastoVals = list.filter((t) => t.type === 'gasto').map((t) => txDispAmount(t)).filter((v) => v > 0);
+    const maxGasto = gastoVals.length ? Math.max(...gastoVals) : 0;
+    const bigClass = (t) => {
+      if (t.type !== 'gasto' || !maxGasto) return '';
+      const ratio = (txDispAmount(t) || 0) / maxGasto;
+      return ratio >= 0.66 ? ' amount-huge' : ratio >= 0.33 ? ' amount-big' : '';
+    };
 
     el.innerHTML = `
       <div class="card">
@@ -1193,14 +1411,20 @@
                 const sign = isIncome ? '+' : '−';
                 const usdLine = (t.currency === 'ARS' && t.usdSnapshot != null)
                   ? `<div class="usd">≈ ${esc(fmtMoney(t.usdSnapshot, 'USD'))}</div>` : '';
+                // El título ya es el nombre de la categoría cuando no hay nota
+                // propia: repetirlo abajo en el subtítulo era redundante.
+                const title = t.note || catName(t.categoryId);
+                const subParts = [];
+                if (t.note) subParts.push(catName(t.categoryId));
+                subParts.push(methodName(t.methodId));
                 return `<div class="tx-card-row" data-tx="${esc(t.id)}">
                   <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(categoryIconName(t.categoryId))}</div>
                   <div class="tx-card-main">
-                    <div class="tx-card-title">${esc(t.note || catName(t.categoryId))}</div>
-                    <div class="tx-card-sub">${esc(catName(t.categoryId))} · ${esc(methodName(t.methodId))}${inst}${rec}${cur}</div>
+                    <div class="tx-card-title">${esc(title)}</div>
+                    <div class="tx-card-sub">${esc(subParts.join(' · '))}${inst}${rec}${cur}</div>
                   </div>
                   <div class="tx-card-amount">
-                    <div class="v ${isIncome ? 'pos' : ''}">${sign} ${fmtMoney(t.amount, t.currency)}</div>
+                    <div class="v ${isIncome ? 'pos' : ''}${bigClass(t)}">${sign} ${fmtMoney(t.amount, t.currency)}</div>
                     ${usdLine}
                   </div>
                   <button class="tx-card-del" data-del="${esc(t.id)}" aria-label="Eliminar">✕</button>
@@ -1317,7 +1541,7 @@
       pctIncSeries.push(incM > 0 ? (catValM / incM) * 100 : 0);
     });
 
-    const pct = (v, total) => (total > 0 ? ((v / total) * 100).toFixed(1) : '0,0').replace('.', ',');
+    const pct = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0) + '%';
 
     const rowsHtml = breakdown.map((g) => {
       const showSubs = g.subs.length && !(g.subs.length === 1 && g.total === g.direct && g.subs[0].name === 'Otros (sin subcategoría)');
@@ -1325,14 +1549,14 @@
         <tr class="cat-sub-row">
           <td class="cell-sub">${esc(s.name)}</td>
           <td class="num cell-sub">${fmtDisp(s.value)}</td>
-          <td class="num cell-sub">${pct(s.value, exp)}%</td>
-          <td class="num cell-sub">${pct(s.value, inc)}%</td>
+          <td class="num cell-sub">${pct(s.value, exp)}</td>
+          <td class="num cell-sub">${pct(s.value, inc)}</td>
         </tr>`).join('') : '';
       return `<tr>
         <td>${esc(g.name)}</td>
         <td class="num amount-out">${fmtDisp(g.total)}</td>
-        <td class="num">${pct(g.total, exp)}%</td>
-        <td class="num">${pct(g.total, inc)}%</td>
+        <td class="num">${pct(g.total, exp)}</td>
+        <td class="num">${pct(g.total, inc)}</td>
       </tr>${subsHtml}`;
     }).join('');
 
@@ -1372,7 +1596,7 @@
         { label: '% de tus gastos', color: Charts.COLORS.expense, values: pctExpSeries },
         { label: '% de tus ingresos', color: Charts.COLORS.income, values: pctIncSeries },
       ], {
-        fmt: (v) => v.toFixed(1).replace('.', ',') + '%',
+        fmt: (v) => Math.round(v) + '%',
         fmtAxis: (v) => Math.round(v) + '%',
         ariaLabel: `Evolución del peso de ${selGroup ? selGroup.name : ''} sobre ingresos y gastos`,
       });
