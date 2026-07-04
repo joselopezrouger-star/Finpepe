@@ -193,7 +193,6 @@
     cash: '<rect x="2.5" y="5.5" width="15" height="9" rx="1.5"/><circle cx="10" cy="10" r="2.2"/>',
     plus: '<circle cx="10" cy="10" r="7.2"/><path d="M10 6.8v6.4M6.8 10h6.4"/>',
     swap: '<path d="M4 7h10.5M12 4.2 15 7l-3 2.8"/><path d="M16 13H5.5M8 10.2 5 13l3 2.8"/>',
-    settings: '<circle cx="10" cy="10" r="3"/><path d="M10 2.6v2.5M10 14.9v2.5M17.4 10h-2.5M5.1 10H2.6M15.1 4.9l-1.8 1.8M6.7 13.3l-1.8 1.8M15.1 15.1l-1.8-1.8M6.7 6.7 4.9 4.9"/>',
   };
   function iconSvg(name, cls) {
     const body = ICON_PATHS[name] || ICON_PATHS.tag;
@@ -206,6 +205,14 @@
     <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
     <path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.68 9c0-.593.102-1.17.284-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"/>
     <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"/>
+  </svg>`;
+  // Engranaje de verdad (dientes, no rayos): el ícono anterior -un círculo
+  // con líneas radiales- se confundía con el típico ícono de "sol" para
+  // cambiar a modo claro. Este es el clásico ícono de ajustes (viewBox
+  // propio de 24x24, no encaja en el sistema de 20x20 de ICON_PATHS).
+  const SETTINGS_GEAR_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    <circle cx="12" cy="12" r="3"/>
   </svg>`;
   // Anillo doble: aro externo = % del ingreso que todavía no se gastó, aro
   // interno = % del mes que todavía falta transcurrir. Comparar los dos de
@@ -978,26 +985,26 @@
 
     el.innerHTML = `
       <div class="hero">
-        <div class="hero-top">
+        <div class="hero-main">
           <div class="hero-label">⇄ Balance del mes</div>
-          <div class="month-nav">
+          <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
+          <div class="hero-split">
+            <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
+            <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
+          </div>
+        </div>
+        <div class="hero-ring-col">
+          <div class="hero-ring-month">
             <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
             <span class="month-label">${esc(monthLabel(mk))}</span>
             <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
           </div>
-        </div>
-        ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
-        <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
-        <div class="hero-split">
-          <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
-          <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
-        </div>
-        <div class="hero-ring-row">
           <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft)}</div>
           <div class="hero-ring-legend">
             <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
             <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
           </div>
+          ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
         </div>
       </div>
 
@@ -1087,7 +1094,7 @@
     const gotoShared = $('[data-goto-shared]', el);
     if (gotoShared) gotoShared.addEventListener('click', () => {
       ui.view = 'compartido';
-      shared.loaded = false;
+      loadShared();
       render();
     });
   }
@@ -2941,7 +2948,9 @@
       : '<div class="view-content"></div>';
     $$('[data-subview]', el).forEach((b) => b.addEventListener('click', () => {
       ui.view = b.dataset.subview;
-      if (ui.view === 'compartido') shared.loaded = false;
+      // Se refresca en segundo plano sin borrar lo ya cargado (ver
+      // comentario en init()): así no aparece "Cargando…" cada vez.
+      if (ui.view === 'compartido') loadShared();
       render();
     }));
     VIEWS[ui.view]($('.view-content', el));
@@ -2954,8 +2963,11 @@
       const grp = GROUPS.find((g) => g.key === b.dataset.group);
       if (!grp.views.includes(ui.view)) ui.view = grp.views[0];
       // "Compartido" vive en la nube y lo puede cambiar la otra persona en
-      // cualquier momento: siempre se recarga al entrar a la pestaña.
-      if (ui.view === 'compartido') shared.loaded = false;
+      // cualquier momento, así que se refresca al entrar — pero en segundo
+      // plano, sin borrar lo que ya se había mostrado (loadShared() re-
+      // renderiza solo cuando termina), para no mostrar "Cargando…" cada
+      // vez que volvés a la pestaña.
+      if (ui.view === 'compartido') loadShared();
       render();
     }));
     $$('.seg-btn').forEach((b) => b.addEventListener('click', () => {
@@ -2963,13 +2975,8 @@
       Store.save();
       render();
     }));
-    $('#footer-backup').addEventListener('click', (e) => {
-      e.preventDefault();
-      ui.view = 'ajustes';
-      render();
-    });
     const settingsBtn = $('#btn-open-settings');
-    settingsBtn.innerHTML = iconSvg('settings');
+    settingsBtn.innerHTML = SETTINGS_GEAR_SVG;
     settingsBtn.addEventListener('click', () => { ui.view = 'ajustes'; render(); });
     // Restaura el scroll de la página al cerrar el diálogo, sin importar
     // cómo se cerró (botón, Escape, o dlg.close() desde código): ver openModal().

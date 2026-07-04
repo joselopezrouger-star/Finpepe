@@ -278,13 +278,6 @@ a { color: var(--accent-down); }
   font-size: 13px;
 }
 
-.footer {
-  max-width: 1080px;
-  margin: 8px auto 96px;
-  padding: 0 20px;
-  color: var(--muted);
-  font-size: 12px;
-}
 
 .card {
   background: var(--surface);
@@ -1077,42 +1070,38 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
   border-radius: 12px;
   padding: 20px 22px;
   color: var(--ink);
-}
-/* El selector de mes vive arriba de todo, en la fila del título — el
-   anillo con el balance y los días restantes bajó más abajo, después del
-   desglose de ingresos/gastos, para dejarle ese lugar. */
-.hero-top {
-  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.hero-top .month-nav { flex: none; }
-.hero-top .month-nav .month-label { min-width: 92px; font-size: 12.5px; }
-.hero-top .icon-btn { width: 24px; height: 24px; }
-.hero-mtoday { position: relative; display: block; margin-top: 2px; }
-.hero-ring-row {
-  position: relative;
-  display: flex;
-  align-items: center;
   gap: 14px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
 }
-.hero-ring { flex: none; }
+.hero-main { position: relative; min-width: 0; flex: 1; }
+/* El selector de mes vive arriba del anillo, en la misma columna de la
+   derecha (el anillo bajó un poco para dejarle lugar ahí adentro), en vez
+   de una fila propia arriba de toda la tarjeta. */
+.hero-ring-col {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.hero-ring-month { display: flex; align-items: center; gap: 3px; }
+.hero-ring-month .icon-btn { width: 22px; height: 22px; }
+.hero-ring-month .month-label { min-width: 0; font-size: 11px; font-weight: 650; white-space: nowrap; }
+.hero-mtoday { position: relative; display: block; margin-top: 2px; font-size: 11px; }
+.hero-ring { position: relative; flex: none; }
 .hero-ring-legend {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 .hero-ring-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 5px;
+  font-size: 10.5px;
   color: var(--muted);
   white-space: nowrap;
 }
