@@ -275,6 +275,85 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
+  /* ---------- Líneas: evolución de una o más series por mes ----------
+     months: [label] · series: [{label, color, values: [n, ...]}] (mismo
+     largo que months) · opts: {fmt, ariaLabel} */
+  function lines(el, months, series, opts) {
+    el.replaceChildren();
+    if (!months.length) return;
+    const W = 640, H = 220;
+    const m = { t: 10, r: 8, b: 26, l: 34 };
+    const iw = W - m.l - m.r;
+    const ih = H - m.t - m.b;
+
+    const maxVal = Math.max(1, ...series.flatMap((s) => s.values));
+    const { top, ticks } = niceTicks(maxVal, 4);
+    const y = (v) => m.t + ih - (v / top) * ih;
+    const band = iw / months.length;
+    const x = (i) => m.l + band * i + band / 2;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('class', 'trend-svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', opts.ariaLabel || 'Evolución mensual');
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const add = (parent, tag, attrs, text) => {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      if (text !== undefined) n.textContent = text;
+      parent.appendChild(n);
+      return n;
+    };
+
+    for (const t of ticks) {
+      const yy = y(t);
+      add(svg, 'line', {
+        x1: m.l, x2: W - m.r, y1: yy, y2: yy,
+        stroke: t === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1,
+        'shape-rendering': 'crispEdges',
+      });
+      add(svg, 'text', {
+        x: m.l - 6, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label',
+      }, (opts.fmtAxis ? opts.fmtAxis(t) : Math.round(t)));
+    }
+
+    months.forEach((lbl, i) => {
+      add(svg, 'text', { x: x(i), y: H - 8, 'text-anchor': 'middle', class: 'tick-label' }, lbl);
+    });
+
+    series.forEach((s) => {
+      const d = s.values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(v)}`).join(' ');
+      add(svg, 'path', {
+        d, fill: 'none', stroke: s.color, 'stroke-width': 2,
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+      });
+      s.values.forEach((v, i) => add(svg, 'circle', { cx: x(i), cy: y(v), r: 3, fill: s.color }));
+    });
+
+    // Zona de hover por mes: un solo tooltip con el valor de cada serie.
+    months.forEach((lbl, i) => {
+      const hit = add(svg, 'rect', {
+        x: m.l + band * i, y: m.t, width: band, height: ih,
+        fill: 'transparent', tabindex: 0,
+      });
+      const show = (cx, cy) =>
+        tipShow(lbl, series.map((s) => ({
+          swatch: s.color, label: s.label, value: opts.fmt(s.values[i]),
+        })), cx, cy);
+      hit.addEventListener('pointermove', (e) => show(e.clientX, e.clientY));
+      hit.addEventListener('pointerleave', tipHide);
+      hit.addEventListener('focus', () => {
+        const b = hit.getBoundingClientRect();
+        show(b.left + b.width / 2, b.top + 30);
+      });
+      hit.addEventListener('blur', tipHide);
+    });
+
+    el.appendChild(svg);
+  }
+
   function compact(n) {
     if (n >= 1e6) return trim(n / 1e6) + ' M';
     if (n >= 1e3) return trim(n / 1e3) + ' mil';
@@ -284,5 +363,5 @@ const Charts = (() => {
     return (Math.round(x * 10) / 10).toString().replace('.', ',');
   }
 
-  return { COLORS, hBars, donut, trend, tipHide };
+  return { COLORS, hBars, donut, trend, lines, tipHide };
 })();
