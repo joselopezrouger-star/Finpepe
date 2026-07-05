@@ -814,12 +814,13 @@
     function wizardStepBodyHTML(key) {
       if (key === 'type') {
         const opts = [
-          { t: 'ingreso', label: 'Ingreso', cls: 'type-income' },
-          { t: 'gasto', label: 'Gasto', cls: 'type-expense' },
-          { t: 'transferencia', label: 'Transferencia', cls: 'type-transfer' },
+          { t: 'ingreso', label: 'Ingreso', cls: 'type-income', icon: 'trend', rowIcon: 'row-icon-income' },
+          { t: 'gasto', label: 'Gasto', cls: 'type-expense', icon: 'cash', rowIcon: 'row-icon-expense' },
+          { t: 'transferencia', label: 'Transferencia', cls: 'type-transfer', icon: 'swap', rowIcon: 'row-icon-transfer' },
         ];
         return `<div class="tx-wiz-type-options">${opts.map((o) => `
           <button type="button" class="tx-wiz-type-opt ${o.cls} ${draft.type === o.t ? 'sel' : ''}" data-wtype="${o.t}">
+            <span class="row-icon ${o.rowIcon}">${iconSvg(o.icon)}</span>
             <span>${esc(o.label)}</span>
           </button>`).join('')}</div>`;
       }
@@ -897,9 +898,9 @@
       const key = steps[draft.wstep];
       return `
       <div class="dialog-head tx-head">
-        <button type="button" class="row-del" data-wiz-back aria-label="${draft.wstep === 0 ? 'Cerrar' : 'Atrás'}">${draft.wstep === 0 ? '✕' : '‹'}</button>
+        ${draft.wstep > 0 ? '<button type="button" class="row-del" data-wiz-back aria-label="Atrás">‹</button>' : '<span></span>'}
         <span class="tx-head-title">${esc(STEP_TITLE[key])}</span>
-        <span></span>
+        <button type="button" class="row-del" data-wiz-close aria-label="Cancelar">✕</button>
       </div>
       <div class="tx-wiz-progress">${steps.map((_, i) => `<span class="tx-wiz-dot ${i === draft.wstep ? 'active' : i < draft.wstep ? 'done' : ''}"></span>`).join('')}</div>
       ${draft.wstep > 0 ? `<div class="tx-wiz-summary">${wizardSummaryHTML()}</div>` : ''}
@@ -921,11 +922,8 @@
     }
     function wizardWire() {
       const backBtn = $('[data-wiz-back]', dlg);
-      if (backBtn) backBtn.addEventListener('click', () => {
-        if (draft.wstep === 0) { dlg.close(); return; }
-        draft.wstep -= 1;
-        paint();
-      });
+      if (backBtn) backBtn.addEventListener('click', () => { draft.wstep -= 1; paint(); });
+      $('[data-wiz-close]', dlg).addEventListener('click', () => dlg.close());
       const key = wizardSteps()[draft.wstep];
       if (key === 'type') {
         $$('[data-wtype]', dlg).forEach((b) => b.addEventListener('click', () => {
@@ -1344,9 +1342,6 @@
     if (ui.fMethod) list = list.filter((t) => t.methodId === ui.fMethod);
     list.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
 
-    const inc = sumDisp(list.filter((t) => t.type === 'ingreso'));
-    const exp = sumDisp(list.filter((t) => t.type === 'gasto'));
-
     // Para resaltar gastos grandes en la lista: relativo al gasto más alto
     // de lo que se está viendo (con los filtros actuales), no a un monto
     // fijo, así se adapta a la escala de cada quien.
@@ -1431,13 +1426,7 @@
                 </div>`;
               }).join('')}
             </div>
-          </div>`).join('')}
-        <div class="totals-row">
-          <span>Movimientos: <b>${list.length}</b></span>
-          <span>Ingresos: <b class="amount-in">${fmtDisp(inc)}</b></span>
-          <span>Gastos: <b>${fmtDisp(exp)}</b></span>
-          <span>Balance: <b>${fmtDisp(inc - exp)}</b></span>
-        </div>`
+          </div>`).join('')}`
         : '<div class="empty">No hay movimientos con estos filtros. Cargá el primero con “+ Movimiento”.</div>'}
       </div>`;
 
@@ -1596,7 +1585,6 @@
         { label: '% de tus gastos', color: Charts.COLORS.expense, values: pctExpSeries },
         { label: '% de tus ingresos', color: Charts.COLORS.income, values: pctIncSeries },
       ], {
-        fmt: (v) => Math.round(v) + '%',
         fmtAxis: (v) => Math.round(v) + '%',
         ariaLabel: `Evolución del peso de ${selGroup ? selGroup.name : ''} sobre ingresos y gastos`,
       });
@@ -2503,6 +2491,9 @@
 
         <div class="card">
           <h2 class="card-title">Cotización del dólar</h2>
+          <div class="fx-current">
+            ${rate() ? `US$ 1 = ${esc(fmtMoney(rate().value, 'ARS'))} <span class="cell-sub">(${esc(rate().label)})</span>` : '<span class="cell-sub">Sin cotización disponible</span>'}
+          </div>
           <div class="inline-form" style="margin-bottom:10px">
             <label for="set-fx" class="hint">Tipo de cambio:</label>
             <select id="set-fx">
@@ -2768,8 +2759,10 @@
     });
     const linkGoogle = $('#btn-cloud-link-google', root);
     if (linkGoogle) linkGoogle.addEventListener('click', async () => {
-      try { await Cloud.linkGoogle(); }
-      catch (e) { alert('No se pudo vincular: ' + friendlyCloudError(e)); }
+      try {
+        await Cloud.linkGoogle();
+        refreshAccountCard();
+      } catch (e) { alert('No se pudo vincular: ' + friendlyCloudError(e)); }
     });
     const pull = $('#btn-cloud-pull', root);
     if (pull) pull.addEventListener('click', async () => {
@@ -3350,7 +3343,6 @@
   function groupOf(view) { return GROUPS.find((g) => g.views.includes(view)) || null; }
 
   function render() {
-    Charts.tipHide();
     const grp = groupOf(ui.view);
     $$('.bottom-nav button').forEach((b) => b.classList.toggle('active', !!grp && b.dataset.group === grp.key));
     $$('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.cur === disp()));
@@ -3359,6 +3351,14 @@
     renderRateChip();
     renderAccountChip();
     renderBanner();
+    // Dentro de Ajustes el engranaje pasa a ser un ícono de "volver a
+    // Inicio" (antes no había forma de salir de Ajustes salvo la nav de
+    // abajo, que ni siquiera queda resaltada ahí).
+    const settingsBtn = $('#btn-open-settings');
+    if (settingsBtn) {
+      settingsBtn.innerHTML = ui.view === 'ajustes' ? iconSvg('home') : SETTINGS_GEAR_SVG;
+      settingsBtn.setAttribute('aria-label', ui.view === 'ajustes' ? 'Volver a Inicio' : 'Ajustes');
+    }
     const el = $('#view');
     el.innerHTML = (grp && grp.views.length > 1)
       ? `<div class="subtabs">${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}</div><div class="view-content"></div>`
@@ -3392,9 +3392,10 @@
       Store.save();
       render();
     }));
-    const settingsBtn = $('#btn-open-settings');
-    settingsBtn.innerHTML = SETTINGS_GEAR_SVG;
-    settingsBtn.addEventListener('click', () => { ui.view = 'ajustes'; render(); });
+    $('#btn-open-settings').addEventListener('click', () => {
+      ui.view = ui.view === 'ajustes' ? 'resumen' : 'ajustes';
+      render();
+    });
     // Restaura el scroll de la página al cerrar el diálogo, sin importar
     // cómo se cerró (botón, Escape, o dlg.close() desde código): ver openModal().
     $('#dialog').addEventListener('close', () => { document.body.style.overflow = ''; });

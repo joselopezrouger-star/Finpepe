@@ -1,8 +1,10 @@
 'use strict';
 
 /* Charts — gráficos SVG/HTML sin dependencias.
-   Especificación: marcas finas, extremos redondeados (4px) contra datos y rectos
-   contra la línea de base, grilla hairline, tooltip en hover y foco. */
+   Especificación: marcas finas, extremos redondeados (4px) contra datos y
+   rectos contra la línea de base, grilla hairline. Sin tooltips ni
+   interacción al tocar/pasar el mouse: el dato se lee directo del tamaño
+   de la marca, la leyenda o los ejes. */
 const Charts = (() => {
   // Los colores de las marcas siguen el tema activo (claro/oscuro): se leen
   // de las variables CSS en vez de quedar fijos, así los gráficos se
@@ -16,67 +18,6 @@ const Charts = (() => {
     get expense() { return cssVar('--expense-series', '#d03b3b'); },
     get category() { return cssVar('--category-series', '#b5760a'); },
   };
-
-  /* ---------- Tooltip único ---------- */
-  let tipEl = null;
-  function tip() {
-    if (!tipEl) {
-      tipEl = document.createElement('div');
-      tipEl.className = 'chart-tip';
-      tipEl.setAttribute('role', 'status');
-      document.body.appendChild(tipEl);
-    }
-    return tipEl;
-  }
-
-  /* rows: [{swatch?, label, value}] — labels con textContent (datos no confiables). */
-  function tipShow(title, rows, clientX, clientY) {
-    const el = tip();
-    el.replaceChildren();
-    if (title) {
-      const h = document.createElement('div');
-      h.className = 'chart-tip-title';
-      h.textContent = title;
-      el.appendChild(h);
-    }
-    for (const r of rows) {
-      const row = document.createElement('div');
-      row.className = 'chart-tip-row';
-      if (r.swatch) {
-        const k = document.createElement('span');
-        k.className = 'chart-tip-key';
-        k.style.background = r.swatch;
-        row.appendChild(k);
-      }
-      const v = document.createElement('span');
-      v.className = 'chart-tip-value';
-      v.textContent = r.value;
-      const l = document.createElement('span');
-      l.className = 'chart-tip-label';
-      l.textContent = r.label;
-      row.appendChild(v);
-      row.appendChild(l);
-      el.appendChild(row);
-    }
-    el.style.display = 'block';
-    position(clientX, clientY);
-  }
-
-  function position(x, y) {
-    const el = tip();
-    const pad = 12;
-    const r = el.getBoundingClientRect();
-    let left = x + pad;
-    let top = y - r.height - pad;
-    if (left + r.width > window.innerWidth - 8) left = x - r.width - pad;
-    if (top < 8) top = y + pad;
-    el.style.left = left + 'px';
-    el.style.top = top + 'px';
-  }
-
-  function tipHide() {
-    if (tipEl) tipEl.style.display = 'none';
-  }
 
   /* ---------- Escalas ---------- */
   function niceStep(raw) {
@@ -314,25 +255,6 @@ const Charts = (() => {
       s.values.forEach((v, i) => add(svg, 'circle', { cx: x(i), cy: y(v), r: 3, fill: s.color }));
     });
 
-    // Zona de hover por mes: un solo tooltip con el valor de cada serie.
-    months.forEach((lbl, i) => {
-      const hit = add(svg, 'rect', {
-        x: m.l + band * i, y: m.t, width: band, height: ih,
-        fill: 'transparent', tabindex: 0,
-      });
-      const show = (cx, cy) =>
-        tipShow(lbl, series.map((s) => ({
-          swatch: s.color, label: s.label, value: opts.fmt(s.values[i]),
-        })), cx, cy);
-      hit.addEventListener('pointermove', (e) => show(e.clientX, e.clientY));
-      hit.addEventListener('pointerleave', tipHide);
-      hit.addEventListener('focus', () => {
-        const b = hit.getBoundingClientRect();
-        show(b.left + b.width / 2, b.top + 30);
-      });
-      hit.addEventListener('blur', tipHide);
-    });
-
     el.appendChild(svg);
   }
 
@@ -342,5 +264,5 @@ const Charts = (() => {
     return String(Math.round(n));
   }
 
-  return { COLORS, hBars, donut, trend, lines, tipHide };
+  return { COLORS, hBars, donut, trend, lines };
 })();
