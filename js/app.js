@@ -243,14 +243,20 @@
     </svg>`;
   }
   // "Velocímetro" de un cuarto de vuelta (0° a 90°): arranca horizontal
-  // (0%, rojo) y termina vertical (100%, verde), con una aguja marcando
-  // dónde está el balance del mes. El pivote vive en la esquina inferior
-  // derecha del viewBox, así el arco se abre hacia arriba-izquierda.
+  // (0%, rojo) y termina vertical (100%, verde). El indicador es una marca
+  // corta ENCIMA de la barra de colores (no una aguja desde el vértice), y
+  // el balance en % va arriba del vértice, centrado. El pivote vive en la
+  // esquina inferior derecha del viewBox, así el arco se abre hacia
+  // arriba-izquierda.
   function speedoGaugeSvg(pct, size) {
     size = size || 128;
-    const pad = 12;
+    const pad = 16;
+    const topPad = 34;   // banda reservada arriba del arco para que el % nunca lo pise
+    const rightPad = 12; // margen extra a la derecha del vértice para que el % no se recorte
     const r = size - pad * 2;
-    const pivot = { x: size - pad, y: size - pad };
+    const width = size + rightPad;
+    const height = size + topPad;
+    const pivot = { x: size - pad, y: height - pad };
     const angleAt = (t) => (180 - 90 * t) * (Math.PI / 180);
     const ptAt = (t, radius) => {
       const a = angleAt(t);
@@ -259,25 +265,23 @@
     const p = Math.max(0, Math.min(100, pct)) / 100;
     const p0 = ptAt(0, r);
     const p1 = ptAt(1, r);
-    const needle = ptAt(p, r * 0.8);
-    // Punto fijo (no según el ángulo de la aguja): a la izquierda del
-    // pivote y bien arriba de su altura, para no cruzarse con la aguja ni
-    // en el extremo horizontal (0%, aguja pegada a la altura del pivote)
-    // ni en el vertical (100%, aguja pegada al lado derecho).
-    const label = { x: pad + r * 0.24, y: pivot.y - r * 0.4 };
+    // Marca corta radial que cruza la barra en el punto actual (no una
+    // aguja larga desde el centro): un segmento entre r-9 y r+9 en el
+    // mismo ángulo que el balance.
+    const markIn = ptAt(p, r - 9);
+    const markOut = ptAt(p, r + 9);
     const gradId = 'speedoGrad' + Math.round(Math.random() * 1e6);
-    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="Balance del mes: ${Math.round(pct)}%">
+    return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Balance del mes: ${Math.round(pct)}%">
       <defs>
         <linearGradient id="${gradId}" x1="${p0.x}" y1="${p0.y}" x2="${p1.x}" y2="${p1.y}" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stop-color="var(--crit)"/>
-          <stop offset="50%" stop-color="var(--warn)"/>
-          <stop offset="100%" stop-color="var(--good)"/>
+          <stop offset="0%" stop-color="var(--gauge-crit)"/>
+          <stop offset="50%" stop-color="var(--gauge-warn)"/>
+          <stop offset="100%" stop-color="var(--gauge-good)"/>
         </linearGradient>
       </defs>
       <path d="M${p0.x},${p0.y} A${r},${r} 0 0,1 ${p1.x},${p1.y}" fill="none" stroke="url(#${gradId})" stroke-width="10" stroke-linecap="round"/>
-      <line x1="${pivot.x}" y1="${pivot.y}" x2="${needle.x}" y2="${needle.y}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="${pivot.x}" cy="${pivot.y}" r="5" fill="var(--ink)"/>
-      <text x="${label.x}" y="${label.y}" text-anchor="middle" dominant-baseline="middle" font-size="${Math.round(size * 0.15)}" font-weight="800" fill="var(--ink)" font-family="var(--font-heading)">${Math.round(pct)}%</text>
+      <line x1="${markIn.x}" y1="${markIn.y}" x2="${markOut.x}" y2="${markOut.y}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+      <text x="${pivot.x}" y="6" text-anchor="middle" dominant-baseline="hanging" font-size="${Math.round(size * 0.15)}" font-weight="800" fill="var(--ink)" font-family="var(--font-heading)">${Math.round(pct)}%</text>
     </svg>`;
   }
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
@@ -365,6 +369,22 @@
       return d;
     };
     return { close, prevClose, prevPrevClose, due: dueAfter(close), prevDue: dueAfter(prevClose) };
+  }
+
+  /* Próximos N resúmenes (cierre + vencimiento), arrancando por el ciclo
+     actual, respetando los overrides puntuales que ya estén cargados. */
+  function cardUpcomingCycles(card, n) {
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    let close = cardDate(card, 'closingDay', now.getFullYear(), now.getMonth());
+    if (close < now) close = cardDate(card, 'closingDay', now.getFullYear(), now.getMonth() + 1);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      let due = cardDate(card, 'dueDay', close.getFullYear(), close.getMonth());
+      if (due <= close) due = cardDate(card, 'dueDay', close.getFullYear(), close.getMonth() + 1);
+      out.push({ close, due });
+      close = cardDate(card, 'closingDay', close.getFullYear(), close.getMonth() + 1);
+    }
+    return out;
   }
 
   const DAY_MS = 24 * 60 * 60 * 1000;
@@ -1284,7 +1304,6 @@
           </div>
           <div class="hero-speedo-wrap">
             ${speedoGaugeSvg(pctLeft, 128)}
-            <div class="hero-speedo-days">Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
           </div>
         </div>
       </div>
@@ -1292,18 +1311,19 @@
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
       ${sharedWidget}
 
+      <div class="card">
+        <h2 class="card-title">
+          <span>Gastos por categoría · ${esc(monthLabel(mk))}</span>
+          <button class="link-btn" data-goto-categorias>Ver análisis</button>
+        </h2>
+        ${catItems.length ? `
+        <div class="cats-chart-row">
+          <div id="chart-cats" class="cats-bars"></div>
+          <div id="chart-cats-donut" class="cats-donut"></div>
+        </div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
+      </div>
+
       <div class="grid-2">
-        <div class="card">
-          <h2 class="card-title">
-            <span>Gastos por categoría · ${esc(monthLabel(mk))}</span>
-            <button class="link-btn" data-goto-categorias>Ver análisis</button>
-          </h2>
-          ${catItems.length ? `
-          <div class="cats-chart-row">
-            <div id="chart-cats" class="cats-bars"></div>
-            <div id="chart-cats-donut" class="cats-donut"></div>
-          </div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
-        </div>
         <div class="card">
           <h2 class="card-title">
             <span>Ingresos vs. gastos · últimos 6 meses</span>
@@ -1764,7 +1784,9 @@
         <input type="date" name="dueDate" id="ov-due" placeholder="usual: ${esc(dateToStr(cy.due))}">
       </div>
       <span class="hint">Elegí la fecha de cierre tal cual va a caer este período (aunque no cambie, ancla a qué mes aplica el ajuste); la de vencimiento solo si también se corrió.</span>
-      ${rows ? `<div class="ov-list"><span class="hint">Ajustes ya cargados:</span>${rows}</div>` : ''}`;
+      ${rows ? `<div class="ov-list"><span class="hint">Ajustes ya cargados:</span>${rows}</div>` : ''}
+      <button type="button" class="link-btn" id="ov-toggle-upcoming">Ver próximos resúmenes</button>
+      <div id="ov-upcoming" hidden></div>`;
 
     const dlg = openDialog(`Ajustar fechas de ${card.name}`, body, {
       submitLabel: 'Guardar ajuste',
@@ -1790,6 +1812,25 @@
       render();
       cardOverrideForm(card);
     }));
+    const upcomingBox = $('#ov-upcoming', dlg);
+    $('#ov-toggle-upcoming', dlg).addEventListener('click', (ev) => {
+      const btn = ev.currentTarget;
+      const willShow = upcomingBox.hidden;
+      if (willShow && !upcomingBox.dataset.filled) {
+        const rowsHtml = cardUpcomingCycles(card, 6).map((c) => `<tr>
+          <td>${esc(monthLabel(periodKey(c.close.getFullYear(), c.close.getMonth())))}</td>
+          <td>${esc(fmtDateShort(dateToStr(c.close)))}</td>
+          <td>${esc(fmtDateShort(dateToStr(c.due)))}</td>
+        </tr>`).join('');
+        upcomingBox.innerHTML = `<div class="table-scroll"><table class="data">
+          <thead><tr><th>Resumen</th><th>Cierre</th><th>Vencimiento</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table></div>`;
+        upcomingBox.dataset.filled = '1';
+      }
+      upcomingBox.hidden = !willShow;
+      btn.textContent = willShow ? 'Ocultar próximos resúmenes' : 'Ver próximos resúmenes';
+    });
   }
 
   function vTarjetas(el) {
