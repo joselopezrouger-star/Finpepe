@@ -242,6 +242,44 @@
       ${arc(rI, strokeI, pctInner, '--warn')}
     </svg>`;
   }
+  // "Velocímetro" de un cuarto de vuelta (0° a 90°): arranca horizontal
+  // (0%, rojo) y termina vertical (100%, verde), con una aguja marcando
+  // dónde está el balance del mes. El pivote vive en la esquina inferior
+  // derecha del viewBox, así el arco se abre hacia arriba-izquierda.
+  function speedoGaugeSvg(pct, size) {
+    size = size || 128;
+    const pad = 12;
+    const r = size - pad * 2;
+    const pivot = { x: size - pad, y: size - pad };
+    const angleAt = (t) => (180 - 90 * t) * (Math.PI / 180);
+    const ptAt = (t, radius) => {
+      const a = angleAt(t);
+      return { x: pivot.x + radius * Math.cos(a), y: pivot.y - radius * Math.sin(a) };
+    };
+    const p = Math.max(0, Math.min(100, pct)) / 100;
+    const p0 = ptAt(0, r);
+    const p1 = ptAt(1, r);
+    const needle = ptAt(p, r * 0.8);
+    // Punto fijo (no según el ángulo de la aguja): a la izquierda del
+    // pivote y bien arriba de su altura, para no cruzarse con la aguja ni
+    // en el extremo horizontal (0%, aguja pegada a la altura del pivote)
+    // ni en el vertical (100%, aguja pegada al lado derecho).
+    const label = { x: pad + r * 0.24, y: pivot.y - r * 0.4 };
+    const gradId = 'speedoGrad' + Math.round(Math.random() * 1e6);
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="Balance del mes: ${Math.round(pct)}%">
+      <defs>
+        <linearGradient id="${gradId}" x1="${p0.x}" y1="${p0.y}" x2="${p1.x}" y2="${p1.y}" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="var(--crit)"/>
+          <stop offset="50%" stop-color="var(--warn)"/>
+          <stop offset="100%" stop-color="var(--good)"/>
+        </linearGradient>
+      </defs>
+      <path d="M${p0.x},${p0.y} A${r},${r} 0 0,1 ${p1.x},${p1.y}" fill="none" stroke="url(#${gradId})" stroke-width="10" stroke-linecap="round"/>
+      <line x1="${pivot.x}" y1="${pivot.y}" x2="${needle.x}" y2="${needle.y}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="${pivot.x}" cy="${pivot.y}" r="5" fill="var(--ink)"/>
+      <text x="${label.x}" y="${label.y}" text-anchor="middle" dominant-baseline="middle" font-size="${Math.round(size * 0.15)}" font-weight="800" fill="var(--ink)" font-family="var(--font-heading)">${Math.round(pct)}%</text>
+    </svg>`;
+  }
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
   // terminó) — para dibujar el arco del anillo, que necesita una escala 0-100.
   function monthLeftPct(mk) {
@@ -1227,15 +1265,15 @@
 
     el.innerHTML = `
       <div class="hero">
-        <div class="hero-top">
-          <div class="hero-main">
-            <div class="hero-label">⇄ Balance del mes</div>
-            <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
-            <div class="hero-split">
-              <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
-              <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
-            </div>
+        <div class="hero-main">
+          <div class="hero-label">⇄ Balance del mes</div>
+          <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
+          <div class="hero-split">
+            <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
+            <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
           </div>
+        </div>
+        <div class="hero-side-col">
           <div class="hero-month-group">
             <div class="hero-month-pill">
               <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
@@ -1244,15 +1282,9 @@
             </div>
             ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
           </div>
-        </div>
-        <div class="hero-gauge-wrap">
-          <div class="hero-gauge-track">
-            <div class="hero-gauge-pointer" style="left:${pctLeft}%"></div>
-          </div>
-          <div class="hero-gauge-legend">
-            <span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b>
-            <span class="hero-gauge-sep">·</span>
-            <span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b>
+          <div class="hero-speedo-wrap">
+            ${speedoGaugeSvg(pctLeft, 128)}
+            <div class="hero-speedo-days">Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
           </div>
         </div>
       </div>
@@ -1281,14 +1313,15 @@
             <span><span class="key" style="background:${Charts.COLORS.income}"></span>Ingresos</span>
             <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos</span>
           </div>
-          <div class="trend-row">
-            <div id="chart-trend" class="trend-main"></div>
-            <div class="trend-ring-side">
-              <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 80)}</div>
-              <div class="hero-ring-legend">
-                <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
-                <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
-              </div>
+          <div id="chart-trend"></div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Balance y días del mes</h2>
+          <div class="hero-ring-standalone">
+            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 92)}</div>
+            <div class="hero-ring-legend">
+              <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
+              <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
             </div>
           </div>
         </div>
@@ -1701,53 +1734,50 @@
 
   /* Ajuste puntual de cierre/vencimiento para un período (mes) puntual,
      para cuando el banco corre la fecha ese mes en particular. */
+  // Ajuste puntual: se pide la fecha REAL de cierre/vencimiento (no un
+  // número de día suelto) para no tener que adivinar a qué mes corresponde
+  // cada uno — el día de mes que usa la lógica de ciclos se saca de ahí.
   function cardOverrideForm(card) {
     const cy = cardCycle(card);
-    const defaultKey = periodKey(cy.close.getFullYear(), cy.close.getMonth());
     const overrides = card.overrides || {};
     const rows = Object.keys(overrides).sort().map((key) => {
       const ov = overrides[key];
-      const [y, m] = key.split('-').map(Number);
       const label = monthLabel(key);
       const parts = [];
-      if (ov.closingDay != null) parts.push(`cierre día ${ov.closingDay}`);
-      if (ov.dueDay != null) parts.push(`vencimiento día ${ov.dueDay}`);
+      if (ov.closeDateStr) parts.push(`cierre ${esc(fmtDateShort(ov.closeDateStr))}`);
+      else if (ov.closingDay != null) parts.push(`cierre día ${ov.closingDay}`);
+      if (ov.dueDateStr) parts.push(`vencimiento ${esc(fmtDateShort(ov.dueDateStr))}`);
+      else if (ov.dueDay != null) parts.push(`vencimiento día ${ov.dueDay}`);
       return `<div class="ov-row" data-ovrow="${esc(key)}">
-        <span>${esc(label)}: ${esc(parts.join(' · ') || 'sin cambios')}</span>
+        <span>${esc(label)}: ${parts.join(' · ') || 'sin cambios'}</span>
         <button type="button" class="row-del" data-ovdel="${esc(key)}" aria-label="Quitar ajuste">✕</button>
       </div>`;
     }).join('');
 
     const body = `
       <div class="field">
-        <label for="ov-period">Período a ajustar (mes de cierre)</label>
-        <input type="month" name="period" id="ov-period" value="${esc(defaultKey)}" required>
+        <label for="ov-close">Fecha real de cierre este período</label>
+        <input type="date" name="closeDate" id="ov-close" value="${esc(dateToStr(cy.close))}" required>
       </div>
-      <div class="field-row">
-        <div class="field">
-          <label for="ov-close">Día de cierre ese mes</label>
-          <input type="number" name="closingDay" id="ov-close" min="1" max="31" step="1" placeholder="usual: ${esc(card.closingDay)}">
-        </div>
-        <div class="field">
-          <label for="ov-due">Día de vencimiento ese mes</label>
-          <input type="number" name="dueDay" id="ov-due" min="1" max="31" step="1" placeholder="usual: ${esc(card.dueDay)}">
-        </div>
+      <div class="field">
+        <label for="ov-due">Fecha real de vencimiento este período <span class="hint">(opcional, si también cambió)</span></label>
+        <input type="date" name="dueDate" id="ov-due" placeholder="usual: ${esc(dateToStr(cy.due))}">
       </div>
-      <span class="hint">Dejá vacío el campo que ese mes no cambia. Sirve para cuando el banco corre la fecha puntualmente.</span>
+      <span class="hint">Elegí la fecha de cierre tal cual va a caer este período (aunque no cambie, ancla a qué mes aplica el ajuste); la de vencimiento solo si también se corrió.</span>
       ${rows ? `<div class="ov-list"><span class="hint">Ajustes ya cargados:</span>${rows}</div>` : ''}`;
 
     const dlg = openDialog(`Ajustar fechas de ${card.name}`, body, {
       submitLabel: 'Guardar ajuste',
       onSubmit(d) {
-        const key = d.period;
-        if (!key) return false;
-        const close = d.closingDay.trim() === '' ? null : Math.min(31, Math.max(1, parseInt(d.closingDay, 10)));
-        const due = d.dueDay.trim() === '' ? null : Math.min(31, Math.max(1, parseInt(d.dueDay, 10)));
-        if (close == null && due == null) return false;
+        if (!d.closeDate) return false;
+        const closeDate = parseDate(d.closeDate);
+        const key = periodKey(closeDate.getFullYear(), closeDate.getMonth());
+        const dueDate = d.dueDate ? parseDate(d.dueDate) : null;
         card.overrides = card.overrides || {};
         card.overrides[key] = {
-          ...(close != null ? { closingDay: close } : {}),
-          ...(due != null ? { dueDay: due } : {}),
+          closingDay: closeDate.getDate(),
+          closeDateStr: d.closeDate,
+          ...(dueDate ? { dueDay: dueDate.getDate(), dueDateStr: d.dueDate } : {}),
         };
         Store.save();
         render();
