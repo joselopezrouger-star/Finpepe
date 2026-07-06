@@ -1227,29 +1227,32 @@
 
     el.innerHTML = `
       <div class="hero">
-        <div class="hero-main">
-          <div class="hero-label">⇄ Balance del mes</div>
-          <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
-          <div class="hero-split">
-            <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
-            <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
+        <div class="hero-top">
+          <div class="hero-main">
+            <div class="hero-label">⇄ Balance del mes</div>
+            <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
+            <div class="hero-split">
+              <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
+              <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
+            </div>
           </div>
-        </div>
-        <div class="hero-ring-col">
           <div class="hero-month-group">
-            <div class="hero-ring-month">
+            <div class="hero-month-pill">
               <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
               <span class="month-label">${esc(monthLabel(mk))}</span>
               <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
             </div>
             ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
           </div>
-          <div class="hero-ring-bottom">
-            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 92)}</div>
-            <div class="hero-ring-legend">
-              <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
-              <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
-            </div>
+        </div>
+        <div class="hero-gauge-wrap">
+          <div class="hero-gauge-track">
+            <div class="hero-gauge-pointer" style="left:${pctLeft}%"></div>
+          </div>
+          <div class="hero-gauge-legend">
+            <span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b>
+            <span class="hero-gauge-sep">·</span>
+            <span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b>
           </div>
         </div>
       </div>
@@ -1278,7 +1281,16 @@
             <span><span class="key" style="background:${Charts.COLORS.income}"></span>Ingresos</span>
             <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos</span>
           </div>
-          <div id="chart-trend"></div>
+          <div class="trend-row">
+            <div id="chart-trend" class="trend-main"></div>
+            <div class="trend-ring-side">
+              <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 80)}</div>
+              <div class="hero-ring-legend">
+                <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
+                <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1637,14 +1649,6 @@
   }
 
   /* ================= Vista: Tarjetas y medios ================= */
-  // Combinaciones de cierre/vencimiento típicas, como atajo — el número
-  // exacto siempre queda editable al lado por si no calza con ninguna.
-  const CARD_DAY_PRESETS = [
-    { close: 1, due: 10 },
-    { close: 10, due: 20 },
-    { close: 20, due: 30 },
-    { close: 25, due: 5 },
-  ];
   function methodForm(method) {
     const editing = !!method;
     const m = method || { name: '', kind: 'efectivo', closingDay: 25, dueDay: 5 };
@@ -1661,25 +1665,17 @@
             `<option value="${k}" ${m.kind === k ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
       </div>
-      <div id="m-card-days" hidden>
-        <div class="field" style="margin-bottom:10px">
-          <label>Atajos comunes</label>
-          <div class="inst-picker">
-            ${CARD_DAY_PRESETS.map((p) => `<button type="button" class="inst-opt" data-card-preset="${p.close}|${p.due}">${p.close} y ${p.due}</button>`).join('')}
-          </div>
+      <div class="field-row" id="m-card-days" hidden>
+        <div class="field">
+          <label for="m-close">Día de cierre</label>
+          <input type="number" name="closingDay" id="m-close" min="1" max="31" step="1" value="${esc(m.closingDay ?? 25)}">
         </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="m-close">Día de cierre</label>
-            <input type="number" name="closingDay" id="m-close" min="1" max="31" step="1" value="${esc(m.closingDay ?? 25)}">
-          </div>
-          <div class="field">
-            <label for="m-due">Día de vencimiento</label>
-            <input type="number" name="dueDay" id="m-due" min="1" max="31" step="1" value="${esc(m.dueDay ?? 5)}">
-          </div>
+        <div class="field">
+          <label for="m-due">Día de vencimiento</label>
+          <input type="number" name="dueDay" id="m-due" min="1" max="31" step="1" value="${esc(m.dueDay ?? 5)}">
         </div>
       </div>
-      <span class="hint" id="m-hint" hidden>Si el vencimiento cae con un número de día menor al de cierre (por ej. cierre 25, vencimiento 5), la app entiende que es al mes siguiente. En meses más cortos, el día 29-31 se ajusta solo al último día del mes.</span>`;
+      <span class="hint" id="m-hint" hidden>Si el vencimiento cae con un número de día menor al de cierre (por ej. cierre 25, vencimiento 5), la app entiende que es al mes siguiente. En meses más cortos, el día 29-31 se ajusta solo al último día del mes. Si un mes puntual el banco corre la fecha, lo podés ajustar después desde "Ajustar fechas" en la tarjeta.</span>`;
 
     const dlg = openDialog(editing ? 'Editar medio de pago' : 'Nuevo medio de pago', body, {
       onSubmit(d) {
@@ -1701,12 +1697,6 @@
     };
     $('#m-kind', dlg).addEventListener('change', toggle);
     toggle();
-    $$('[data-card-preset]', dlg).forEach((b) => b.addEventListener('click', () => {
-      const [close, due] = b.dataset.cardPreset.split('|');
-      $('#m-close', dlg).value = close;
-      $('#m-due', dlg).value = due;
-      $$('[data-card-preset]', dlg).forEach((x) => x.classList.toggle('sel', x === b));
-    }));
   }
 
   /* Ajuste puntual de cierre/vencimiento para un período (mes) puntual,
@@ -2344,22 +2334,22 @@
           <button class="link-btn" id="btn-add-rec">+ Fijo</button>
         </h2>
         ${S().recurring.length ? `
-        <div class="table-scroll"><table class="data">
-          <thead><tr>
-            <th>Nombre</th><th>Tipo</th><th class="num">Monto</th><th>Día</th>
-            <th>Categoría</th><th>Medio</th><th></th>
-          </tr></thead>
-          <tbody>${S().recurring.map((r) => `
-            <tr class="rowlink" data-rid="${esc(r.id)}">
-              <td><b>${esc(r.name)}</b></td>
-              <td class="cell-sub">${r.type === 'gasto' ? 'Gasto' : 'Ingreso'}</td>
-              <td class="num">${fmtMoney(r.amount, r.currency)}</td>
-              <td class="cell-sub">${r.day}</td>
-              <td class="cell-sub">${esc(catName(r.categoryId))}</td>
-              <td class="cell-sub">${esc(methodName(r.methodId))}</td>
-              <td><button class="row-del" data-rdel="${esc(r.id)}" aria-label="Eliminar">✕</button></td>
-            </tr>`).join('')}</tbody>
-        </table></div>
+        <div class="tx-card-list">
+          ${S().recurring.map((r) => {
+            const isIncome = r.type === 'ingreso';
+            return `<div class="tx-card-row" data-rid="${esc(r.id)}">
+              <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(isIncome ? 'trend' : 'cash')}</div>
+              <div class="tx-card-main">
+                <div class="tx-card-title">${esc(r.name)}</div>
+                <div class="tx-card-sub">${esc(catName(r.categoryId))} · ${esc(methodName(r.methodId))} · día ${r.day}</div>
+              </div>
+              <div class="tx-card-amount">
+                <div class="v ${isIncome ? 'pos' : ''}">${isIncome ? '+' : '−'} ${fmtMoney(r.amount, r.currency)}</div>
+              </div>
+              <button class="tx-card-del" data-rdel="${esc(r.id)}" aria-label="Eliminar">✕</button>
+            </div>`;
+          }).join('')}
+        </div>
         <div class="hint" style="margin-top:8px">Al abrir la app en un mes nuevo, estos movimientos se cargan solos. Los ya generados se pueden editar o borrar como cualquier movimiento.</div>`
         : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos cada mes.</div>'}
       </div>
@@ -2398,7 +2388,7 @@
       Store.save();
       render();
     }));
-    $$('tr[data-rid]', el).forEach((row) => row.addEventListener('click', (e) => {
+    $$('[data-rid]', el).forEach((row) => row.addEventListener('click', (e) => {
       if (e.target.closest('[data-rdel]')) return;
       recurringForm(S().recurring.find((r) => r.id === row.dataset.rid));
     }));
