@@ -32,6 +32,9 @@
   --good: #04996f;
   --warn: #a15c00;
   --crit: #d6362f;
+  --gauge-good: #7cd6b9;
+  --gauge-warn: #f0c869;
+  --gauge-crit: #f0928c;
   --danger-bg: #fdf0ef;
   --danger-border: #f4c9c6;
   --danger-ink: #8c241f;
@@ -69,6 +72,9 @@
   --good: #08d59d;
   --warn: #f5d142;
   --crit: #ff5e5b;
+  --gauge-good: #5eb99e;
+  --gauge-warn: #d9bd6a;
+  --gauge-crit: #d9807d;
   --danger-bg: #2a1416;
   --danger-border: #4a2228;
   --danger-ink: #ff5e5b;
@@ -1195,8 +1201,6 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 /* "Velocímetro" de cuarto de vuelta: reemplaza al anillo doble que vivía
    acá (se mudó a su propia tarjeta, al lado del gráfico de tendencia). */
 .hero-speedo-wrap { display: flex; flex-direction: column; align-items: center; }
-.hero-speedo-days { font-size: 11px; color: var(--muted); margin-top: -6px; }
-.hero-speedo-days b { color: var(--ink); font-weight: 700; }
 .hero-ring { position: relative; flex: none; }
 .hero-ring-legend {
   display: flex;
