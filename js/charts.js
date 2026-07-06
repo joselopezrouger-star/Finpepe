@@ -133,6 +133,7 @@ const Charts = (() => {
      rows: [{label, income, expense}] · opts: {ariaLabel} */
   function trend(el, rows, opts) {
     el.replaceChildren();
+    if (!rows.length) return;
     const W = 640, H = 236;
     const m = { t: 10, r: 8, b: 26, l: 56 };
     const iw = W - m.l - m.r;

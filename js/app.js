@@ -9,6 +9,12 @@
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Vibración cortita al tocar el teclado numérico (feedback táctil). No
+  // todos los navegadores exponen navigator.vibrate (iOS Safari no), así
+  // que es un no-op silencioso ahí.
+  function haptic() {
+    if (navigator.vibrate) navigator.vibrate(10);
+  }
 
   const pad = (n) => String(n).padStart(2, '0');
   const dateToStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -533,7 +539,10 @@
   function txForm(tx) {
     const editing = !!tx;
     const partner = sharedPartner();
-    const canShare = () => !editing && draft.type !== 'transferencia' && !!partner && !!(shared.household);
+    // Compartir con la pareja solo tiene sentido para gastos (se reparte
+    // quién pagó qué); un ingreso o una transferencia entre tus propias
+    // cuentas no es algo que "se deba" entre los dos.
+    const canShare = () => !editing && draft.type === 'gasto' && !!partner && !!(shared.household);
 
     const draft = {
       type: editing ? tx.type : 'gasto',
@@ -597,12 +606,14 @@
       return parts.length ? parts.join(' ') : '0';
     }
     function pressDigit(d) {
+      haptic();
       if (d === '.' && draft.cur.includes('.')) return;
       if (draft.cur.length > 12) return;
       draft.cur = (draft.cur === '0' && d !== '.') ? d : draft.cur + d;
       paint();
     }
     function pressOp(op) {
+      haptic();
       const curVal = draft.cur === '' ? null : parseFloat(draft.cur);
       if (draft.op && curVal != null) draft.acc = applyOp(draft.acc, draft.op, curVal);
       else if (curVal != null) draft.acc = curVal;
@@ -611,6 +622,7 @@
       paint();
     }
     function pressEquals() {
+      haptic();
       const curVal = draft.cur === '' ? null : parseFloat(draft.cur);
       if (draft.op && curVal != null) draft.acc = applyOp(draft.acc, draft.op, curVal);
       else if (curVal != null) draft.acc = curVal;
@@ -619,6 +631,7 @@
       paint();
     }
     function pressBack() {
+      haptic();
       if (draft.cur) draft.cur = draft.cur.slice(0, -1);
       else if (draft.op) draft.op = null;
       else if (draft.acc != null) { draft.cur = numFmt(draft.acc); draft.acc = null; }
@@ -629,6 +642,24 @@
     function showInstallments() {
       const m = currentInstMethod();
       return !editing && draft.type === 'gasto' && m && m.kind === 'credito';
+    }
+
+    // Elegir cuotas como mini-tarjetas (1/3/6/12/otra) en vez de un campo
+    // numérico pelado: las opciones más comunes quedan a un toque, y "Otra"
+    // despliega el número para casos puntuales.
+    const INST_PRESETS = [1, 3, 6, 12];
+    function installmentsPickerHTML() {
+      const cur = Number(draft.inst);
+      const isCustom = !INST_PRESETS.includes(cur);
+      return `
+        <div class="tx-row-note">
+          <label>Cuotas</label>
+          <div class="inst-picker">
+            ${INST_PRESETS.map((n) => `<button type="button" class="inst-opt ${!isCustom && cur === n ? 'sel' : ''}" data-inst-preset="${n}">${n}</button>`).join('')}
+            <button type="button" class="inst-opt ${isCustom ? 'sel' : ''}" data-inst-custom>Otra</button>
+          </div>
+          ${isCustom ? `<input type="number" id="tx-inst" min="1" max="36" step="1" value="${esc(draft.inst)}" placeholder="Cantidad de cuotas" class="inst-custom-input">` : ''}
+        </div>`;
     }
 
     // Grilla de tarjetas (categoría/subcategoría), con las que tienen hijos
@@ -735,11 +766,7 @@
         ${draft.expand === 'method' ? `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML(draft.methodId)}</div>` : ''}
         `}
 
-        ${showInstallments() ? `
-        <div class="tx-row-note">
-          <label>Cuotas</label>
-          <input type="number" id="tx-inst" min="1" max="36" step="1" value="${draft.inst}">
-        </div>` : ''}
+        ${showInstallments() ? installmentsPickerHTML() : ''}
 
         ${canShare() ? `
         <label class="tx-check-row">
@@ -860,11 +887,7 @@
       }
       // 'extra': cuotas (si aplica) + compartido (si aplica) + nota, antes de guardar.
       return `
-        ${showInstallments() ? `
-        <div class="tx-row-note">
-          <label>Cuotas</label>
-          <input type="number" id="tx-inst" min="1" max="36" step="1" value="${draft.inst}">
-        </div>` : ''}
+        ${showInstallments() ? installmentsPickerHTML() : ''}
         ${canShare() ? `
         <label class="tx-check-row">
           <input type="checkbox" id="tx-share" ${draft.shareIt ? 'checked' : ''}>
@@ -1017,6 +1040,12 @@
     function wireDraftInputs() {
       const noteEl = $('#tx-note', dlg);
       if (noteEl) noteEl.addEventListener('input', (e) => { draft.note = e.target.value; });
+      $$('[data-inst-preset]', dlg).forEach((b) => b.addEventListener('click', () => {
+        draft.inst = b.dataset.instPreset;
+        paint();
+      }));
+      const instCustomBtn = $('[data-inst-custom]', dlg);
+      if (instCustomBtn) instCustomBtn.addEventListener('click', () => { draft.inst = ''; paint(); });
       const instEl = $('#tx-inst', dlg);
       if (instEl) instEl.addEventListener('input', (e) => { draft.inst = e.target.value; });
       const pctEl = $('#tx-share-pct', dlg);
@@ -1150,7 +1179,9 @@
     }
     catItems = catItems.map((it, i) => ({ ...it, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
 
-    // Tendencia: últimos 6 meses hasta el mes elegido
+    // Tendencia: últimos 6 meses hasta el mes elegido, salvo los que no
+    // tengan ningún movimiento (no tiene sentido mostrar un mes vacío en
+    // el eje si nunca se cargó nada ese mes).
     const months = [];
     for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
     const trendRows = months.map((m) => {
@@ -1161,7 +1192,7 @@
         income: sumDisp(list.filter((t) => t.type === 'ingreso')),
         expense: sumDisp(list.filter((t) => t.type === 'gasto')),
       };
-    });
+    }).filter((r) => r.income > 0 || r.expense > 0);
 
     // Vencimientos de tarjetas
     const cards = S().methods.filter((m) => m.kind === 'credito');
@@ -1284,7 +1315,9 @@
       Charts.donut($('#chart-cats-donut', el), catItems, { size: 92, stroke: 13 });
     }
     const trendEl = $('#chart-trend', el);
-    if (ui.trendTable) {
+    if (!trendRows.length) {
+      trendEl.innerHTML = '<div class="empty">Sin movimientos en los últimos 6 meses.</div>';
+    } else if (ui.trendTable) {
       trendEl.innerHTML = `
         <div class="table-scroll"><table class="data">
           <thead><tr><th>Mes</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Balance</th></tr></thead>
@@ -1604,6 +1637,14 @@
   }
 
   /* ================= Vista: Tarjetas y medios ================= */
+  // Combinaciones de cierre/vencimiento típicas, como atajo — el número
+  // exacto siempre queda editable al lado por si no calza con ninguna.
+  const CARD_DAY_PRESETS = [
+    { close: 1, due: 10 },
+    { close: 10, due: 20 },
+    { close: 20, due: 30 },
+    { close: 25, due: 5 },
+  ];
   function methodForm(method) {
     const editing = !!method;
     const m = method || { name: '', kind: 'efectivo', closingDay: 25, dueDay: 5 };
@@ -1620,14 +1661,22 @@
             `<option value="${k}" ${m.kind === k ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
       </div>
-      <div class="field-row" id="m-card-days" hidden>
-        <div class="field">
-          <label for="m-close">Día de cierre</label>
-          <input type="number" name="closingDay" id="m-close" min="1" max="31" step="1" value="${esc(m.closingDay ?? 25)}">
+      <div id="m-card-days" hidden>
+        <div class="field" style="margin-bottom:10px">
+          <label>Atajos comunes</label>
+          <div class="inst-picker">
+            ${CARD_DAY_PRESETS.map((p) => `<button type="button" class="inst-opt" data-card-preset="${p.close}|${p.due}">${p.close} y ${p.due}</button>`).join('')}
+          </div>
         </div>
-        <div class="field">
-          <label for="m-due">Día de vencimiento</label>
-          <input type="number" name="dueDay" id="m-due" min="1" max="31" step="1" value="${esc(m.dueDay ?? 5)}">
+        <div class="field-row">
+          <div class="field">
+            <label for="m-close">Día de cierre</label>
+            <input type="number" name="closingDay" id="m-close" min="1" max="31" step="1" value="${esc(m.closingDay ?? 25)}">
+          </div>
+          <div class="field">
+            <label for="m-due">Día de vencimiento</label>
+            <input type="number" name="dueDay" id="m-due" min="1" max="31" step="1" value="${esc(m.dueDay ?? 5)}">
+          </div>
         </div>
       </div>
       <span class="hint" id="m-hint" hidden>Si el vencimiento cae con un número de día menor al de cierre (por ej. cierre 25, vencimiento 5), la app entiende que es al mes siguiente. En meses más cortos, el día 29-31 se ajusta solo al último día del mes.</span>`;
@@ -1652,6 +1701,12 @@
     };
     $('#m-kind', dlg).addEventListener('change', toggle);
     toggle();
+    $$('[data-card-preset]', dlg).forEach((b) => b.addEventListener('click', () => {
+      const [close, due] = b.dataset.cardPreset.split('|');
+      $('#m-close', dlg).value = close;
+      $('#m-due', dlg).value = due;
+      $$('[data-card-preset]', dlg).forEach((x) => x.classList.toggle('sel', x === b));
+    }));
   }
 
   /* Ajuste puntual de cierre/vencimiento para un período (mes) puntual,
