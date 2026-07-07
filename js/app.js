@@ -252,6 +252,9 @@
   function speedoGaugeSvg(pct, size) {
     size = size || 128;
     const pad = 16;
+    const extra = 34; // margen extra alrededor del vértice para el texto de adentro
+    const width = size + extra;
+    const height = size + extra;
     const r = size - pad * 2;
     const pivot = { x: size - pad, y: size - pad };
     const angleAt = (t) => (180 - 90 * t) * (Math.PI / 180);
@@ -274,10 +277,12 @@
       ? `color-mix(in srgb, var(--gauge-warn) ${Math.round((p / 0.5) * 100)}%, var(--gauge-crit))`
       : `color-mix(in srgb, var(--gauge-good) ${Math.round(((p - 0.5) / 0.5) * 100)}%, var(--gauge-warn))`;
     // Centrado adentro del arco, alineado en el mismo ángulo que el punto
-    // medio entre donde arranca y donde termina la barra (a mitad de radio,
-    // para que quede bien adentro y no se cruce con el trazo del arco).
-    const labelPt = ptAt(0.5, r * 0.5);
-    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="Balance del mes: ${Math.round(pct)}%">
+    // medio entre donde arranca y donde termina la barra, pero cerca del
+    // vértice (no a mitad de camino hacia el trazo). Debajo, una etiqueta
+    // chica aclara qué es ese número.
+    const labelPt = ptAt(0.5, r * 0.32);
+    const fontSize = Math.round(size * 0.24);
+    return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Balance del mes: ${Math.round(pct)}%">
       <defs>
         <linearGradient id="${gradId}" x1="${p0.x}" y1="${p0.y}" x2="${p1.x}" y2="${p1.y}" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stop-color="var(--gauge-crit)"/>
@@ -287,7 +292,8 @@
       </defs>
       <path d="M${p0.x},${p0.y} A${r},${r} 0 0,1 ${p1.x},${p1.y}" fill="none" stroke="url(#${gradId})" stroke-width="10" stroke-linecap="round"/>
       <line x1="${markIn.x}" y1="${markIn.y}" x2="${markOut.x}" y2="${markOut.y}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
-      <text x="${labelPt.x}" y="${labelPt.y}" text-anchor="middle" dominant-baseline="middle" font-size="${Math.round(size * 0.24)}" font-weight="800" fill="${textColor}" font-family="var(--font-heading)">${Math.round(pct)}%</text>
+      <text x="${labelPt.x}" y="${labelPt.y}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}" font-weight="800" fill="${textColor}" font-family="var(--font-heading)">${Math.round(pct)}%</text>
+      <text x="${labelPt.x}" y="${labelPt.y + fontSize * 0.62}" text-anchor="middle" dominant-baseline="hanging" font-size="${Math.round(size * 0.09)}" fill="var(--muted)" font-family="var(--font)">Balance del mes</text>
     </svg>`;
   }
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
@@ -1292,9 +1298,9 @@
     let dailyRunning = 0;
     const dailyBalance = [];
     for (let d = 1; d <= daysInMk; d++) {
-      if (d > lastDayToShow) { dailyBalance.push({ day: d, value: null }); continue; }
+      if (d > lastDayToShow) { dailyBalance.push({ day: d, value: null, delta: null }); continue; }
       dailyRunning += dailyDelta[d];
-      dailyBalance.push({ day: d, value: dailyRunning });
+      dailyBalance.push({ day: d, value: dailyRunning, delta: dailyDelta[d] });
     }
 
     // Muestra el nombre del hogar (no "Compartido con {pareja}"): el nombre
@@ -1341,48 +1347,14 @@
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
       ${sharedWidget}
 
-      <div class="card">
-        <h2 class="card-title">
-          <span>Gastos por categoría · ${esc(monthLabel(mk))}</span>
-          <button class="link-btn" data-goto-categorias>Ver análisis</button>
-        </h2>
-        ${catItems.length ? `
-        <div class="cats-chart-row">
-          <div id="chart-cats" class="cats-bars"></div>
-          <div id="chart-cats-donut" class="cats-donut"></div>
-        </div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
-      </div>
-
-      ${ui.trendTable ? `
-      <div class="card trend-table-card">
-        <h2 class="card-title">
-          <span>Ingresos vs. gastos · tabla</span>
-          <button class="icon-btn" data-trendtable-close aria-label="Cerrar tabla">✕</button>
-        </h2>
-        <div class="table-scroll"><table class="data">
-          <thead><tr><th>Mes</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Balance</th></tr></thead>
-          <tbody>${trendRows.map((r) => `
-            <tr><td>${esc(r.label)}</td>
-            <td class="num amount-in">${fmtDisp(r.income)}</td>
-            <td class="num">${fmtDisp(r.expense)}</td>
-            <td class="num">${fmtDisp(r.income - r.expense)}</td></tr>`).join('')}
-          </tbody>
-        </table></div>
-      </div>` : ''}
-
-      <div class="card">
-        <h2 class="card-title">
-          <span>Ingresos vs. gastos · últimos 6 meses</span>
-          ${ui.trendTable ? '' : '<button class="link-btn" data-trendtable>Ver tabla</button>'}
-        </h2>
-        <div class="chart-legend">
-          <span><span class="key" style="background:${Charts.COLORS.income}"></span>Ingresos</span>
-          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos</span>
-        </div>
-        <div id="chart-trend"></div>
-      </div>
-
       <div class="grid-2">
+        <div class="card">
+          <h2 class="card-title">
+            <span>Gastos por categoría · ${esc(monthLabel(mk))}</span>
+            <button class="link-btn" data-goto-categorias>Ver análisis</button>
+          </h2>
+          ${catItems.length ? `<div id="chart-cats" class="cats-bars"></div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
+        </div>
         <div class="card">
           <h2 class="card-title">Balance y días del mes</h2>
           <div class="hero-ring-standalone">
@@ -1396,10 +1368,23 @@
             </div>
           </div>
         </div>
-        <div class="card">
-          <h2 class="card-title">Balance por día</h2>
-          <div id="chart-daily-balance"></div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">
+          <span>Ingresos vs. gastos · últimos 6 meses</span>
+          <button class="link-btn" data-trendtable>${ui.trendTable ? 'Ver gráfico' : 'Ver tabla'}</button>
+        </h2>
+        <div class="chart-legend">
+          <span><span class="key" style="background:${Charts.COLORS.income}"></span>Ingresos</span>
+          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos</span>
         </div>
+        <div id="chart-trend"></div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Balance por día</h2>
+        <div id="chart-daily-balance"></div>
       </div>
 
       <div class="card">
@@ -1432,11 +1417,21 @@
       Charts.hBars($('#chart-cats', el), catItems, {
         fmt: fmtDisp, color: Charts.COLORS.category,
       });
-      Charts.donut($('#chart-cats-donut', el), catItems, { size: 92, stroke: 13 });
     }
     const trendEl = $('#chart-trend', el);
     if (!trendRows.length) {
       trendEl.innerHTML = '<div class="empty">Sin movimientos en los últimos 6 meses.</div>';
+    } else if (ui.trendTable) {
+      trendEl.innerHTML = `
+        <div class="table-scroll"><table class="data">
+          <thead><tr><th>Mes</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Balance</th></tr></thead>
+          <tbody>${trendRows.map((r) => `
+            <tr><td>${esc(r.label)}</td>
+            <td class="num amount-in">${fmtDisp(r.income)}</td>
+            <td class="num">${fmtDisp(r.expense)}</td>
+            <td class="num">${fmtDisp(r.income - r.expense)}</td></tr>`).join('')}
+          </tbody>
+        </table></div>`;
     } else {
       Charts.trend(trendEl, trendRows, {});
     }
@@ -1448,10 +1443,10 @@
     }));
     const btnToday = $('[data-mtoday]', el);
     if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
-    const btnTrendTable = $('[data-trendtable]', el);
-    if (btnTrendTable) btnTrendTable.addEventListener('click', () => { ui.trendTable = true; render(); });
-    const btnTrendTableClose = $('[data-trendtable-close]', el);
-    if (btnTrendTableClose) btnTrendTableClose.addEventListener('click', () => { ui.trendTable = false; render(); });
+    $('[data-trendtable]', el).addEventListener('click', () => {
+      ui.trendTable = !ui.trendTable;
+      render();
+    });
     $('#btn-cta-tx', el).addEventListener('click', () => txForm(null));
     $$('[data-goto-card]', el).forEach((row) => row.addEventListener('click', () => {
       ui.view = 'tarjetas';
