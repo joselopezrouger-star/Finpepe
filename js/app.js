@@ -1236,10 +1236,10 @@
     let catItems = [...byCat.entries()]
       .map(([id, value]) => ({ label: catName(id), value }))
       .sort((a, b) => b.value - a.value);
-    if (catItems.length > 8) {
-      const rest = catItems.slice(7);
-      catItems = catItems.slice(0, 7);
-      catItems.push({ label: `Otras (${rest.length})`, value: rest.reduce((a, i) => a + i.value, 0) });
+    if (catItems.length > 4) {
+      const rest = catItems.slice(4);
+      catItems = catItems.slice(0, 4);
+      catItems.push({ label: 'Otros', value: rest.reduce((a, i) => a + i.value, 0) });
     }
     catItems = catItems.map((it, i) => ({ ...it, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
 
@@ -1272,6 +1272,30 @@
     const pctLeft = exp <= 0 ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round(((inc - exp) / inc) * 100))) : 0);
     const pctMonthLeft = monthLeftPct(mk);
     const daysLeft = daysLeftInMonth(mk);
+
+    // Balance acumulado día a día del mes (cuánto queda de plata a medida
+    // que pasan los días, no el mes completo de un saque): usa la fecha
+    // calendario real de cada movimiento, no el mes "efectivo" (que puede
+    // correr un gasto de tarjeta al mes de vencimiento). En el mes en curso
+    // corta en el día de hoy (no tiene sentido proyectar una línea plana a
+    // futuro); en un mes que todavía no llegó no hay nada que mostrar.
+    const [mkY, mkM] = mk.split('-').map(Number);
+    const daysInMk = new Date(mkY, mkM, 0).getDate();
+    const lastDayToShow = mk > curMonth() ? 0 : (mk === curMonth() ? new Date().getDate() : daysInMk);
+    const calMonthTxs = txs.filter((t) => monthKeyOf(t.date) === mk);
+    const dailyDelta = new Array(daysInMk + 1).fill(0);
+    for (const t of calMonthTxs) {
+      const v = txDispAmount(t);
+      if (v == null) continue;
+      dailyDelta[parseDate(t.date).getDate()] += t.type === 'ingreso' ? v : -v;
+    }
+    let dailyRunning = 0;
+    const dailyBalance = [];
+    for (let d = 1; d <= daysInMk; d++) {
+      if (d > lastDayToShow) { dailyBalance.push({ day: d, value: null }); continue; }
+      dailyRunning += dailyDelta[d];
+      dailyBalance.push({ day: d, value: dailyRunning });
+    }
 
     // Muestra el nombre del hogar (no "Compartido con {pareja}"): el nombre
     // de la pareja ya aparece en el balance de al lado ("ana te debe..."),
@@ -1329,27 +1353,52 @@
         </div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
       </div>
 
-      <div class="grid-2">
-        <div class="card">
-          <h2 class="card-title">
-            <span>Ingresos vs. gastos · últimos 6 meses</span>
-            <button class="link-btn" data-trendtable>${ui.trendTable ? 'Ver gráfico' : 'Ver tabla'}</button>
-          </h2>
-          <div class="chart-legend">
-            <span><span class="key" style="background:${Charts.COLORS.income}"></span>Ingresos</span>
-            <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos</span>
-          </div>
-          <div id="chart-trend"></div>
+      ${ui.trendTable ? `
+      <div class="card trend-table-card">
+        <h2 class="card-title">
+          <span>Ingresos vs. gastos · tabla</span>
+          <button class="icon-btn" data-trendtable-close aria-label="Cerrar tabla">✕</button>
+        </h2>
+        <div class="table-scroll"><table class="data">
+          <thead><tr><th>Mes</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Balance</th></tr></thead>
+          <tbody>${trendRows.map((r) => `
+            <tr><td>${esc(r.label)}</td>
+            <td class="num amount-in">${fmtDisp(r.income)}</td>
+            <td class="num">${fmtDisp(r.expense)}</td>
+            <td class="num">${fmtDisp(r.income - r.expense)}</td></tr>`).join('')}
+          </tbody>
+        </table></div>
+      </div>` : ''}
+
+      <div class="card">
+        <h2 class="card-title">
+          <span>Ingresos vs. gastos · últimos 6 meses</span>
+          ${ui.trendTable ? '' : '<button class="link-btn" data-trendtable>Ver tabla</button>'}
+        </h2>
+        <div class="chart-legend">
+          <span><span class="key" style="background:${Charts.COLORS.income}"></span>Ingresos</span>
+          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos</span>
         </div>
+        <div id="chart-trend"></div>
+      </div>
+
+      <div class="grid-2">
         <div class="card">
           <h2 class="card-title">Balance y días del mes</h2>
           <div class="hero-ring-standalone">
             <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 92)}</div>
+            <div class="hero-ring-stat">
+              <div class="hero-ring-stat-value">${pctLeft}%</div>
+              <div class="hero-ring-stat-label">Balance del mes</div>
+            </div>
             <div class="hero-ring-legend">
-              <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
               <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
             </div>
           </div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Balance por día</h2>
+          <div id="chart-daily-balance"></div>
         </div>
       </div>
 
@@ -1388,20 +1437,10 @@
     const trendEl = $('#chart-trend', el);
     if (!trendRows.length) {
       trendEl.innerHTML = '<div class="empty">Sin movimientos en los últimos 6 meses.</div>';
-    } else if (ui.trendTable) {
-      trendEl.innerHTML = `
-        <div class="table-scroll"><table class="data">
-          <thead><tr><th>Mes</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Balance</th></tr></thead>
-          <tbody>${trendRows.map((r) => `
-            <tr><td>${esc(r.label)}</td>
-            <td class="num amount-in">${fmtDisp(r.income)}</td>
-            <td class="num">${fmtDisp(r.expense)}</td>
-            <td class="num">${fmtDisp(r.income - r.expense)}</td></tr>`).join('')}
-          </tbody>
-        </table></div>`;
     } else {
       Charts.trend(trendEl, trendRows, {});
     }
+    Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {});
 
     $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
       ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
@@ -1409,10 +1448,10 @@
     }));
     const btnToday = $('[data-mtoday]', el);
     if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
-    $('[data-trendtable]', el).addEventListener('click', () => {
-      ui.trendTable = !ui.trendTable;
-      render();
-    });
+    const btnTrendTable = $('[data-trendtable]', el);
+    if (btnTrendTable) btnTrendTable.addEventListener('click', () => { ui.trendTable = true; render(); });
+    const btnTrendTableClose = $('[data-trendtable-close]', el);
+    if (btnTrendTableClose) btnTrendTableClose.addEventListener('click', () => { ui.trendTable = false; render(); });
     $('#btn-cta-tx', el).addEventListener('click', () => txForm(null));
     $$('[data-goto-card]', el).forEach((row) => row.addEventListener('click', () => {
       ui.view = 'tarjetas';

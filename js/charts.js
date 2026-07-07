@@ -39,11 +39,14 @@ const Charts = (() => {
   /* ---------- Barras horizontales (una serie) ----------
      items: [{label, value, color?}] · opts: {fmt, color} — color por ítem
      pisa el color general (para diferenciar categorías, emparejado con el
-     mismo orden de colores que Charts.donut). */
+     mismo orden de colores que Charts.donut). Cada fila va en dos líneas:
+     arriba el nombre y el monto (el monto queda sobre la barra, no al
+     lado), abajo la barra con su % del total a la derecha. */
   function hBars(el, items, opts) {
     el.replaceChildren();
     if (!items.length) return;
     const max = Math.max(...items.map((i) => i.value));
+    const total = items.reduce((a, i) => a + i.value, 0);
     const fallbackColor = opts.color || COLORS.expense;
 
     for (const it of items) {
@@ -51,6 +54,8 @@ const Charts = (() => {
       const row = document.createElement('div');
       row.className = 'hbar-row';
 
+      const top = document.createElement('div');
+      top.className = 'hbar-toprow';
       const label = document.createElement('span');
       label.className = 'hbar-label';
       if (it.color) {
@@ -60,7 +65,14 @@ const Charts = (() => {
         label.appendChild(dot);
       }
       label.appendChild(document.createTextNode(it.label));
+      const amount = document.createElement('span');
+      amount.className = 'hbar-amount';
+      amount.textContent = opts.fmt(it.value);
+      top.appendChild(label);
+      top.appendChild(amount);
 
+      const bottom = document.createElement('div');
+      bottom.className = 'hbar-trackrow';
       const track = document.createElement('span');
       track.className = 'hbar-track';
       const bar = document.createElement('span');
@@ -68,14 +80,14 @@ const Charts = (() => {
       bar.style.width = Math.max(0.5, (it.value / max) * 100) + '%';
       bar.style.background = color;
       track.appendChild(bar);
+      const pct = document.createElement('span');
+      pct.className = 'hbar-pct';
+      pct.textContent = (total > 0 ? Math.round((it.value / total) * 100) : 0) + '%';
+      bottom.appendChild(track);
+      bottom.appendChild(pct);
 
-      const value = document.createElement('span');
-      value.className = 'hbar-value';
-      value.textContent = opts.fmt(it.value);
-
-      row.appendChild(label);
-      row.appendChild(track);
-      row.appendChild(value);
+      row.appendChild(top);
+      row.appendChild(bottom);
 
       el.appendChild(row);
     }
@@ -260,10 +272,98 @@ const Charts = (() => {
   }
 
   function compact(n) {
-    if (n >= 1e6) return Math.round(n / 1e6) + ' M';
-    if (n >= 1e3) return Math.round(n / 1e3) + ' mil';
+    const sign = n < 0 ? '-' : '';
+    const a = Math.abs(n);
+    if (a >= 1e6) return sign + Math.round(a / 1e6) + ' M';
+    if (a >= 1e3) return sign + Math.round(a / 1e3) + ' mil';
     return String(Math.round(n));
   }
 
-  return { COLORS, hBars, donut, trend, lines };
+  /* ---------- Balance acumulado por día del mes ----------
+     points: [{day, value}] uno por cada día DEL MES ENTERO (1 al último),
+     con value en null para los días que todavía no llegaron (no se
+     proyecta una línea plana a futuro, pero el eje sigue mostrando el mes
+     completo) · opts: {ariaLabel}. El valor puede ser negativo (si los
+     gastos superan a los ingresos temprano en el mes), así que el eje Y
+     siempre incluye el cero. */
+  function dailyBalance(el, points, opts) {
+    el.replaceChildren();
+    if (!points.length) return;
+    const known = points.filter((p) => p.value != null);
+    if (!known.length) {
+      el.innerHTML = '<div class="empty">Todavía no hay movimientos este mes.</div>';
+      return;
+    }
+    const W = 640, H = 200;
+    const m = { t: 10, r: 8, b: 22, l: 50 };
+    const iw = W - m.l - m.r;
+    const ih = H - m.t - m.b;
+
+    // El eje sólo baja de cero si el balance realmente llega a ser negativo
+    // algún día (no tiene sentido reservar la mitad del gráfico para
+    // negativos si el mes nunca se fue en rojo).
+    const maxVal = Math.max(0, ...known.map((p) => p.value));
+    const minVal = Math.min(0, ...known.map((p) => p.value));
+    let top, bottom, ticks;
+    if (minVal >= 0) {
+      const nt = niceTicks(Math.max(1, maxVal), 4);
+      top = nt.top; bottom = 0; ticks = nt.ticks;
+    } else {
+      top = niceTicks(Math.max(maxVal, -minVal, 1), 3).top;
+      bottom = -top;
+      ticks = [bottom, bottom / 2, 0, top / 2, top];
+    }
+    const range = top - bottom;
+    const y = (v) => m.t + ih - ((v - bottom) / range) * ih;
+    const band = iw / points.length;
+    const x = (i) => m.l + band * i + band / 2;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('class', 'trend-svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', opts.ariaLabel || 'Balance acumulado por día del mes');
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const add = (parent, tag, attrs, text) => {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      if (text !== undefined) n.textContent = text;
+      parent.appendChild(n);
+      return n;
+    };
+
+    for (const t of ticks) {
+      const yy = y(t);
+      add(svg, 'line', {
+        x1: m.l, x2: W - m.r, y1: yy, y2: yy,
+        stroke: t === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1,
+        'shape-rendering': 'crispEdges',
+      });
+      add(svg, 'text', {
+        x: m.l - 8, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label',
+      }, compact(t));
+    }
+
+    // Días en el eje X: no entran los 31 números sin amontonarse, así que
+    // se etiqueta el primero, el último y cada 5.
+    points.forEach((p, i) => {
+      if (p.day === 1 || p.day === points.length || p.day % 5 === 0) {
+        add(svg, 'text', { x: x(i), y: H - 6, 'text-anchor': 'middle', class: 'tick-label' }, String(p.day));
+      }
+    });
+
+    const d = known.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.day - 1)},${y(p.value)}`).join(' ');
+    add(svg, 'path', {
+      d, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2,
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    });
+    // Punto de hoy (último día cargado): destaca dónde está parado el mes.
+    const last = known[known.length - 1];
+    add(svg, 'circle', { cx: x(last.day - 1), cy: y(last.value), r: 3.5, fill: 'var(--accent)' });
+
+    el.appendChild(svg);
+  }
+
+  return { COLORS, hBars, donut, trend, lines, dailyBalance };
 })();
