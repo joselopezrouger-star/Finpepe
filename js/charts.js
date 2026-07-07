@@ -93,54 +93,6 @@ const Charts = (() => {
     }
   }
 
-  /* ---------- Anillo de participación (donut, sin interacción: el reparto
-     se lee por el tamaño de cada arco, no por hover/tap) ----------
-     items: [{label, value, color?}] · opts: {size, stroke, color} */
-  function donut(el, items, opts) {
-    el.replaceChildren();
-    const o = opts || {};
-    const total = items.reduce((a, i) => a + i.value, 0);
-    if (!items.length || total <= 0) return;
-    const size = o.size || 104;
-    const stroke = o.stroke || 14;
-    const r = size / 2 - stroke / 2;
-    const c = 2 * Math.PI * r;
-
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
-    svg.setAttribute('width', size);
-    svg.setAttribute('height', size);
-    svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', o.ariaLabel || 'Participación de cada categoría en el total');
-
-    const NS = 'http://www.w3.org/2000/svg';
-    const add = (attrs) => {
-      const n = document.createElementNS(NS, 'circle');
-      for (const k in attrs) n.setAttribute(k, attrs[k]);
-      svg.appendChild(n);
-      return n;
-    };
-
-    const gap = items.length > 1 ? 2 : 0; // separación chica entre arcos
-    let acc = 0;
-    items.forEach((it, i) => {
-      const frac = it.value / total;
-      const dash = Math.max(0, c * frac - gap);
-      add({
-        cx: size / 2, cy: size / 2, r, fill: 'none',
-        stroke: it.color || COLORS.category,
-        'stroke-width': stroke,
-        'stroke-linecap': items.length > 1 ? 'round' : 'butt',
-        'stroke-dasharray': `${dash} ${c - dash}`,
-        'stroke-dashoffset': c * (1 - acc),
-        transform: `rotate(-90 ${size / 2} ${size / 2})`,
-      });
-      acc += frac;
-    });
-
-    el.appendChild(svg);
-  }
-
   /* ---------- Columnas agrupadas: ingresos vs gastos por mes ----------
      rows: [{label, income, expense}] · opts: {ariaLabel} */
   function trend(el, rows, opts) {
@@ -280,12 +232,13 @@ const Charts = (() => {
   }
 
   /* ---------- Balance acumulado por día del mes ----------
-     points: [{day, value}] uno por cada día DEL MES ENTERO (1 al último),
-     con value en null para los días que todavía no llegaron (no se
-     proyecta una línea plana a futuro, pero el eje sigue mostrando el mes
-     completo) · opts: {ariaLabel}. El valor puede ser negativo (si los
-     gastos superan a los ingresos temprano en el mes), así que el eje Y
-     siempre incluye el cero. */
+     points: [{day, value, delta}] uno por cada día DEL MES ENTERO (1 al
+     último), con value/delta en null para los días que todavía no llegaron
+     (no se proyecta una línea plana a futuro, pero el eje sigue mostrando
+     el mes completo) · opts: {ariaLabel}. "value" es el balance acumulado
+     (línea verde), "delta" es el neto de ese día (barra roja si fue en
+     contra, verde si fue a favor). El eje Y puede bajar de cero si el
+     balance o algún día individual lo requieren. */
   function dailyBalance(el, points, opts) {
     el.replaceChildren();
     if (!points.length) return;
@@ -295,15 +248,15 @@ const Charts = (() => {
       return;
     }
     const W = 640, H = 200;
-    const m = { t: 10, r: 8, b: 22, l: 50 };
+    const m = { t: 10, r: 8, b: 22, l: 58 };
     const iw = W - m.l - m.r;
     const ih = H - m.t - m.b;
 
-    // El eje sólo baja de cero si el balance realmente llega a ser negativo
-    // algún día (no tiene sentido reservar la mitad del gráfico para
-    // negativos si el mes nunca se fue en rojo).
-    const maxVal = Math.max(0, ...known.map((p) => p.value));
-    const minVal = Math.min(0, ...known.map((p) => p.value));
+    // El eje sólo baja de cero si el balance acumulado o el neto de algún
+    // día individual realmente llegan a ser negativos (no tiene sentido
+    // reservar la mitad del gráfico para negativos si nunca hace falta).
+    const maxVal = Math.max(0, ...known.map((p) => p.value), ...known.map((p) => p.delta || 0));
+    const minVal = Math.min(0, ...known.map((p) => p.value), ...known.map((p) => p.delta || 0));
     let top, bottom, ticks;
     if (minVal >= 0) {
       const nt = niceTicks(Math.max(1, maxVal), 4);
@@ -353,6 +306,21 @@ const Charts = (() => {
       }
     });
 
+    // Barra roja/verde con el neto de cada día (a favor o en contra),
+    // detrás de la línea de balance acumulado.
+    const barW = Math.max(1.5, Math.min(6, band * 0.55));
+    const y0 = y(0);
+    known.forEach((p) => {
+      if (!p.delta) return;
+      const cx = x(p.day - 1);
+      const barTop = Math.min(y0, y(p.delta));
+      const barBottom = Math.max(y0, y(p.delta));
+      add(svg, 'rect', {
+        x: cx - barW / 2, y: barTop, width: barW, height: Math.max(1, barBottom - barTop),
+        fill: p.delta >= 0 ? COLORS.income : COLORS.expense, opacity: 0.55, rx: 1.5,
+      });
+    });
+
     const d = known.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.day - 1)},${y(p.value)}`).join(' ');
     add(svg, 'path', {
       d, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2,
@@ -365,5 +333,5 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
-  return { COLORS, hBars, donut, trend, lines, dailyBalance };
+  return { COLORS, hBars, trend, lines, dailyBalance };
 })();
