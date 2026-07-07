@@ -1184,7 +1184,7 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
   color: var(--ink);
   display: flex;
   justify-content: space-between;
-  gap: 14px;
+  gap: 26px;
 }
 .hero-main { position: relative; min-width: 0; flex: 1; }
 .hero-side-col {

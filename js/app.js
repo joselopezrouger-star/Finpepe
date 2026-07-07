@@ -1298,9 +1298,9 @@
     let dailyRunning = 0;
     const dailyBalance = [];
     for (let d = 1; d <= daysInMk; d++) {
-      if (d > lastDayToShow) { dailyBalance.push({ day: d, value: null, delta: null }); continue; }
+      if (d > lastDayToShow) { dailyBalance.push({ day: d, value: null }); continue; }
       dailyRunning += dailyDelta[d];
-      dailyBalance.push({ day: d, value: dailyRunning, delta: dailyDelta[d] });
+      dailyBalance.push({ day: d, value: dailyRunning });
     }
 
     // Muestra el nombre del hogar (no "Compartido con {pareja}"): el nombre

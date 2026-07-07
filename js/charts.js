@@ -232,13 +232,11 @@ const Charts = (() => {
   }
 
   /* ---------- Balance acumulado por día del mes ----------
-     points: [{day, value, delta}] uno por cada día DEL MES ENTERO (1 al
-     último), con value/delta en null para los días que todavía no llegaron
-     (no se proyecta una línea plana a futuro, pero el eje sigue mostrando
-     el mes completo) · opts: {ariaLabel}. "value" es el balance acumulado
-     (línea verde), "delta" es el neto de ese día (barra roja si fue en
-     contra, verde si fue a favor). El eje Y puede bajar de cero si el
-     balance o algún día individual lo requieren. */
+     points: [{day, value}] uno por cada día DEL MES ENTERO (1 al último),
+     con value en null para los días que todavía no llegaron (no se
+     proyecta una línea plana a futuro, pero el eje sigue mostrando el mes
+     completo) · opts: {ariaLabel}. El eje Y baja de cero sólo si el balance
+     acumulado realmente llega a ser negativo algún día. */
   function dailyBalance(el, points, opts) {
     el.replaceChildren();
     if (!points.length) return;
@@ -252,11 +250,11 @@ const Charts = (() => {
     const iw = W - m.l - m.r;
     const ih = H - m.t - m.b;
 
-    // El eje sólo baja de cero si el balance acumulado o el neto de algún
-    // día individual realmente llegan a ser negativos (no tiene sentido
-    // reservar la mitad del gráfico para negativos si nunca hace falta).
-    const maxVal = Math.max(0, ...known.map((p) => p.value), ...known.map((p) => p.delta || 0));
-    const minVal = Math.min(0, ...known.map((p) => p.value), ...known.map((p) => p.delta || 0));
+    // El eje sólo baja de cero si el balance realmente llega a ser negativo
+    // algún día (no tiene sentido reservar la mitad del gráfico para
+    // negativos si el mes nunca se fue en rojo).
+    const maxVal = Math.max(0, ...known.map((p) => p.value));
+    const minVal = Math.min(0, ...known.map((p) => p.value));
     let top, bottom, ticks;
     if (minVal >= 0) {
       const nt = niceTicks(Math.max(1, maxVal), 4);
@@ -304,21 +302,6 @@ const Charts = (() => {
       if (p.day === 1 || p.day === points.length || p.day % 5 === 0) {
         add(svg, 'text', { x: x(i), y: H - 6, 'text-anchor': 'middle', class: 'tick-label' }, String(p.day));
       }
-    });
-
-    // Barra roja/verde con el neto de cada día (a favor o en contra),
-    // detrás de la línea de balance acumulado.
-    const barW = Math.max(1.5, Math.min(6, band * 0.55));
-    const y0 = y(0);
-    known.forEach((p) => {
-      if (!p.delta) return;
-      const cx = x(p.day - 1);
-      const barTop = Math.min(y0, y(p.delta));
-      const barBottom = Math.max(y0, y(p.delta));
-      add(svg, 'rect', {
-        x: cx - barW / 2, y: barTop, width: barW, height: Math.max(1, barBottom - barTop),
-        fill: p.delta >= 0 ? COLORS.income : COLORS.expense, opacity: 0.55, rx: 1.5,
-      });
     });
 
     const d = known.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.day - 1)},${y(p.value)}`).join(' ');
