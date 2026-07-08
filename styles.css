@@ -1201,7 +1201,7 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
   border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--ink);
-  padding-bottom: 18px;
+  padding-bottom: 12px;
 }
 .hero-month-bar {
   display: flex;
@@ -1210,26 +1210,28 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
   gap: 12px;
   background: var(--honey-deep);
   color: #fff;
-  padding: 12px 16px;
-  margin-bottom: 6px;
+  padding: 10px 16px;
+  margin-bottom: 4px;
 }
 .hero-month-bar .icon-btn { width: 26px; height: 26px; border: 0; background: color-mix(in srgb, white 14%, transparent); color: #fff; }
 .hero-month-bar .icon-btn:hover { background: color-mix(in srgb, white 24%, transparent); }
 .hero-month-bar-label { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; white-space: nowrap; }
-.hero-mtoday { position: relative; display: block; width: 100%; text-align: center; font-size: 11px; margin: 0 0 2px; }
-.hero-balance-center { text-align: center; padding: 0 20px; }
+/* Sólo se dibuja (ver app.js) cuando NO es el mes actual, así que acá no
+   hace falta reservarle espacio de antemano. */
+.hero-mtoday { position: relative; display: block; width: 100%; text-align: center; font-size: 11px; margin: 4px 0 0; }
+.hero-balance-center { text-align: center; padding: 4px 20px 0; }
 .hero-balance-center .hero-label { justify-content: center; text-transform: uppercase; }
 /* Velocímetro chico, pegado debajo del número grande de Balance del mes
    (no en su propia sección aparte): mismo dibujo que antes, sólo que
    mucho más chico en pantalla vía el ancho del contenedor. */
-.hero-speedo-mini { text-align: center; padding: 6px 20px 0; }
+.hero-speedo-mini { text-align: center; padding: 2px 20px 0; }
 .hero-speedo-mini svg { width: 56%; max-width: 190px; min-width: 130px; height: auto; display: inline-block; }
 .hero-split-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   column-gap: 14px;
   border-top: 1px solid var(--border);
-  padding: 14px 20px 2px;
+  padding: 10px 20px 2px;
 }
 .hero-split-3 > div { min-width: 0; }
 .hero-split-3 > div + div { border-left: 1px solid var(--border); padding-left: 14px; }
@@ -1291,7 +1293,7 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
   position: relative;
   font: 700 34px/1.2 var(--font-heading);
   letter-spacing: -0.02em;
-  margin: 2px 0 14px;
+  margin: 2px 0 4px;
   color: var(--accent);
 }
 .hero-value.neg { color: var(--crit); }
