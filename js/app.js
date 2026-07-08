@@ -374,17 +374,52 @@
     const d = new Date(y, m0, 1);
     return clampDate(d.getFullYear(), d.getMonth(), cardDayFor(card, kind, y, m0));
   }
+  /* Los candidatos de 'kind' (closingDay/dueDay) para un mes dado: el
+     valor "efectivo" de ese mes (el ajuste puntual si tiene uno, si no el
+     día habitual de la tarjeta) y, si tiene un ajuste puntual, TAMBIÉN el
+     día habitual sin ajustar — porque en la vida real ambos pueden caer
+     el mismo mes calendario. Por ejemplo: cierre habitual día 30, pero un
+     ajuste puntual corrió el cierre de julio al día 2 (el banco lo
+     adelantó); el ciclo siguiente vuelve a cerrar normalmente, y ese
+     cierre "de siempre" (30) cae en el mismo julio, ~28 días después del
+     ajustado. Ignorar esa segunda fecha hace que el próximo cierre salte
+     directo a agosto, un mes de más. */
+  function cardDateCandidates(card, kind, y, m0) {
+    const eff = cardDate(card, kind, y, m0);
+    const base = clampDate(y, m0, card[kind]);
+    return base.getTime() === eff.getTime() ? [eff] : [eff, base].sort((a, b) => a - b);
+  }
+  /* Próxima fecha de 'kind' a partir de 'from' (inclusive, o estrictamente
+     posterior si strict=true), revisando primero los candidatos del
+     propio mes de 'from', y si no encuentra ninguno, mes por mes hacia
+     adelante. */
+  function nextCardDate(card, kind, from, strict) {
+    for (let dm = 0; dm < 3; dm++) {
+      const d = new Date(from.getFullYear(), from.getMonth() + dm, 1);
+      for (const c of cardDateCandidates(card, kind, d.getFullYear(), d.getMonth())) {
+        if (strict ? c > from : c >= from) return c;
+      }
+    }
+    return cardDate(card, kind, from.getFullYear(), from.getMonth() + 3);
+  }
+  /* Misma idea que nextCardDate pero hacia atrás: la fecha de 'kind' más
+     reciente estrictamente ANTERIOR a 'before'. */
+  function prevCardDate(card, kind, before) {
+    for (let dm = 0; dm < 3; dm++) {
+      const d = new Date(before.getFullYear(), before.getMonth() - dm, 1);
+      const cands = cardDateCandidates(card, kind, d.getFullYear(), d.getMonth());
+      for (let i = cands.length - 1; i >= 0; i--) {
+        if (cands[i] < before) return cands[i];
+      }
+    }
+    return cardDate(card, kind, before.getFullYear(), before.getMonth() - 3);
+  }
   function cardCycle(card) {
     const now = new Date(); now.setHours(0, 0, 0, 0);
-    let close = cardDate(card, 'closingDay', now.getFullYear(), now.getMonth());
-    if (close < now) close = cardDate(card, 'closingDay', now.getFullYear(), now.getMonth() + 1);
-    const prevClose = cardDate(card, 'closingDay', close.getFullYear(), close.getMonth() - 1);
-    const prevPrevClose = cardDate(card, 'closingDay', prevClose.getFullYear(), prevClose.getMonth() - 1);
-    const dueAfter = (c) => {
-      let d = cardDate(card, 'dueDay', c.getFullYear(), c.getMonth());
-      if (d <= c) d = cardDate(card, 'dueDay', c.getFullYear(), c.getMonth() + 1);
-      return d;
-    };
+    const close = nextCardDate(card, 'closingDay', now, false);
+    const prevClose = prevCardDate(card, 'closingDay', close);
+    const prevPrevClose = prevCardDate(card, 'closingDay', prevClose);
+    const dueAfter = (c) => nextCardDate(card, 'dueDay', c, true);
     return { close, prevClose, prevPrevClose, due: dueAfter(close), prevDue: dueAfter(prevClose) };
   }
 
@@ -392,14 +427,12 @@
      actual, respetando los overrides puntuales que ya estén cargados. */
   function cardUpcomingCycles(card, n) {
     const now = new Date(); now.setHours(0, 0, 0, 0);
-    let close = cardDate(card, 'closingDay', now.getFullYear(), now.getMonth());
-    if (close < now) close = cardDate(card, 'closingDay', now.getFullYear(), now.getMonth() + 1);
+    let close = nextCardDate(card, 'closingDay', now, false);
     const out = [];
     for (let i = 0; i < n; i++) {
-      let due = cardDate(card, 'dueDay', close.getFullYear(), close.getMonth());
-      if (due <= close) due = cardDate(card, 'dueDay', close.getFullYear(), close.getMonth() + 1);
+      const due = nextCardDate(card, 'dueDay', close, true);
       out.push({ close, due });
-      close = cardDate(card, 'closingDay', close.getFullYear(), close.getMonth() + 1);
+      close = nextCardDate(card, 'closingDay', close, true);
     }
     return out;
   }
@@ -448,10 +481,8 @@
      COMPRA puntual (no a "hoy"): a qué resumen cae y cuándo vence ese resumen. */
   function cardCycleFor(card, purchaseDate) {
     const p = new Date(purchaseDate); p.setHours(0, 0, 0, 0);
-    let close = cardDate(card, 'closingDay', p.getFullYear(), p.getMonth());
-    if (close < p) close = cardDate(card, 'closingDay', p.getFullYear(), p.getMonth() + 1);
-    let due = cardDate(card, 'dueDay', close.getFullYear(), close.getMonth());
-    if (due <= close) due = cardDate(card, 'dueDay', close.getFullYear(), close.getMonth() + 1);
+    const close = nextCardDate(card, 'closingDay', p, false);
+    const due = nextCardDate(card, 'dueDay', close, true);
     return { close, due };
   }
 
