@@ -1273,10 +1273,9 @@
     // ahorros, en cambio, sería un aporte negativo y sumaría).
     const balance = inc - exp - savingsMonth;
 
-    // Cada variación va siempre en dos líneas: arriba el %, abajo el monto
-    // nominal de la diferencia (MoM = month over month, contra el mes
-    // anterior) — "MoM" en vez de "vs. Junio" para que la segunda línea
-    // entre siempre en un solo renglón, sin importar el ancho de pantalla.
+    // Cada variación va en una sola línea: "▲ X% MoM" (MoM = month over
+    // month, contra el mes anterior). El monto nominal se saca para que
+    // entre en un renglón sin importar el ancho de pantalla.
     const delta = (cur, prev, upIsGood) => {
       if (!(prev > 0)) return '';
       const diff = cur - prev;
@@ -1284,28 +1283,21 @@
       if (pct === 0) return `<div class="tile-delta">= MoM</div>`;
       const up = pct > 0;
       const cls = (up === upIsGood) ? 'up-good' : 'down-bad';
-      return `<div class="tile-delta tile-delta-2l">
-        <span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(pct)}%</span>
-        <span class="tile-delta-nom">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))} MoM</span>
-      </div>`;
+      return `<div class="tile-delta"><span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(pct)}% MoM</span></div>`;
     };
     // Variación de Ahorros: el aporte mensual puede ser $0 o negativo (un
     // retiro), así que si no hay un aporte previo positivo contra el cual
     // comparar, el % no tiene una base válida ("nuevo" en vez de un
-    // porcentaje inventado). El monto nominal, en cambio, siempre se puede
-    // calcular.
+    // porcentaje inventado).
     const savingsDelta = (() => {
       const diff = savingsMonth - savingsMonthPrev;
       if (diff === 0) return `<div class="tile-delta">= MoM</div>`;
       const up = diff > 0;
       const cls = up ? 'up-good' : 'down-bad';
       const pctLabel = savingsMonthPrev > 0
-        ? `${up ? '▲' : '▼'} ${Math.abs(Math.round((diff / savingsMonthPrev) * 100))}%`
+        ? `${up ? '▲' : '▼'} ${Math.abs(Math.round((diff / savingsMonthPrev) * 100))}% MoM`
         : `${up ? '▲' : '▼'} nuevo`;
-      return `<div class="tile-delta tile-delta-2l">
-        <span class="${cls}">${pctLabel}</span>
-        <span class="tile-delta-nom">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))} MoM</span>
-      </div>`;
+      return `<div class="tile-delta"><span class="${cls}">${pctLabel}</span></div>`;
     })();
 
     // Gastos por categoría (top 8 + Otros)
