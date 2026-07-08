@@ -324,6 +324,21 @@ a { color: var(--accent-down); }
   .grid-tiles { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* "Gastos por categoría" + anillo: par que se pidió mantener lado a lado
+   incluso en el ancho de un celular (a diferencia del resto de los pares
+   de tarjetas, que se apilan abajo de los 820px). Achica todo lo demás
+   para que entre cómodo en la mitad del ancho de una pantalla chica. */
+.grid-2.grid-2-tight { grid-template-columns: 1fr 1fr; gap: 10px; }
+.card-compact { padding: 12px; }
+.cats-bars-compact .hbar-row { padding: 5px 0; gap: 2px; }
+.cats-bars-compact .hbar-label { font-size: 11px; gap: 4px; }
+.cats-bars-compact .hbar-dot { width: 6px; height: 6px; }
+.cats-bars-compact .hbar-amount { font-size: 11px; }
+.cats-bars-compact .hbar-trackrow { gap: 4px; }
+.cats-bars-compact .hbar-track { height: 10px; }
+.cats-bars-compact .hbar-bar { height: 10px; }
+.cats-bars-compact .hbar-pct { font-size: 9.5px; min-width: 20px; }
+
 /* ---------- Tiles de resumen ---------- */
 .tile { padding: 14px 16px; }
 .tile-label {
@@ -1175,11 +1190,14 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
    Un resplandor sutil detrás (como la referencia) le da algo de vida sin
    volverse un cartel. */
 /* Grid (no flex) para que la columna derecha comparta fila con la
-   izquierda: así "Ahorros" queda a la misma altura que "Ingresos" sin
-   coordenadas fijas a mano — la fila 2 (el valor grande) empuja a las dos
-   columnas por igual, venga del alto que venga. hero-main/hero-side-col
-   pasan a "display:contents" para que sus hijos sean los que arman la
-   grilla (siguen agrupados en el HTML, pero no generan su propia caja). */
+   izquierda: así "Ahorros" arranca a la misma altura que "Ingresos" sin
+   coordenadas fijas a mano. hero-main/hero-side-col pasan a
+   "display:contents" para que sus hijos sean los que arman la grilla
+   (siguen agrupados en el HTML, pero no generan su propia caja). Ahorros y
+   el velocímetro van juntos en un mismo wrapper/celda (fila 3): así, si esa
+   fila queda alta porque Ingresos+Gastos ocupan mucho, el aire de más
+   queda abajo del velocímetro (invisible) en vez de abrir un hueco feo
+   entre Ahorros y el velocímetro. */
 .hero {
   position: relative;
   overflow: hidden;
@@ -1198,10 +1216,9 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .hero-value { grid-column: 1; grid-row: 2; }
 .hero-split { grid-column: 1; grid-row: 3; }
 .hero-month-group { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; justify-self: end; }
-/* Ahorros: mismo patrón etiqueta+monto que Ingresos/Gastos, pero más chico
-   (va en la columna angosta de la derecha, alineado con la fila de
-   Ingresos/Gastos, arriba del velocímetro). */
-.hero-savings { grid-column: 2; grid-row: 3; justify-self: end; text-align: right; }
+.hero-savings-speedo { grid-column: 2; grid-row: 3; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+/* Ahorros: mismo patrón etiqueta+monto que Ingresos/Gastos, pero más chico. */
+.hero-savings { text-align: right; }
 .hero-savings .k { font-size: 10.5px; color: var(--muted); }
 .hero-savings .v { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); }
 .hero-savings .tile-delta { font-size: 10.5px; margin-top: 2px; }
@@ -1223,7 +1240,7 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .hero-mtoday { position: relative; display: block; font-size: 11px; }
 /* "Velocímetro" de cuarto de vuelta: reemplaza al anillo doble que vivía
    acá (se mudó a su propia tarjeta, al lado del gráfico de tendencia). */
-.hero-speedo-wrap { grid-column: 2; grid-row: 4; justify-self: center; display: flex; flex-direction: column; align-items: center; }
+.hero-speedo-wrap { align-self: center; display: flex; flex-direction: column; align-items: center; }
 .hero-ring { position: relative; flex: none; }
 /* El valor de balance va separado del anillo (no pegado), con su etiqueta
    abajo, como un stat propio en vez de una leyenda chica al lado. */
@@ -1251,6 +1268,8 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 /* Tarjeta separada del anillo doble (balance + días del mes), al lado del
    gráfico de tendencia. */
 .hero-ring-standalone { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0 4px; }
+.card-compact .hero-ring-standalone { gap: 4px; padding: 2px 0 0; }
+.card-compact .hero-ring-stat-value { font-size: 21px; }
 .hero-label {
   position: relative;
   font-size: 12px;
