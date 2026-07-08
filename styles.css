@@ -1174,6 +1174,12 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
    queda reservado para el número, que es la única marca que lo necesita.
    Un resplandor sutil detrás (como la referencia) le da algo de vida sin
    volverse un cartel. */
+/* Grid (no flex) para que la columna derecha comparta fila con la
+   izquierda: así "Ahorros" queda a la misma altura que "Ingresos" sin
+   coordenadas fijas a mano — la fila 2 (el valor grande) empuja a las dos
+   columnas por igual, venga del alto que venga. hero-main/hero-side-col
+   pasan a "display:contents" para que sus hijos sean los que arman la
+   grilla (siguen agrupados en el HTML, pero no generan su propia caja). */
 .hero {
   position: relative;
   overflow: hidden;
@@ -1182,26 +1188,23 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
   border-radius: 12px;
   padding: 20px 22px;
   color: var(--ink);
-  display: flex;
-  justify-content: space-between;
-  gap: 26px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 26px;
+  align-items: start;
 }
-.hero-main { position: relative; min-width: 0; flex: 1; }
-.hero-side-col {
-  position: relative;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 10px;
-}
-.hero-month-group { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.hero-main, .hero-side-col { display: contents; }
+.hero-label { grid-column: 1; grid-row: 1; }
+.hero-value { grid-column: 1; grid-row: 2; }
+.hero-split { grid-column: 1; grid-row: 3; }
+.hero-month-group { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; justify-self: end; }
 /* Ahorros: mismo patrón etiqueta+monto que Ingresos/Gastos, pero más chico
-   (va en la columna angosta de la derecha, arriba del velocímetro). */
-.hero-savings { text-align: right; }
+   (va en la columna angosta de la derecha, alineado con la fila de
+   Ingresos/Gastos, arriba del velocímetro). */
+.hero-savings { grid-column: 2; grid-row: 3; justify-self: end; text-align: right; }
 .hero-savings .k { font-size: 10.5px; color: var(--muted); }
 .hero-savings .v { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); }
+.hero-savings .tile-delta { font-size: 10.5px; margin-top: 2px; }
 /* Fondo propio, bien saturado con el acento, para que se note como un
    control destacado y no una píldora gris más entre tantas otras. */
 .hero-month-pill {
@@ -1220,7 +1223,7 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .hero-mtoday { position: relative; display: block; font-size: 11px; }
 /* "Velocímetro" de cuarto de vuelta: reemplaza al anillo doble que vivía
    acá (se mudó a su propia tarjeta, al lado del gráfico de tendencia). */
-.hero-speedo-wrap { display: flex; flex-direction: column; align-items: center; }
+.hero-speedo-wrap { grid-column: 2; grid-row: 4; justify-self: center; display: flex; flex-direction: column; align-items: center; }
 .hero-ring { position: relative; flex: none; }
 /* El valor de balance va separado del anillo (no pegado), con su etiqueta
    abajo, como un stat propio en vez de una leyenda chica al lado. */

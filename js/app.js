@@ -1224,11 +1224,18 @@
 
     // Total ahorrado (mismo criterio que la vista de Ahorros): suma de
     // todos los fondos, cada uno convertido a la moneda de visualización.
-    let totalSavings = 0;
-    for (const s of S().savings) {
-      const v = convOrNull(s.entries.reduce((a, e) => a + e.amount, 0), s.currency);
-      if (v != null) totalSavings += v;
-    }
+    // Se corta al final del mes elegido (no cuenta aportes futuros) para
+    // que sea comparable contra el total al final del mes anterior.
+    const savingsUpTo = (cutoff) => {
+      let total = 0;
+      for (const s of S().savings) {
+        const v = convOrNull(s.entries.filter((e) => e.date < cutoff).reduce((a, e) => a + e.amount, 0), s.currency);
+        if (v != null) total += v;
+      }
+      return total;
+    };
+    const totalSavings = savingsUpTo(`${addMonthsKey(mk, 1)}-01`);
+    const totalSavingsPrev = savingsUpTo(`${mk}-01`);
 
     const delta = (cur, prev, upIsGood) => {
       if (!(prev > 0)) return '';
@@ -1238,6 +1245,19 @@
       const cls = (up === upIsGood) ? 'up-good' : 'down-bad';
       return `<div class="tile-delta"><span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(pct)}%</span> vs. ${esc(monthLabel(prevMk))}</div>`;
     };
+    // Variación de Ahorros: a diferencia de delta() de arriba, siempre
+    // muestra algo (aunque el mes anterior no tenga ahorro previo todavía),
+    // porque acá "sin datos" es un estado normal, no una excepción a ocultar.
+    const savingsDelta = (() => {
+      if (!(totalSavingsPrev > 0)) {
+        if (totalSavings <= 0) return `<div class="tile-delta">= vs. ${esc(monthLabel(prevMk))}</div>`;
+        return `<div class="tile-delta"><span class="up-good">▲ nuevo</span> vs. ${esc(monthLabel(prevMk))}</div>`;
+      }
+      const pct = Math.round(((totalSavings - totalSavingsPrev) / totalSavingsPrev) * 100);
+      if (pct === 0) return `<div class="tile-delta">= vs. ${esc(monthLabel(prevMk))}</div>`;
+      const up = pct > 0;
+      return `<div class="tile-delta"><span class="${up ? 'up-good' : 'down-bad'}">${up ? '▲' : '▼'} ${Math.abs(pct)}%</span> vs. ${esc(monthLabel(prevMk))}</div>`;
+    })();
 
     // Gastos por categoría (top 8 + Otros)
     const byCat = new Map();
@@ -1349,6 +1369,7 @@
           <div class="hero-savings">
             <div class="k">Ahorros</div>
             <div class="v">${fmtDisp(totalSavings)}</div>
+            ${savingsDelta}
           </div>
           <div class="hero-speedo-wrap">
             ${speedoGaugeSvg(pctLeft, 112)}
