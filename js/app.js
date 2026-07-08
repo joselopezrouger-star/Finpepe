@@ -1250,23 +1250,37 @@
     // ahorros, en cambio, sería un aporte negativo y sumaría).
     const balance = inc - exp - savingsMonth;
 
+    // Cada variación va siempre en dos líneas: arriba el %, abajo el monto
+    // nominal de la diferencia (ambos contra el mismo mes anterior).
     const delta = (cur, prev, upIsGood) => {
       if (!(prev > 0)) return '';
-      const pct = Math.round(((cur - prev) / prev) * 100);
+      const diff = cur - prev;
+      const pct = Math.round((diff / prev) * 100);
       if (pct === 0) return `<div class="tile-delta">= vs. ${esc(monthNameOnly(prevMk))}</div>`;
       const up = pct > 0;
       const cls = (up === upIsGood) ? 'up-good' : 'down-bad';
-      return `<div class="tile-delta"><span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(pct)}%</span> vs. ${esc(monthNameOnly(prevMk))}</div>`;
+      return `<div class="tile-delta tile-delta-2l">
+        <span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(pct)}%</span>
+        <span class="tile-delta-nom">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))} vs. ${esc(monthNameOnly(prevMk))}</span>
+      </div>`;
     };
-    // Variación de Ahorros: como el aporte mensual puede ser $0 o negativo
-    // (retiro), no tiene sentido comparar en % (base cero o negativa). Se
-    // compara la diferencia en moneda contra el aporte del mes anterior,
-    // igual que Ingresos/Gastos pero en pesos en vez de porcentaje.
+    // Variación de Ahorros: el aporte mensual puede ser $0 o negativo (un
+    // retiro), así que si no hay un aporte previo positivo contra el cual
+    // comparar, el % no tiene una base válida ("nuevo" en vez de un
+    // porcentaje inventado). El monto nominal, en cambio, siempre se puede
+    // calcular.
     const savingsDelta = (() => {
       const diff = savingsMonth - savingsMonthPrev;
       if (diff === 0) return `<div class="tile-delta">= vs. ${esc(monthNameOnly(prevMk))}</div>`;
       const up = diff > 0;
-      return `<div class="tile-delta"><span class="${up ? 'up-good' : 'down-bad'}">${up ? '▲' : '▼'} ${fmtDisp(Math.abs(diff))}</span> vs. ${esc(monthNameOnly(prevMk))}</div>`;
+      const cls = up ? 'up-good' : 'down-bad';
+      const pctLabel = savingsMonthPrev > 0
+        ? `${up ? '▲' : '▼'} ${Math.abs(Math.round((diff / savingsMonthPrev) * 100))}%`
+        : `${up ? '▲' : '▼'} nuevo`;
+      return `<div class="tile-delta tile-delta-2l">
+        <span class="${cls}">${pctLabel}</span>
+        <span class="tile-delta-nom">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))} vs. ${esc(monthNameOnly(prevMk))}</span>
+      </div>`;
     })();
 
     // Gastos por categoría (top 8 + Otros)
@@ -1369,14 +1383,13 @@
           <div class="hero-label">Balance del mes</div>
           <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
         </div>
-        <div class="hero-daily-chart" id="chart-daily-balance"></div>
+        <div class="hero-speedo-mini">
+          ${speedoGaugeSvg(pctLeft, 220)}
+        </div>
         <div class="hero-split-3">
           <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
           <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
           <div><div class="k">Ahorros</div><div class="v ${savingsMonth < 0 ? 'neg' : ''}">${fmtDisp(savingsMonth)}</div>${savingsDelta}</div>
-        </div>
-        <div class="hero-speedo-section">
-          ${speedoGaugeSvg(pctLeft, 220)}
         </div>
       </div>
 
@@ -1404,6 +1417,7 @@
               <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
             </div>
           </div>
+          <h2 class="card-title card-title-mirror" aria-hidden="true">Balance y días del mes</h2>
         </div>
       </div>
 
@@ -1417,6 +1431,11 @@
           <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos</span>
         </div>
         <div id="chart-trend"></div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Balance por día</h2>
+        <div id="chart-daily-balance"></div>
       </div>
 
       <div class="card">
@@ -1467,7 +1486,7 @@
     } else {
       Charts.trend(trendEl, trendRows, {});
     }
-    Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, { compact: true });
+    Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {});
 
     $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
       ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
