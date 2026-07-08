@@ -1429,7 +1429,7 @@
               <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
               <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
             </div>
-            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 108)}</div>
+            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 80)}</div>
             <div class="hero-ring-legend">
               <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
               <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
@@ -3124,6 +3124,12 @@
     }
     lastAuthUserId = uid;
     if (Cloud.user()) {
+      // loadShared() no depende de Cloud.pull() (son datos independientes:
+      // movimientos propios vs. hogar compartido) — antes se disparaba
+      // recién DESPUÉS de esperar el pull, sumando ese tiempo al de sus
+      // propias consultas y haciendo tardar bastante más de la cuenta en
+      // aparecer la tarjeta de compartidos. Ahora arrancan en paralelo.
+      loadShared();
       try {
         const remote = await Cloud.pull();
         if (remote && remote.data && Array.isArray(remote.data.transactions)) {
@@ -3148,7 +3154,6 @@
       } catch (e) {
         console.error(e);
       }
-      loadShared(); // en segundo plano, para que "+ Movimiento" ya sepa si hay hogar compartido
     }
     render();
   }
