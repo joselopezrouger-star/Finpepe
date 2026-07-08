@@ -329,7 +329,11 @@ a { color: var(--accent-down); }
    de tarjetas, que se apilan abajo de los 820px). Achica todo lo demás
    para que entre cómodo en la mitad del ancho de una pantalla chica. */
 .grid-2.grid-2-tight { grid-template-columns: 1fr 1fr; gap: 10px; }
-.card-compact { padding: 12px; }
+/* display:flex + flex-direction:column deja que .hero-ring-standalone (con
+   flex:1 más abajo) crezca para llenar el alto que le da la grilla (la
+   tarjeta de al lado, "Gastos por categoría", suele ser más alta) y
+   centre el anillo ahí adentro, en vez de quedar pegado arriba. */
+.card-compact { padding: 12px; display: flex; flex-direction: column; }
 .card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; }
 .cats-bars-compact .hbar-row { padding: 5px 0; gap: 2px; }
 .cats-bars-compact .hbar-label { font-size: 11px; gap: 4px; }
@@ -1207,12 +1211,12 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
   background: var(--honey-deep);
   color: #fff;
   padding: 12px 16px;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
 }
 .hero-month-bar .icon-btn { width: 26px; height: 26px; border: 0; background: color-mix(in srgb, white 14%, transparent); color: #fff; }
 .hero-month-bar .icon-btn:hover { background: color-mix(in srgb, white 24%, transparent); }
 .hero-month-bar-label { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; white-space: nowrap; }
-.hero-mtoday { position: relative; display: block; width: 100%; text-align: center; font-size: 11px; margin: -10px 0 10px; }
+.hero-mtoday { position: relative; display: block; width: 100%; text-align: center; font-size: 11px; margin: 0 0 2px; }
 .hero-balance-center { text-align: center; padding: 0 20px; }
 .hero-balance-center .hero-label { justify-content: center; text-transform: uppercase; }
 .hero-split-3 {
@@ -1227,7 +1231,7 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .hero-split-3 .k { font-size: 11.5px; color: var(--muted); }
 .hero-split-3 .v { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); margin-top: 2px; }
 .hero-speedo-section { text-align: center; border-top: 1px dashed var(--border); margin: 16px 20px 0; padding-top: 14px; }
-.hero-speedo-section svg { width: 62%; max-width: 220px; min-width: 160px; display: inline-block; }
+.hero-speedo-section svg { width: 62%; max-width: 220px; min-width: 160px; height: auto; display: inline-block; }
 .hero-ring { position: relative; flex: none; }
 .hero-ring-legend {
   display: flex;
@@ -1251,7 +1255,7 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 /* Tarjeta separada del anillo doble (balance + días del mes), al lado del
    gráfico de tendencia. */
 .hero-ring-standalone { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0 4px; }
-.card-compact .hero-ring-standalone { gap: 8px; padding: 4px 0 0; }
+.card-compact .hero-ring-standalone { gap: 8px; padding: 4px 0 0; flex: 1; justify-content: center; }
 .hero-label {
   position: relative;
   font-size: 12px;
