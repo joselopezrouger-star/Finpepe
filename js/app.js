@@ -242,22 +242,22 @@
       ${arc(rI, strokeI, pctInner, '--warn')}
     </svg>`;
   }
-  // "Velocímetro" de un cuarto de vuelta (0° a 90°): arranca horizontal
-  // (0%, rojo) y termina vertical (100%, verde). El indicador es una marca
-  // corta ENCIMA de la barra de colores (no una aguja desde el vértice). El
-  // balance en % va ADENTRO del arco, centrado en el punto medio entre donde
-  // arranca y donde termina la barra, con el mismo color que le toca a la
-  // barra en ese punto (mismo criterio que el degradé). El pivote vive en la
-  // esquina inferior derecha del viewBox, así el arco se abre hacia arriba-izquierda.
+  // "Velocímetro" de media vuelta (180°, 0° a 180°): arranca horizontal a
+  // la izquierda (0%, rojo), pasa por arriba y termina horizontal a la
+  // derecha (100%, verde) — forma de arcoíris/gauge clásico, no un cuarto
+  // de círculo. El indicador es una marca corta ENCIMA de la barra de
+  // colores (no una aguja desde el vértice). El balance en % va ADENTRO
+  // del arco, centrado arriba del vértice, con el mismo color que le toca
+  // a la barra en ese punto (mismo criterio que el degradé). El pivote
+  // vive centrado abajo del viewBox, así el arco se abre como una cúpula.
   function speedoGaugeSvg(pct, size) {
-    size = size || 128;
-    const pad = 16;
-    const extra = 34; // margen extra alrededor del vértice para el texto de adentro
-    const width = size + extra;
-    const height = size + extra;
-    const r = size - pad * 2;
-    const pivot = { x: size - pad, y: size - pad };
-    const angleAt = (t) => (180 - 90 * t) * (Math.PI / 180);
+    size = size || 128; // diámetro de referencia (2×r)
+    const pad = 14;
+    const r = size / 2;
+    const width = size + pad * 2;
+    const height = r + pad * 2;
+    const pivot = { x: width / 2, y: height - pad };
+    const angleAt = (t) => (180 - 180 * t) * (Math.PI / 180);
     const ptAt = (t, radius) => {
       const a = angleAt(t);
       return { x: pivot.x + radius * Math.cos(a), y: pivot.y - radius * Math.sin(a) };
@@ -266,22 +266,19 @@
     const p0 = ptAt(0, r);
     const p1 = ptAt(1, r);
     // Marca corta radial que cruza la barra en el punto actual (no una
-    // aguja larga desde el centro): un segmento entre r-9 y r+9 en el
+    // aguja larga desde el centro): un segmento entre r-8 y r+8 en el
     // mismo ángulo que el balance.
-    const markIn = ptAt(p, r - 9);
-    const markOut = ptAt(p, r + 9);
+    const markIn = ptAt(p, r - 8);
+    const markOut = ptAt(p, r + 8);
     const gradId = 'speedoGrad' + Math.round(Math.random() * 1e6);
     // Mismo criterio de color que el degradé de la barra (crit→warn→good),
     // pero resuelto acá para pintar el número del color que le toca en p.
     const textColor = p <= 0.5
       ? `color-mix(in srgb, var(--gauge-warn) ${Math.round((p / 0.5) * 100)}%, var(--gauge-crit))`
       : `color-mix(in srgb, var(--gauge-good) ${Math.round(((p - 0.5) / 0.5) * 100)}%, var(--gauge-warn))`;
-    // Centrado adentro del arco, alineado en el mismo ángulo que el punto
-    // medio entre donde arranca y donde termina la barra, pero cerca del
-    // vértice (no a mitad de camino hacia el trazo). Debajo, una etiqueta
-    // chica aclara qué es ese número.
-    const labelPt = ptAt(0.5, r * 0.32);
-    const fontSize = Math.round(size * 0.24);
+    // Centrado adentro de la cúpula, abajo del punto más alto del arco.
+    const labelPt = ptAt(0.5, r * 0.5);
+    const fontSize = Math.round(size * 0.2);
     return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Balance del mes: ${Math.round(pct)}%">
       <defs>
         <linearGradient id="${gradId}" x1="${p0.x}" y1="${p0.y}" x2="${p1.x}" y2="${p1.y}" gradientUnits="userSpaceOnUse">
@@ -290,10 +287,10 @@
           <stop offset="100%" stop-color="var(--gauge-good)"/>
         </linearGradient>
       </defs>
-      <path d="M${p0.x},${p0.y} A${r},${r} 0 0,1 ${p1.x},${p1.y}" fill="none" stroke="url(#${gradId})" stroke-width="10" stroke-linecap="round"/>
+      <path d="M${p0.x},${p0.y} A${r},${r} 0 0,1 ${p1.x},${p1.y}" fill="none" stroke="url(#${gradId})" stroke-width="9" stroke-linecap="round"/>
       <line x1="${markIn.x}" y1="${markIn.y}" x2="${markOut.x}" y2="${markOut.y}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
       <text x="${labelPt.x}" y="${labelPt.y}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}" font-weight="800" fill="${textColor}" font-family="var(--font-heading)">${Math.round(pct)}%</text>
-      <text x="${labelPt.x}" y="${labelPt.y + fontSize * 0.62}" text-anchor="middle" dominant-baseline="hanging" font-size="${Math.round(size * 0.09)}" fill="var(--muted)" font-family="var(--font)">Balance del mes</text>
+      <text x="${labelPt.x}" y="${labelPt.y + fontSize * 0.72}" text-anchor="middle" dominant-baseline="hanging" font-size="${Math.round(size * 0.075)}" fill="var(--muted)" font-family="var(--font)">Balance del mes</text>
     </svg>`;
   }
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
@@ -1373,7 +1370,7 @@
               ${savingsDelta}
             </div>
             <div class="hero-speedo-wrap">
-              ${speedoGaugeSvg(pctLeft, 112)}
+              ${speedoGaugeSvg(pctLeft, 100)}
             </div>
           </div>
         </div>
@@ -1393,7 +1390,7 @@
         <div class="card card-compact">
           <h2 class="card-title">Balance y días del mes</h2>
           <div class="hero-ring-standalone">
-            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 68)}</div>
+            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 88)}</div>
             <div class="hero-ring-stat">
               <div class="hero-ring-stat-value">${pctLeft}%</div>
               <div class="hero-ring-stat-label">Balance del mes</div>
