@@ -1366,13 +1366,15 @@
             </div>
             ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
           </div>
-          <div class="hero-savings">
-            <div class="k">Ahorros</div>
-            <div class="v">${fmtDisp(totalSavings)}</div>
-            ${savingsDelta}
-          </div>
-          <div class="hero-speedo-wrap">
-            ${speedoGaugeSvg(pctLeft, 112)}
+          <div class="hero-savings-speedo">
+            <div class="hero-savings">
+              <div class="k">Ahorros</div>
+              <div class="v">${fmtDisp(totalSavings)}</div>
+              ${savingsDelta}
+            </div>
+            <div class="hero-speedo-wrap">
+              ${speedoGaugeSvg(pctLeft, 112)}
+            </div>
           </div>
         </div>
       </div>
@@ -1380,18 +1382,18 @@
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
       ${sharedWidget}
 
-      <div class="grid-2">
-        <div class="card">
+      <div class="grid-2 grid-2-tight">
+        <div class="card card-compact">
           <h2 class="card-title">
-            <span>Gastos por categoría · ${esc(monthLabel(mk))}</span>
+            <span>Gastos por categoría</span>
             <button class="link-btn" data-goto-categorias>Ver análisis</button>
           </h2>
-          ${catItems.length ? `<div id="chart-cats" class="cats-bars"></div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
+          ${catItems.length ? `<div id="chart-cats" class="cats-bars cats-bars-compact"></div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
         </div>
-        <div class="card">
+        <div class="card card-compact">
           <h2 class="card-title">Balance y días del mes</h2>
           <div class="hero-ring-standalone">
-            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 92)}</div>
+            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 68)}</div>
             <div class="hero-ring-stat">
               <div class="hero-ring-stat-value">${pctLeft}%</div>
               <div class="hero-ring-stat-label">Balance del mes</div>
