@@ -198,6 +198,7 @@
     cash: '<rect x="2.5" y="5.5" width="15" height="9" rx="1.5"/><circle cx="10" cy="10" r="2.2"/>',
     plus: '<circle cx="10" cy="10" r="7.2"/><path d="M10 6.8v6.4M6.8 10h6.4"/>',
     swap: '<path d="M4 7h10.5M12 4.2 15 7l-3 2.8"/><path d="M16 13H5.5M8 10.2 5 13l3 2.8"/>',
+    calendar: '<rect x="3" y="4.5" width="14" height="12" rx="1.5"/><path d="M3 8h14"/><path d="M6.5 3v3M13.5 3v3"/>',
   };
   function iconSvg(name, cls) {
     const body = ICON_PATHS[name] || ICON_PATHS.tag;
@@ -242,21 +243,27 @@
       ${arc(rI, strokeI, pctInner, '--warn')}
     </svg>`;
   }
+  // Mismo criterio de color en todo el degradé del velocímetro
+  // (crit→warn→good): se usa tanto para pintar la barra como el número
+  // grande de arriba, que ahora vive afuera del SVG.
+  function speedoColorFor(pct) {
+    const p = Math.max(0, Math.min(100, pct)) / 100;
+    return p <= 0.5
+      ? `color-mix(in srgb, var(--gauge-warn) ${Math.round((p / 0.5) * 100)}%, var(--gauge-crit))`
+      : `color-mix(in srgb, var(--gauge-good) ${Math.round(((p - 0.5) / 0.5) * 100)}%, var(--gauge-warn))`;
+  }
   // "Velocímetro" de media vuelta (180°, 0° a 180°): arranca horizontal a
   // la izquierda (0%, rojo), pasa por arriba y termina horizontal a la
-  // derecha (100%, verde) — forma de arcoíris/gauge clásico, no un cuarto
-  // de círculo. El indicador es una marca corta ENCIMA de la barra de
-  // colores (no una aguja desde el vértice). El balance en % va ADENTRO
-  // del arco, centrado arriba del vértice, con el mismo color que le toca
-  // a la barra en ese punto (mismo criterio que el degradé). El pivote
-  // vive centrado abajo del viewBox, así el arco se abre como una cúpula.
-  function speedoGaugeSvg(pct, size) {
-    size = size || 128; // diámetro de referencia (2×r)
-    const pad = 14;
-    const r = size / 2;
-    const width = size + pad * 2;
-    const height = r + pad * 2;
-    const pivot = { x: width / 2, y: height - pad };
+  // derecha (100%, verde) — forma de arcoíris/gauge clásico, a todo el
+  // ancho disponible (width="100%", el viewBox fija la proporción). Debajo
+  // del arco van las marcas de referencia 0/25/50/75/100%. El balance en
+  // % grande y su etiqueta van afuera, arriba del SVG (ver hero-speedo-*).
+  function speedoGaugeSvg(pct, viewW) {
+    viewW = viewW || 300;
+    const padX = 14, padTop = 6, padBottom = 20;
+    const r = (viewW - padX * 2) / 2;
+    const height = r + padTop + padBottom;
+    const pivot = { x: viewW / 2, y: height - padBottom };
     const angleAt = (t) => (180 - 180 * t) * (Math.PI / 180);
     const ptAt = (t, radius) => {
       const a = angleAt(t);
@@ -271,15 +278,11 @@
     const markIn = ptAt(p, r - 8);
     const markOut = ptAt(p, r + 8);
     const gradId = 'speedoGrad' + Math.round(Math.random() * 1e6);
-    // Mismo criterio de color que el degradé de la barra (crit→warn→good),
-    // pero resuelto acá para pintar el número del color que le toca en p.
-    const textColor = p <= 0.5
-      ? `color-mix(in srgb, var(--gauge-warn) ${Math.round((p / 0.5) * 100)}%, var(--gauge-crit))`
-      : `color-mix(in srgb, var(--gauge-good) ${Math.round(((p - 0.5) / 0.5) * 100)}%, var(--gauge-warn))`;
-    // Centrado adentro de la cúpula, abajo del punto más alto del arco.
-    const labelPt = ptAt(0.5, r * 0.5);
-    const fontSize = Math.round(size * 0.2);
-    return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Balance del mes: ${Math.round(pct)}%">
+    const tickLabels = [0, 25, 50, 75, 100].map((tv) => {
+      const pt = ptAt(tv / 100, r);
+      return `<text x="${pt.x}" y="${height - 5}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="var(--font)">${tv}%</text>`;
+    }).join('');
+    return `<svg width="100%" height="${height}" viewBox="0 0 ${viewW} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Balance del mes: ${Math.round(pct)}%">
       <defs>
         <linearGradient id="${gradId}" x1="${p0.x}" y1="${p0.y}" x2="${p1.x}" y2="${p1.y}" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stop-color="var(--gauge-crit)"/>
@@ -289,8 +292,7 @@
       </defs>
       <path d="M${p0.x},${p0.y} A${r},${r} 0 0,1 ${p1.x},${p1.y}" fill="none" stroke="url(#${gradId})" stroke-width="9" stroke-linecap="round"/>
       <line x1="${markIn.x}" y1="${markIn.y}" x2="${markOut.x}" y2="${markOut.y}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
-      <text x="${labelPt.x}" y="${labelPt.y}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}" font-weight="800" fill="${textColor}" font-family="var(--font-heading)">${Math.round(pct)}%</text>
-      <text x="${labelPt.x}" y="${labelPt.y + fontSize * 0.72}" text-anchor="middle" dominant-baseline="hanging" font-size="${Math.round(size * 0.075)}" fill="var(--muted)" font-family="var(--font)">Balance del mes</text>
+      ${tickLabels}
     </svg>`;
   }
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
@@ -1346,33 +1348,25 @@
 
     el.innerHTML = `
       <div class="hero">
-        <div class="hero-main">
-          <div class="hero-label">⇄ Balance del mes</div>
-          <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
-          <div class="hero-split">
-            <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
-            <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
-          </div>
+        <div class="hero-month-bar">
+          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
+          <span class="hero-month-bar-label">${iconSvg('calendar')}${esc(monthLabel(mk))}</span>
+          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
         </div>
-        <div class="hero-side-col">
-          <div class="hero-month-group">
-            <div class="hero-month-pill">
-              <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
-              <span class="month-label">${esc(monthLabel(mk))}</span>
-              <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
-            </div>
-            ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
-          </div>
-          <div class="hero-savings-speedo">
-            <div class="hero-savings">
-              <div class="k">Ahorros</div>
-              <div class="v">${fmtDisp(totalSavings)}</div>
-              ${savingsDelta}
-            </div>
-            <div class="hero-speedo-wrap">
-              ${speedoGaugeSvg(pctLeft, 100)}
-            </div>
-          </div>
+        ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
+        <div class="hero-balance-center">
+          <div class="hero-label">Balance del mes</div>
+          <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
+        </div>
+        <div class="hero-split-3">
+          <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
+          <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
+          <div><div class="k">Ahorros</div><div class="v">${fmtDisp(totalSavings)}</div>${savingsDelta}</div>
+        </div>
+        <div class="hero-speedo-section">
+          <div class="hero-speedo-value" style="color:${speedoColorFor(pctLeft)}">${pctLeft}%</div>
+          <div class="hero-speedo-caption">Balance del mes</div>
+          ${speedoGaugeSvg(pctLeft, 300)}
         </div>
       </div>
 
