@@ -1229,15 +1229,20 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .hero-split-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  column-gap: 14px;
+  column-gap: 10px;
   border-top: 1px solid var(--border);
   padding: 8px 20px 0;
 }
 .hero-split-3 > div { min-width: 0; }
-.hero-split-3 > div + div { border-left: 1px solid var(--border); padding-left: 14px; }
+.hero-split-3 > div + div { border-left: 1px solid var(--border); padding-left: 10px; }
 .hero-split-3 .k { font-size: 11.5px; color: var(--muted); }
 .hero-split-3 .v { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); margin-top: 2px; }
 .hero-split-3 .v.neg { color: var(--crit); }
+/* Gastos es la columna con menos margen de las tres (más ajustada de
+   ancho + porcentajes que pueden llegar a 4 dígitos): la variación va un
+   toque más chica que el resto de la tarjeta para que "MoM" entre
+   siempre en el mismo renglón que el %, sin cortarse a una línea aparte. */
+.hero-split-3 .tile-delta { font-size: 11px; white-space: nowrap; }
 .hero-ring { position: relative; flex: none; }
 .hero-ring-legend {
   display: flex;

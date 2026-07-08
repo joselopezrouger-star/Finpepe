@@ -1300,7 +1300,8 @@
       return `<div class="tile-delta"><span class="${cls}">${pctLabel}</span></div>`;
     })();
 
-    // Gastos por categoría (top 8 + Otros)
+    // Gastos por categoría (top 3 + Otros, para que la tarjeta principal
+    // entre compacta al lado del anillo)
     const byCat = new Map();
     for (const t of inMonth.filter((x) => x.type === 'gasto')) {
       const v = txDispAmount(t);
@@ -1311,9 +1312,9 @@
     let catItems = [...byCat.entries()]
       .map(([id, value]) => ({ label: catName(id), value }))
       .sort((a, b) => b.value - a.value);
-    if (catItems.length > 4) {
-      const rest = catItems.slice(4);
-      catItems = catItems.slice(0, 4);
+    if (catItems.length > 3) {
+      const rest = catItems.slice(3);
+      catItems = catItems.slice(0, 3);
       catItems.push({ label: 'Otros', value: rest.reduce((a, i) => a + i.value, 0) });
     }
     catItems = catItems.map((it, i) => ({ ...it, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
