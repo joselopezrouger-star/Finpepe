@@ -235,8 +235,11 @@ const Charts = (() => {
      points: [{day, value}] uno por cada día DEL MES ENTERO (1 al último),
      con value en null para los días que todavía no llegaron (no se
      proyecta una línea plana a futuro, pero el eje sigue mostrando el mes
-     completo) · opts: {ariaLabel}. El eje Y baja de cero sólo si el balance
-     acumulado realmente llega a ser negativo algún día. */
+     completo) · opts: {ariaLabel, compact}. El eje Y baja de cero sólo si
+     el balance acumulado realmente llega a ser negativo algún día.
+     Con opts.compact: versión mini tipo "sparkline" para vivir pegada
+     debajo del número de Balance del mes (sin ejes ni grilla, sólo la
+     línea y el punto de hoy). */
   function dailyBalance(el, points, opts) {
     el.replaceChildren();
     if (!points.length) return;
@@ -245,8 +248,9 @@ const Charts = (() => {
       el.innerHTML = '<div class="empty">Todavía no hay movimientos este mes.</div>';
       return;
     }
-    const W = 640, H = 200;
-    const m = { t: 10, r: 8, b: 22, l: 58 };
+    const isCompact = !!opts.compact;
+    const W = isCompact ? 640 : 640, H = isCompact ? 72 : 200;
+    const m = isCompact ? { t: 6, r: 2, b: 6, l: 2 } : { t: 10, r: 8, b: 22, l: 58 };
     const iw = W - m.l - m.r;
     const ih = H - m.t - m.b;
 
@@ -284,34 +288,44 @@ const Charts = (() => {
       return n;
     };
 
-    for (const t of ticks) {
-      const yy = y(t);
+    if (!isCompact) {
+      for (const t of ticks) {
+        const yy = y(t);
+        add(svg, 'line', {
+          x1: m.l, x2: W - m.r, y1: yy, y2: yy,
+          stroke: t === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1,
+          'shape-rendering': 'crispEdges',
+        });
+        add(svg, 'text', {
+          x: m.l - 8, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label',
+        }, compact(t));
+      }
+
+      // Días en el eje X: no entran los 31 números sin amontonarse, así que
+      // se etiqueta el primero, el último y cada 5.
+      points.forEach((p, i) => {
+        if (p.day === 1 || p.day === points.length || p.day % 5 === 0) {
+          add(svg, 'text', { x: x(i), y: H - 6, 'text-anchor': 'middle', class: 'tick-label' }, String(p.day));
+        }
+      });
+    } else if (bottom < 0 && top > 0) {
+      // Compacto: sin grilla, pero conserva la línea de cero como
+      // referencia si el balance llegó a ser negativo algún día.
+      const yy = y(0);
       add(svg, 'line', {
         x1: m.l, x2: W - m.r, y1: yy, y2: yy,
-        stroke: t === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1,
-        'shape-rendering': 'crispEdges',
+        stroke: 'var(--axis)', 'stroke-width': 1, 'stroke-dasharray': '3 3',
       });
-      add(svg, 'text', {
-        x: m.l - 8, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label',
-      }, compact(t));
     }
-
-    // Días en el eje X: no entran los 31 números sin amontonarse, así que
-    // se etiqueta el primero, el último y cada 5.
-    points.forEach((p, i) => {
-      if (p.day === 1 || p.day === points.length || p.day % 5 === 0) {
-        add(svg, 'text', { x: x(i), y: H - 6, 'text-anchor': 'middle', class: 'tick-label' }, String(p.day));
-      }
-    });
 
     const d = known.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.day - 1)},${y(p.value)}`).join(' ');
     add(svg, 'path', {
-      d, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2,
+      d, fill: 'none', stroke: 'var(--accent)', 'stroke-width': isCompact ? 2.5 : 2,
       'stroke-linecap': 'round', 'stroke-linejoin': 'round',
     });
     // Punto de hoy (último día cargado): destaca dónde está parado el mes.
     const last = known[known.length - 1];
-    add(svg, 'circle', { cx: x(last.day - 1), cy: y(last.value), r: 3.5, fill: 'var(--accent)' });
+    add(svg, 'circle', { cx: x(last.day - 1), cy: y(last.value), r: isCompact ? 3 : 3.5, fill: 'var(--accent)' });
 
     el.appendChild(svg);
   }

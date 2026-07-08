@@ -1219,6 +1219,10 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .hero-mtoday { position: relative; display: block; width: 100%; text-align: center; font-size: 11px; margin: 0 0 2px; }
 .hero-balance-center { text-align: center; padding: 0 20px; }
 .hero-balance-center .hero-label { justify-content: center; text-transform: uppercase; }
+/* Mini gráfico de balance por día, pegado debajo del número grande: sólo
+   la línea y el punto de hoy (ver opts.compact en Charts.dailyBalance),
+   bien bajo para no competir en protagonismo con el balance. */
+.hero-daily-chart { padding: 6px 20px 0; }
 .hero-split-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
