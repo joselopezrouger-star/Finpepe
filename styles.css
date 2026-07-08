@@ -330,6 +330,7 @@ a { color: var(--accent-down); }
    para que entre cómodo en la mitad del ancho de una pantalla chica. */
 .grid-2.grid-2-tight { grid-template-columns: 1fr 1fr; gap: 10px; }
 .card-compact { padding: 12px; }
+.card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; }
 .cats-bars-compact .hbar-row { padding: 5px 0; gap: 2px; }
 .cats-bars-compact .hbar-label { font-size: 11px; gap: 4px; }
 .cats-bars-compact .hbar-dot { width: 6px; height: 6px; }
@@ -1216,7 +1217,9 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .hero-value { grid-column: 1; grid-row: 2; }
 .hero-split { grid-column: 1; grid-row: 3; }
 .hero-month-group { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; justify-self: end; }
-.hero-savings-speedo { grid-column: 2; grid-row: 3; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+/* padding-top calza con el border-top(1px)+padding-top(12px) de .hero-split,
+   así "Ahorros" arranca exactamente a la misma altura que "Ingresos". */
+.hero-savings-speedo { grid-column: 2; grid-row: 3; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding-top: 13px; }
 /* Ahorros: mismo patrón etiqueta+monto que Ingresos/Gastos, pero más chico. */
 .hero-savings { text-align: right; }
 .hero-savings .k { font-size: 10.5px; color: var(--muted); }
@@ -1269,7 +1272,11 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
    gráfico de tendencia. */
 .hero-ring-standalone { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0 4px; }
 .card-compact .hero-ring-standalone { gap: 4px; padding: 2px 0 0; }
-.card-compact .hero-ring-stat-value { font-size: 21px; }
+/* El valor en % se achica para pesar visualmente lo mismo que la leyenda
+   de "Faltan X días" de al lado, no como un título grande. */
+.card-compact .hero-ring-stat { gap: 0; margin-top: 2px; }
+.card-compact .hero-ring-stat-value { font-size: 10.5px; font-weight: 700; color: var(--ink); }
+.card-compact .hero-ring-stat-label { font-size: 10.5px; }
 .hero-label {
   position: relative;
   font-size: 12px;
