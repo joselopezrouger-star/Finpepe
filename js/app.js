@@ -3248,6 +3248,41 @@
     return (m && m.email) ? m.email.split('@')[0] : 'tu pareja';
   }
 
+  // Total pagado por cada uno (no el balance neto): sirve para el tamaño
+  // relativo de las burbujas de la vista Compartido.
+  function sharedTotals() {
+    const me = sharedMe();
+    const partner = sharedPartner();
+    let mine = 0, theirs = 0;
+    for (const e of shared.expenses) {
+      const amt = convOrNull(Number(e.amount), e.currency);
+      if (amt == null) continue;
+      if (e.paid_by === me.id) mine += amt;
+      else if (partner && e.paid_by === partner.user_id) theirs += amt;
+    }
+    return { mine, theirs };
+  }
+
+  function initials(label) {
+    return (label || '?').trim().charAt(0).toUpperCase() || '?';
+  }
+
+  // Fecha relativa en español para el feed de Compartido ("hace 3 semanas"),
+  // más fácil de leer de un vistazo que la fecha corta de fmtDateShort.
+  function timeAgo(str) {
+    const d = parseDate(str);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((today - d) / 86400000);
+    if (diffDays <= 0) return 'Hoy';
+    if (diffDays === 1) return 'Ayer';
+    if (diffDays < 7) return `hace ${diffDays} días`;
+    if (diffDays < 30) { const w = Math.round(diffDays / 7); return `hace ${w} semana${w > 1 ? 's' : ''}`; }
+    if (diffDays < 365) { const m = Math.round(diffDays / 30); return `hace ${m} mes${m > 1 ? 'es' : ''}`; }
+    const y = Math.round(diffDays / 365);
+    return `hace ${y} año${y > 1 ? 's' : ''}`;
+  }
+
   function createHouseholdForm() {
     const body = `
       <div class="field">
@@ -3439,11 +3474,33 @@
     const partner = sharedPartner();
     const bal = sharedBalance();
     const balAbs = Math.abs(bal);
-    const balTxt = balAbs < 0.01
-      ? 'Están a mano'
-      : (bal > 0
-          ? `${esc(partnerLabel(partner))} te debe ${fmtDisp(balAbs)}`
-          : `Le debés a ${esc(partnerLabel(partner))} ${fmtDisp(balAbs)}`);
+    const meLabel = 'Vos';
+    const partnerName = partner ? partnerLabel(partner) : null;
+    const meIsDebtor = bal < -0.01;
+
+    // Burbujas: el tamaño refleja cuánto pagó cada uno (no el balance, que
+    // en un hogar de 2 personas es el mismo monto para ambos con signo
+    // opuesto) — así se ve a simple vista quién puso más plata este tiempo.
+    let bubblesHTML = '';
+    if (partner) {
+      const totals = sharedTotals();
+      const maxTotal = Math.max(totals.mine, totals.theirs, 1);
+      const MIN_D = 92, MAX_D = 190;
+      const sizeFor = (t) => Math.round(MIN_D + (MAX_D - MIN_D) * Math.sqrt(t / maxTotal));
+      const bubble = (label, kind, amount, d) => `
+        <div class="shared-bubble is-${kind}" style="width:${d}px;height:${d}px">
+          <div class="shared-bubble-name">${esc(label)}</div>
+          <div class="shared-bubble-amount">${kind === 'debtor' ? '-' : ''}${fmtDisp(amount)}</div>
+          ${kind === 'debtor' ? '<div class="shared-bubble-caption">debería pagar</div>' : ''}
+        </div>`;
+      const dMine = sizeFor(totals.mine), dTheirs = sizeFor(totals.theirs);
+      const bubbles = balAbs < 0.01
+        ? [bubble(meLabel, 'even', totals.mine, dMine), bubble(partnerName, 'even', totals.theirs, dTheirs)]
+        : meIsDebtor
+          ? [bubble(meLabel, 'debtor', balAbs, dMine), bubble(partnerName, 'creditor', balAbs, dTheirs)]
+          : [bubble(partnerName, 'debtor', balAbs, dTheirs), bubble(meLabel, 'creditor', balAbs, dMine)];
+      bubblesHTML = `<div class="shared-bubbles">${bubbles.join('')}</div>`;
+    }
 
     // Combina gastos y pagos en una sola lista cronológica.
     const feed = [
@@ -3460,30 +3517,50 @@
           <div class="agenda-icon">✅</div>
           <div class="agenda-body">
             <div class="agenda-name">${title}</div>
-            <div class="agenda-sub">${esc(fmtDateShort(item.date))}${item.note ? ' · ' + esc(item.note) : ''}</div>
+            <div class="agenda-sub">${esc(timeAgo(item.date))}${item.note ? ' · ' + esc(item.note) : ''}</div>
           </div>
           <div class="agenda-amount">${fmtMoney(item.amount, item.currency)}</div>
           <button class="row-del" data-delset="${esc(item.id)}" aria-label="Eliminar">✕</button>
         </div>`;
       }
       const paidByMe = item.paid_by === me.id;
-      const who = paidByMe ? 'Vos' : esc(partnerLabel(partner));
-      const pct = Math.round(Number(item.payer_share) * 100);
+      const who = paidByMe ? meLabel : esc(partnerLabel(partner));
       return `<div class="agenda-item">
-        <div class="agenda-icon">🧾</div>
+        <div class="shared-avatar ${paidByMe ? 'me' : 'partner'}">${esc(initials(who))}</div>
         <div class="agenda-body">
           <div class="agenda-name">${esc(item.note || 'Gasto compartido')}</div>
-          <div class="agenda-sub">${esc(fmtDateShort(item.date))} · Pagó ${who} · reparto ${pct}/${100 - pct}</div>
+          <div class="agenda-sub">${esc(timeAgo(item.date))}</div>
+          <div class="agenda-sub"><b>${who}</b> pagó por</div>
         </div>
-        <div class="agenda-amount">${fmtMoney(item.amount, item.currency)}</div>
+        <div class="agenda-trailing">
+          <div class="agenda-amount">${fmtMoney(item.amount, item.currency)}</div>
+          <div class="shared-participants">
+            <span class="shared-mini-avatar">${esc(initials(meLabel))}</span>
+            <span class="shared-mini-avatar">${esc(initials(partnerLabel(partner)))}</span>
+          </div>
+        </div>
         <button class="row-del" data-delexp="${esc(item.id)}" aria-label="Eliminar">✕</button>
       </div>`;
     };
 
+    const deudasHTML = !partner ? '' : (balAbs < 0.01
+      ? `<div class="card">
+          <h2 class="card-title">Deudas</h2>
+          <div class="empty">Están a mano — sin deudas pendientes.</div>
+        </div>`
+      : `<div class="card">
+          <h2 class="card-title">Deudas</h2>
+          <div class="debt-row">
+            <div class="debt-row-text"><b>${esc(meIsDebtor ? meLabel : partnerName)}</b> le debe a <b>${esc(meIsDebtor ? partnerName : meLabel)}</b></div>
+            <div class="debt-row-amount">${fmtDisp(balAbs)}</div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-settle-debt" style="margin-top:10px">Registrar pago</button>
+        </div>`);
+
     el.innerHTML = `
       <div class="hero">
-        <div class="hero-label">◇ Balance con ${esc(partnerLabel(partner))}</div>
-        <div class="hero-value" style="font-size:26px">${balTxt}</div>
+        <div class="hero-label">◇ ${partner ? `Balance con ${esc(partnerName)}` : 'Balance'}</div>
+        ${bubblesHTML}
         ${!partner ? '<div class="hero-split"><div class="k">Esperando a que tu pareja se una con el código de invitación.</div></div>' : ''}
       </div>
 
@@ -3498,13 +3575,17 @@
       <div id="invite-box"></div>
 
       <div class="card">
-        <h2 class="card-title">Historial</h2>
+        <h2 class="card-title">Transacciones</h2>
         <div class="agenda">${feed.length ? feed.map(rowHTML).join('') : '<div class="empty">Todavía no cargaron ningún gasto compartido.</div>'}</div>
-      </div>`;
+      </div>
+
+      ${deudasHTML}`;
 
     $('#btn-add-se', el).addEventListener('click', sharedExpenseForm);
     const addSettle = $('#btn-add-settle', el);
     if (addSettle) addSettle.addEventListener('click', settlementForm);
+    const settleDebt = $('#btn-settle-debt', el);
+    if (settleDebt) settleDebt.addEventListener('click', settlementForm);
     $('#btn-refresh-shared', el).addEventListener('click', () => {
       shared.loaded = false;
       render();
