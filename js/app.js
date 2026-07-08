@@ -46,14 +46,6 @@
     const s = monthLongFmt.format(new Date(y, m - 1, 1));
     return s.charAt(0).toUpperCase() + s.slice(1);
   };
-  // Solo el nombre del mes, sin año: para las variaciones de la tarjeta
-  // principal ("vs. Junio"), donde repetir el año de a poco sobra.
-  const monthNameFmt = new Intl.DateTimeFormat('es-AR', { month: 'long' });
-  const monthNameOnly = (mk) => {
-    const [y, m] = mk.split('-').map(Number);
-    const s = monthNameFmt.format(new Date(y, m - 1, 1));
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  };
   const fmtDay = (d) => dayMonthFmt.format(d);
   const fmtDateShort = (str) => dateShortFmt.format(parseDate(str));
   const fmtDateFull = (str) => {
@@ -269,12 +261,13 @@
   function speedoGaugeSvg(pct, viewW) {
     viewW = viewW || 220;
     const padX = 14;
-    const labelSize = Math.round(viewW * 0.16);
-    const sublabelSize = Math.round(viewW * 0.065);
+    // Sin sub-etiqueta "Balance del mes": ya lo dice el título de arriba
+    // de la tarjeta, repetirlo acá era redundante. El % también se achica
+    // (antes competía en tamaño con el número grande de más arriba).
+    const labelSize = Math.round(viewW * 0.11);
     const labelTopY = 2;
-    const sublabelTopY = labelTopY + labelSize + 4;
     const barH = Math.max(10, Math.round(viewW * 0.055));
-    const barTopY = sublabelTopY + sublabelSize + 10;
+    const barTopY = labelTopY + labelSize + 8;
     const barCenterY = barTopY + barH / 2;
     const tickY = barCenterY + barH / 2 + 14;
     const height = tickY + 4;
@@ -298,7 +291,6 @@
       <line x1="${markerX}" y1="${barCenterY - 9}" x2="${markerX}" y2="${barCenterY + 9}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
       ${tick0}${tick100}
       <text x="${viewW / 2}" y="${labelTopY}" text-anchor="middle" dominant-baseline="hanging" font-size="${labelSize}" font-weight="800" fill="${textColor}" font-family="var(--font-heading)">${Math.round(pct)}%</text>
-      <text x="${viewW / 2}" y="${sublabelTopY}" text-anchor="middle" dominant-baseline="hanging" font-size="${sublabelSize}" fill="var(--muted)" font-family="var(--font)">Balance del mes</text>
     </svg>`;
   }
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
@@ -1282,17 +1274,19 @@
     const balance = inc - exp - savingsMonth;
 
     // Cada variación va siempre en dos líneas: arriba el %, abajo el monto
-    // nominal de la diferencia (ambos contra el mismo mes anterior).
+    // nominal de la diferencia (MoM = month over month, contra el mes
+    // anterior) — "MoM" en vez de "vs. Junio" para que la segunda línea
+    // entre siempre en un solo renglón, sin importar el ancho de pantalla.
     const delta = (cur, prev, upIsGood) => {
       if (!(prev > 0)) return '';
       const diff = cur - prev;
       const pct = Math.round((diff / prev) * 100);
-      if (pct === 0) return `<div class="tile-delta">= vs. ${esc(monthNameOnly(prevMk))}</div>`;
+      if (pct === 0) return `<div class="tile-delta">= MoM</div>`;
       const up = pct > 0;
       const cls = (up === upIsGood) ? 'up-good' : 'down-bad';
       return `<div class="tile-delta tile-delta-2l">
         <span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(pct)}%</span>
-        <span class="tile-delta-nom">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))} vs. ${esc(monthNameOnly(prevMk))}</span>
+        <span class="tile-delta-nom">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))} MoM</span>
       </div>`;
     };
     // Variación de Ahorros: el aporte mensual puede ser $0 o negativo (un
@@ -1302,7 +1296,7 @@
     // calcular.
     const savingsDelta = (() => {
       const diff = savingsMonth - savingsMonthPrev;
-      if (diff === 0) return `<div class="tile-delta">= vs. ${esc(monthNameOnly(prevMk))}</div>`;
+      if (diff === 0) return `<div class="tile-delta">= MoM</div>`;
       const up = diff > 0;
       const cls = up ? 'up-good' : 'down-bad';
       const pctLabel = savingsMonthPrev > 0
@@ -1310,7 +1304,7 @@
         : `${up ? '▲' : '▼'} nuevo`;
       return `<div class="tile-delta tile-delta-2l">
         <span class="${cls}">${pctLabel}</span>
-        <span class="tile-delta-nom">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))} vs. ${esc(monthNameOnly(prevMk))}</span>
+        <span class="tile-delta-nom">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))} MoM</span>
       </div>`;
     })();
 
@@ -1409,7 +1403,7 @@
           <span class="hero-month-bar-label">${iconSvg('calendar')}${esc(monthLabel(mk))}</span>
           <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
         </div>
-        <button class="link-btn hero-mtoday" data-mtoday ${mk === curMonth() ? 'style="visibility:hidden"' : ''}>volver al mes actual</button>
+        ${mk === curMonth() ? '' : '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>'}
         <div class="hero-balance-center">
           <div class="hero-label">Balance del mes</div>
           <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
