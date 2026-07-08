@@ -1369,6 +1369,7 @@
           <div class="hero-label">Balance del mes</div>
           <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
         </div>
+        <div class="hero-daily-chart" id="chart-daily-balance"></div>
         <div class="hero-split-3">
           <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
           <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
@@ -1419,11 +1420,6 @@
       </div>
 
       <div class="card">
-        <h2 class="card-title">Balance por día</h2>
-        <div id="chart-daily-balance"></div>
-      </div>
-
-      <div class="card">
         <h2 class="card-title">Próximos vencimientos</h2>
         ${cards.length ? `
         <div class="due-card-list">
@@ -1471,7 +1467,7 @@
     } else {
       Charts.trend(trendEl, trendRows, {});
     }
-    Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {});
+    Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, { compact: true });
 
     $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
       ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
