@@ -1197,6 +1197,11 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
   gap: 10px;
 }
 .hero-month-group { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+/* Ahorros: mismo patrón etiqueta+monto que Ingresos/Gastos, pero más chico
+   (va en la columna angosta de la derecha, arriba del velocímetro). */
+.hero-savings { text-align: right; }
+.hero-savings .k { font-size: 10.5px; color: var(--muted); }
+.hero-savings .v { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); }
 /* Fondo propio, bien saturado con el acento, para que se note como un
    control destacado y no una píldora gris más entre tantas otras. */
 .hero-month-pill {

@@ -1222,6 +1222,14 @@
     const expPrev = sumDisp(inPrev.filter((t) => t.type === 'gasto'));
     const balance = inc - exp;
 
+    // Total ahorrado (mismo criterio que la vista de Ahorros): suma de
+    // todos los fondos, cada uno convertido a la moneda de visualización.
+    let totalSavings = 0;
+    for (const s of S().savings) {
+      const v = convOrNull(s.entries.reduce((a, e) => a + e.amount, 0), s.currency);
+      if (v != null) totalSavings += v;
+    }
+
     const delta = (cur, prev, upIsGood) => {
       if (!(prev > 0)) return '';
       const pct = Math.round(((cur - prev) / prev) * 100);
@@ -1338,8 +1346,12 @@
             </div>
             ${mk !== curMonth() ? '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>' : ''}
           </div>
+          <div class="hero-savings">
+            <div class="k">Ahorros</div>
+            <div class="v">${fmtDisp(totalSavings)}</div>
+          </div>
           <div class="hero-speedo-wrap">
-            ${speedoGaugeSvg(pctLeft, 128)}
+            ${speedoGaugeSvg(pctLeft, 112)}
           </div>
         </div>
       </div>
