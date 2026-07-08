@@ -260,37 +260,32 @@
       ? `color-mix(in srgb, var(--gauge-warn) ${Math.round((p / 0.5) * 100)}%, var(--gauge-crit))`
       : `color-mix(in srgb, var(--gauge-good) ${Math.round(((p - 0.5) / 0.5) * 100)}%, var(--gauge-warn))`;
   }
-  // "Velocímetro" de media vuelta (180°, 0° a 180°): arranca horizontal a
-  // la izquierda (0%, rojo), pasa por arriba y termina horizontal a la
-  // derecha (100%, verde). El balance en % y su etiqueta van ADENTRO del
-  // arco, centrados; abajo sólo quedan las referencias 0% y 100% (los
-  // extremos, no toda la escala). El ancho real en pantalla lo fija el CSS
-  // (hero-speedo-section svg), acá sólo se define la proporción interna.
+  // "Velocímetro" horizontal (barra recta, no arco): a la izquierda 0%
+  // (rojo), a la derecha 100% (verde). Arriba de la barra van el % grande
+  // y la etiqueta "Balance del mes", centrados; debajo de la barra sólo
+  // quedan las referencias 0% y 100% (los extremos, no toda la escala).
+  // El ancho real en pantalla lo fija el CSS (hero-speedo-section svg),
+  // acá sólo se define la proporción interna.
   function speedoGaugeSvg(pct, viewW) {
     viewW = viewW || 220;
-    const padX = 14, padTop = 6, padBottom = 18;
-    const r = (viewW - padX * 2) / 2;
-    const height = r + padTop + padBottom;
-    const pivot = { x: viewW / 2, y: height - padBottom };
-    const angleAt = (t) => (180 - 180 * t) * (Math.PI / 180);
-    const ptAt = (t, radius) => {
-      const a = angleAt(t);
-      return { x: pivot.x + radius * Math.cos(a), y: pivot.y - radius * Math.sin(a) };
-    };
+    const padX = 14;
+    const labelSize = Math.round(viewW * 0.16);
+    const sublabelSize = Math.round(viewW * 0.065);
+    const labelTopY = 2;
+    const sublabelTopY = labelTopY + labelSize + 4;
+    const barH = Math.max(10, Math.round(viewW * 0.055));
+    const barTopY = sublabelTopY + sublabelSize + 10;
+    const barCenterY = barTopY + barH / 2;
+    const tickY = barCenterY + barH / 2 + 14;
+    const height = tickY + 4;
+    const p0 = { x: padX, y: barCenterY };
+    const p1 = { x: viewW - padX, y: barCenterY };
     const p = Math.max(0, Math.min(100, pct)) / 100;
-    const p0 = ptAt(0, r);
-    const p1 = ptAt(1, r);
-    // Marca corta radial que cruza la barra en el punto actual (no una
-    // aguja larga desde el centro): un segmento entre r-7 y r+7 en el
-    // mismo ángulo que el balance.
-    const markIn = ptAt(p, r - 7);
-    const markOut = ptAt(p, r + 7);
+    const markerX = p0.x + (p1.x - p0.x) * p;
     const gradId = 'speedoGrad' + Math.round(Math.random() * 1e6);
-    const tick0 = `<text x="${p0.x}" y="${height - 5}" text-anchor="start" font-size="10.5" fill="var(--muted)" font-family="var(--font)">0%</text>`;
-    const tick100 = `<text x="${p1.x}" y="${height - 5}" text-anchor="end" font-size="10.5" fill="var(--muted)" font-family="var(--font)">100%</text>`;
+    const tick0 = `<text x="${p0.x}" y="${tickY}" text-anchor="start" font-size="10.5" fill="var(--muted)" font-family="var(--font)">0%</text>`;
+    const tick100 = `<text x="${p1.x}" y="${tickY}" text-anchor="end" font-size="10.5" fill="var(--muted)" font-family="var(--font)">100%</text>`;
     const textColor = speedoColorFor(pct);
-    const labelPt = ptAt(0.5, r * 0.55);
-    const fontSize = Math.round(viewW * 0.16);
     return `<svg width="100%" height="${height}" viewBox="0 0 ${viewW} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Balance del mes: ${Math.round(pct)}%">
       <defs>
         <linearGradient id="${gradId}" x1="${p0.x}" y1="${p0.y}" x2="${p1.x}" y2="${p1.y}" gradientUnits="userSpaceOnUse">
@@ -299,11 +294,11 @@
           <stop offset="100%" stop-color="var(--gauge-good)"/>
         </linearGradient>
       </defs>
-      <path d="M${p0.x},${p0.y} A${r},${r} 0 0,1 ${p1.x},${p1.y}" fill="none" stroke="url(#${gradId})" stroke-width="9" stroke-linecap="round"/>
-      <line x1="${markIn.x}" y1="${markIn.y}" x2="${markOut.x}" y2="${markOut.y}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+      <line x1="${p0.x}" y1="${p0.y}" x2="${p1.x}" y2="${p1.y}" stroke="url(#${gradId})" stroke-width="${barH}" stroke-linecap="round"/>
+      <line x1="${markerX}" y1="${barCenterY - 9}" x2="${markerX}" y2="${barCenterY + 9}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
       ${tick0}${tick100}
-      <text x="${labelPt.x}" y="${labelPt.y}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}" font-weight="800" fill="${textColor}" font-family="var(--font-heading)">${Math.round(pct)}%</text>
-      <text x="${labelPt.x}" y="${labelPt.y + fontSize * 0.72}" text-anchor="middle" dominant-baseline="hanging" font-size="${Math.round(viewW * 0.065)}" fill="var(--muted)" font-family="var(--font)">Balance del mes</text>
+      <text x="${viewW / 2}" y="${labelTopY}" text-anchor="middle" dominant-baseline="hanging" font-size="${labelSize}" font-weight="800" fill="${textColor}" font-family="var(--font-heading)">${Math.round(pct)}%</text>
+      <text x="${viewW / 2}" y="${sublabelTopY}" text-anchor="middle" dominant-baseline="hanging" font-size="${sublabelSize}" fill="var(--muted)" font-family="var(--font)">Balance del mes</text>
     </svg>`;
   }
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
@@ -1230,12 +1225,12 @@
     const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
     const incPrev = sumDisp(inPrev.filter((t) => t.type === 'ingreso'));
     const expPrev = sumDisp(inPrev.filter((t) => t.type === 'gasto'));
-    const balance = inc - exp;
 
-    // Total ahorrado (mismo criterio que la vista de Ahorros): suma de
-    // todos los fondos, cada uno convertido a la moneda de visualización.
-    // Se corta al final del mes elegido (no cuenta aportes futuros) para
-    // que sea comparable contra el total al final del mes anterior.
+    // Ahorros: no el total acumulado histórico, sino lo aportado (neto de
+    // retiros) durante ESE mes puntual — es la diferencia entre el total
+    // acumulado al final del mes y al final del mes anterior. Usar el
+    // total acumulado directo rompería "Balance del mes" (se iría cada vez
+    // más negativo con los meses, aunque no cambie el ritmo de ahorro).
     const savingsUpTo = (cutoff) => {
       let total = 0;
       for (const s of S().savings) {
@@ -1244,8 +1239,16 @@
       }
       return total;
     };
-    const totalSavings = savingsUpTo(`${addMonthsKey(mk, 1)}-01`);
-    const totalSavingsPrev = savingsUpTo(`${mk}-01`);
+    const savingsAtEndOf = (mkk) => savingsUpTo(`${addMonthsKey(mkk, 1)}-01`);
+    const totalSavings = savingsAtEndOf(mk);
+    const totalSavingsPrev = savingsAtEndOf(prevMk);
+    const savingsMonth = totalSavings - totalSavingsPrev;
+    const savingsMonthPrev = totalSavingsPrev - savingsAtEndOf(addMonthsKey(mk, -2));
+
+    // El dinero que se destina a ahorro ese mes deja de estar disponible,
+    // así que resta del balance del mes igual que un gasto (un retiro de
+    // ahorros, en cambio, sería un aporte negativo y sumaría).
+    const balance = inc - exp - savingsMonth;
 
     const delta = (cur, prev, upIsGood) => {
       if (!(prev > 0)) return '';
@@ -1255,18 +1258,15 @@
       const cls = (up === upIsGood) ? 'up-good' : 'down-bad';
       return `<div class="tile-delta"><span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(pct)}%</span> vs. ${esc(monthNameOnly(prevMk))}</div>`;
     };
-    // Variación de Ahorros: a diferencia de delta() de arriba, siempre
-    // muestra algo (aunque el mes anterior no tenga ahorro previo todavía),
-    // porque acá "sin datos" es un estado normal, no una excepción a ocultar.
+    // Variación de Ahorros: como el aporte mensual puede ser $0 o negativo
+    // (retiro), no tiene sentido comparar en % (base cero o negativa). Se
+    // compara la diferencia en moneda contra el aporte del mes anterior,
+    // igual que Ingresos/Gastos pero en pesos en vez de porcentaje.
     const savingsDelta = (() => {
-      if (!(totalSavingsPrev > 0)) {
-        if (totalSavings <= 0) return `<div class="tile-delta">= vs. ${esc(monthNameOnly(prevMk))}</div>`;
-        return `<div class="tile-delta"><span class="up-good">▲ nuevo</span> vs. ${esc(monthNameOnly(prevMk))}</div>`;
-      }
-      const pct = Math.round(((totalSavings - totalSavingsPrev) / totalSavingsPrev) * 100);
-      if (pct === 0) return `<div class="tile-delta">= vs. ${esc(monthNameOnly(prevMk))}</div>`;
-      const up = pct > 0;
-      return `<div class="tile-delta"><span class="${up ? 'up-good' : 'down-bad'}">${up ? '▲' : '▼'} ${Math.abs(pct)}%</span> vs. ${esc(monthNameOnly(prevMk))}</div>`;
+      const diff = savingsMonth - savingsMonthPrev;
+      if (diff === 0) return `<div class="tile-delta">= vs. ${esc(monthNameOnly(prevMk))}</div>`;
+      const up = diff > 0;
+      return `<div class="tile-delta"><span class="${up ? 'up-good' : 'down-bad'}">${up ? '▲' : '▼'} ${fmtDisp(Math.abs(diff))}</span> vs. ${esc(monthNameOnly(prevMk))}</div>`;
     })();
 
     // Gastos por categoría (top 8 + Otros)
@@ -1313,7 +1313,7 @@
       };
     }).sort((a, b) => a.cy.due - b.cy.due);
 
-    const pctLeft = exp <= 0 ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round(((inc - exp) / inc) * 100))) : 0);
+    const pctLeft = (exp <= 0 && savingsMonth <= 0) ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round((balance / inc) * 100))) : 0);
     const pctMonthLeft = monthLeftPct(mk);
     const daysLeft = daysLeftInMonth(mk);
 
@@ -1372,7 +1372,7 @@
         <div class="hero-split-3">
           <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
           <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
-          <div><div class="k">Ahorros</div><div class="v">${fmtDisp(totalSavings)}</div>${savingsDelta}</div>
+          <div><div class="k">Ahorros</div><div class="v ${savingsMonth < 0 ? 'neg' : ''}">${fmtDisp(savingsMonth)}</div>${savingsDelta}</div>
         </div>
         <div class="hero-speedo-section">
           ${speedoGaugeSvg(pctLeft, 220)}
@@ -1393,6 +1393,10 @@
         <div class="card card-compact">
           <h2 class="card-title">Balance y días del mes</h2>
           <div class="hero-ring-standalone">
+            <div class="hero-ring-legend hero-ring-legend-mirror" aria-hidden="true">
+              <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
+              <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
+            </div>
             <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 108)}</div>
             <div class="hero-ring-legend">
               <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
