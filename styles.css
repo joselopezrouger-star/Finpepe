@@ -1227,24 +1227,18 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .hero-split-3 .k { font-size: 11.5px; color: var(--muted); }
 .hero-split-3 .v { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); margin-top: 2px; }
 .hero-speedo-section { text-align: center; border-top: 1px dashed var(--border); margin: 16px 20px 0; padding-top: 14px; }
-.hero-speedo-value { font: 800 24px var(--font-heading); }
-.hero-speedo-caption { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.hero-speedo-section svg { width: 62%; max-width: 220px; min-width: 160px; display: inline-block; }
 .hero-ring { position: relative; flex: none; }
-/* El valor de balance va separado del anillo (no pegado), con su etiqueta
-   abajo, como un stat propio en vez de una leyenda chica al lado. */
-.hero-ring-stat { display: flex; flex-direction: column; align-items: center; gap: 1px; margin-top: 4px; }
-.hero-ring-stat-value { font: 800 26px var(--font-heading); color: var(--ink); line-height: 1.1; }
-.hero-ring-stat-label { font-size: 11.5px; color: var(--muted); }
 .hero-ring-legend {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .hero-ring-item {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -1252,16 +1246,12 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .hero-ring-item .dot {
   width: 7px; height: 7px; border-radius: 50%; flex: none;
 }
+.dot-accent { background: var(--accent); }
 .dot-warn { background: var(--warn); }
 /* Tarjeta separada del anillo doble (balance + días del mes), al lado del
    gráfico de tendencia. */
-.hero-ring-standalone { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0 4px; }
-.card-compact .hero-ring-standalone { gap: 4px; padding: 2px 0 0; }
-/* El valor en % se achica para pesar visualmente lo mismo que la leyenda
-   de "Faltan X días" de al lado, no como un título grande. */
-.card-compact .hero-ring-stat { gap: 0; margin-top: 2px; }
-.card-compact .hero-ring-stat-value { font-size: 10.5px; font-weight: 700; color: var(--ink); }
-.card-compact .hero-ring-stat-label { font-size: 10.5px; }
+.hero-ring-standalone { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0 4px; }
+.card-compact .hero-ring-standalone { gap: 8px; padding: 4px 0 0; }
 .hero-label {
   position: relative;
   font-size: 12px;
