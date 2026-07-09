@@ -223,86 +223,6 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
-  /* ---------- Columnas apiladas: varias series por mes en una sola barra ----------
-     months: [label] · series: [{label, color, values: [n, ...]}] (mismo
-     largo que months, alineado por índice) · opts: {ariaLabel}. Cada
-     columna se recorta con un clip-path de esquinas redondeadas arriba
-     (mismo criterio que trend()), y los segmentos se apilan adentro sin
-     agregarle una esquina rara a cada uno. */
-  function stackedBars(el, months, series, opts) {
-    el.replaceChildren();
-    if (!months.length) return;
-    const W = 640, H = 220;
-    const m = { t: 10, r: 8, b: 26, l: 56 };
-    const iw = W - m.l - m.r;
-    const ih = H - m.t - m.b;
-
-    const totals = months.map((_, i) => series.reduce((a, s) => a + (s.values[i] || 0), 0));
-    const maxVal = Math.max(1, ...totals);
-    const { top, ticks } = niceTicks(maxVal, 4);
-    const y = (v) => m.t + ih - (v / top) * ih;
-    const band = iw / months.length;
-    const colW = Math.min(34, band * 0.5);
-
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.setAttribute('class', 'trend-svg');
-    svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', opts.ariaLabel || 'Compromiso mensual');
-
-    const NS = 'http://www.w3.org/2000/svg';
-    const add = (parent, tag, attrs, text) => {
-      const n = document.createElementNS(NS, tag);
-      for (const k in attrs) n.setAttribute(k, attrs[k]);
-      if (text !== undefined) n.textContent = text;
-      parent.appendChild(n);
-      return n;
-    };
-
-    for (const t of ticks) {
-      const yy = y(t);
-      add(svg, 'line', {
-        x1: m.l, x2: W - m.r, y1: yy, y2: yy,
-        stroke: t === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1,
-        'shape-rendering': 'crispEdges',
-      });
-      add(svg, 'text', {
-        x: m.l - 8, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label',
-      }, compact(t));
-    }
-
-    const defs = add(svg, 'defs', {});
-    months.forEach((label, i) => {
-      const cx = m.l + band * i + band / 2;
-      const x0 = cx - colW / 2;
-      add(svg, 'text', { x: cx, y: H - 8, 'text-anchor': 'middle', class: 'tick-label' }, label);
-      const total = totals[i];
-      if (!(total > 0)) return;
-
-      const yTop = y(total);
-      const h = m.t + ih - yTop;
-      const r = Math.min(4, h, colW / 2);
-      const d = `M${x0},${m.t + ih} L${x0},${yTop + r} Q${x0},${yTop} ${x0 + r},${yTop}` +
-                ` L${x0 + colW - r},${yTop} Q${x0 + colW},${yTop} ${x0 + colW},${yTop + r}` +
-                ` L${x0 + colW},${m.t + ih} Z`;
-      const clipId = `inst-clip-${i}`;
-      const clipPath = add(defs, 'clipPath', { id: clipId });
-      add(clipPath, 'path', { d });
-
-      const g = add(svg, 'g', { 'clip-path': `url(#${clipId})` });
-      let acc = 0;
-      series.forEach((s) => {
-        const v = s.values[i] || 0;
-        if (!(v > 0)) return;
-        const y1 = y(acc), y2 = y(acc + v);
-        add(g, 'rect', { x: x0, y: y2, width: colW, height: Math.max(0, y1 - y2), fill: s.color });
-        acc += v;
-      });
-    });
-
-    el.appendChild(svg);
-  }
-
   function compact(n) {
     const sign = n < 0 ? '-' : '';
     const a = Math.abs(n);
@@ -396,5 +316,5 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
-  return { COLORS, hBars, trend, lines, dailyBalance, stackedBars };
+  return { COLORS, hBars, trend, lines, dailyBalance };
 })();
