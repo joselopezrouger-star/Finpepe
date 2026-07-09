@@ -46,6 +46,11 @@
     const s = monthLongFmt.format(new Date(y, m - 1, 1));
     return s.charAt(0).toUpperCase() + s.slice(1);
   };
+  const monthShortLabel = (mk) => {
+    const [y, m] = mk.split('-').map(Number);
+    const s = monthShortFmt.format(new Date(y, m - 1, 1)).replace('.', '');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
   const fmtDay = (d) => dayMonthFmt.format(d);
   const fmtDateShort = (str) => dateShortFmt.format(parseDate(str));
   const fmtDateFull = (str) => {
@@ -2501,10 +2506,56 @@
       rows.push({
         groupId: txs[0].groupId, note: txs[0].note, categoryId: txs[0].categoryId,
         methodId: txs[0].methodId, currency: txs[0].currency,
-        n: next.installment.n, nextK: next.installment.k, next, totalPending,
+        n: next.installment.n, nextK: next.installment.k, next, totalPending, pending, all: txs,
       });
     }
     return rows.sort((a, b) => a.next.date.localeCompare(b.next.date));
+  }
+
+  // Cuánto suman TODAS las compras en cuotas activas, mes a mes (para
+  // responder "cuánto tengo comprometido este mes y los que vienen"). Usa
+  // TODAS las cuotas del grupo (no solo las pendientes): la cuota de este
+  // mes ya cobrada hoy sigue siendo parte del total de este mes.
+  function installmentMonthTotals(rows, months) {
+    const totals = Object.fromEntries(months.map((m) => [m, 0]));
+    for (const r of rows) {
+      for (const t of r.all) {
+        const mk = effectiveMonthOf(t);
+        if (mk in totals) {
+          const amt = convOrNull(t.amount, t.currency);
+          if (amt != null) totals[mk] += amt;
+        }
+      }
+    }
+    return totals;
+  }
+
+  // Vista tipo Gantt: una fila por compra, una columna por mes, celda
+  // llena cuando esa compra tiene una cuota ese mes — así se ve de un
+  // vistazo qué meses se pisan varias cuotas, sin tener que sumar a mano.
+  function installmentGanttHTML(rows, months) {
+    const totals = installmentMonthTotals(rows, months);
+    const cellFor = (r, mk) => r.all.find((t) => effectiveMonthOf(t) === mk) || null;
+    return `
+      <div class="table-scroll"><table class="data inst-gantt">
+        <thead><tr>
+          <th>Compra</th>
+          ${months.map((mk) => `<th class="num">${esc(monthShortLabel(mk))}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          ${rows.map((r) => `<tr class="rowlink" data-instgroup="${esc(r.groupId)}">
+            <td><b>${esc(r.note || catName(r.categoryId))}</b></td>
+            ${months.map((mk) => {
+              const t = cellFor(r, mk);
+              return `<td class="num inst-gantt-cell ${t ? 'has' : ''}">${t ? esc(fmtMoney(t.amount, r.currency)) : '—'}</td>`;
+            }).join('')}
+          </tr>`).join('')}
+        </tbody>
+        <tfoot><tr>
+          <td>Total</td>
+          ${months.map((mk) => `<td class="num">${fmtDisp(totals[mk])}</td>`).join('')}
+        </tr></tfoot>
+      </table></div>`;
   }
 
   function vPlan(el) {
@@ -2512,6 +2563,7 @@
     const monthTx = S().transactions.filter(
       (t) => t.type === 'gasto' && effectiveMonthOf(t) === mk);
     const instRows = activeInstallmentGroups();
+    const instMonths = Array.from({ length: 6 }, (_, i) => addMonthsKey(mk, i));
 
     const budgetRows = S().budgets.map((b) => {
       const spent = sumDisp(monthTx.filter((t) => topCategoryOf(t.categoryId) === b.categoryId));
@@ -2521,6 +2573,27 @@
     }).sort((a, x) => (x.pct || 0) - (a.pct || 0));
 
     el.innerHTML = `
+      <div class="card">
+        <h2 class="card-title">Compras en cuotas</h2>
+        ${instRows.length ? `
+        <div class="hint" style="margin-bottom:10px">Cuánto suma cada compra en cuotas, mes a mes (próximos 6 meses).</div>
+        ${installmentGanttHTML(instRows, instMonths)}
+        <div class="table-scroll" style="margin-top:14px"><table class="data">
+          <thead><tr>
+            <th>Compra</th><th>Cuota</th><th class="num">Monto de la cuota</th><th>Próximo cargo</th><th class="num">Restan pagar</th>
+          </tr></thead>
+          <tbody>${instRows.map((r) => `
+            <tr class="rowlink" data-instgroup="${esc(r.groupId)}">
+              <td><b>${esc(r.note || catName(r.categoryId))}</b><div class="cell-sub">${esc(methodName(r.methodId))}</div></td>
+              <td class="cell-sub">${r.nextK}/${r.n}</td>
+              <td class="num">${fmtMoney(r.next.amount, r.currency)}</td>
+              <td class="cell-sub">${esc(fmtDateShort(r.next.date))}</td>
+              <td class="num">${fmtMoney(r.totalPending, r.currency)}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>`
+        : '<div class="empty">Cuando cargues una compra en cuotas desde "+ Movimiento", la vas a ver acá con cuántas cuotas faltan.</div>'}
+      </div>
+
       <div class="card">
         <h2 class="card-title">
           <span>Presupuestos por categoría · ${esc(monthLabel(mk))}</span>
@@ -2572,25 +2645,6 @@
         </div>
         <div class="hint" style="margin-top:8px">Al abrir la app en un mes nuevo, estos movimientos se cargan solos. Los ya generados se pueden editar o borrar como cualquier movimiento.</div>`
         : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos cada mes.</div>'}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">Compras en cuotas</h2>
-        ${instRows.length ? `
-        <div class="table-scroll"><table class="data">
-          <thead><tr>
-            <th>Compra</th><th>Cuota</th><th class="num">Monto de la cuota</th><th>Próximo cargo</th><th class="num">Restan pagar</th>
-          </tr></thead>
-          <tbody>${instRows.map((r) => `
-            <tr class="rowlink" data-instgroup="${esc(r.groupId)}">
-              <td><b>${esc(r.note || catName(r.categoryId))}</b><div class="cell-sub">${esc(methodName(r.methodId))}</div></td>
-              <td class="cell-sub">${r.nextK}/${r.n}</td>
-              <td class="num">${fmtMoney(r.next.amount, r.currency)}</td>
-              <td class="cell-sub">${esc(fmtDateShort(r.next.date))}</td>
-              <td class="num">${fmtMoney(r.totalPending, r.currency)}</td>
-            </tr>`).join('')}</tbody>
-        </table></div>`
-        : '<div class="empty">Cuando cargues una compra en cuotas desde "+ Movimiento", la vas a ver acá con cuántas cuotas faltan.</div>'}
       </div>`;
 
     $$('tr[data-instgroup]', el).forEach((row) => row.addEventListener('click', () => {
