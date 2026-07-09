@@ -3245,11 +3245,45 @@
   }
 
   function partnerLabel(m) {
-    return (m && m.email) ? m.email.split('@')[0] : 'tu pareja';
+    if (!m) return 'tu pareja';
+    return m.display_name || (m.email ? m.email.split('@')[0] : 'tu pareja');
   }
 
-  // Total pagado por cada uno (no el balance neto): sirve para el tamaño
-  // relativo de las burbujas de la vista Compartido.
+  function meMember() {
+    if (!shared.household) return null;
+    const me = sharedMe();
+    return shared.household.members.find((m) => m.user_id === me.id) || null;
+  }
+
+  function meLabel() {
+    const me = sharedMe();
+    const mine = meMember();
+    if (mine && mine.display_name) return mine.display_name;
+    return (me && me.email) ? me.email.split('@')[0] : 'Vos';
+  }
+
+  function editNameForm() {
+    const mine = meMember();
+    const body = `
+      <div class="field">
+        <label for="nm-name">Tu nombre</label>
+        <input type="text" name="name" id="nm-name" maxlength="24" required value="${esc((mine && mine.display_name) || '')}" placeholder="${esc(meLabel())}">
+        <span class="hint">Así te va a ver tu pareja en Compartido.</span>
+      </div>`;
+    openDialog('Cambiar tu nombre', body, {
+      submitLabel: 'Guardar',
+      async onSubmit(d) {
+        try {
+          await Cloud.updateDisplayName(shared.household.id, d.name);
+          shared.household = await Cloud.getHousehold();
+          render();
+        } catch (e) { alert('No se pudo guardar: ' + friendlyCloudError(e)); return false; }
+      },
+    });
+  }
+
+  // Total pagado por cada uno (no el balance neto): alimenta la hoja de
+  // balance de la vista Compartido.
   function sharedTotals() {
     const me = sharedMe();
     const partner = sharedPartner();
@@ -3474,33 +3508,33 @@
     const partner = sharedPartner();
     const bal = sharedBalance();
     const balAbs = Math.abs(bal);
-    const meLabel = 'Vos';
+    const myName = meLabel();
     const partnerName = partner ? partnerLabel(partner) : null;
     const meIsDebtor = bal < -0.01;
+    const totals = partner ? sharedTotals() : { mine: 0, theirs: 0 };
 
-    // Burbujas: el tamaño refleja cuánto pagó cada uno (no el balance, que
-    // en un hogar de 2 personas es el mismo monto para ambos con signo
-    // opuesto) — así se ve a simple vista quién puso más plata este tiempo.
-    let bubblesHTML = '';
-    if (partner) {
-      const totals = sharedTotals();
-      const maxTotal = Math.max(totals.mine, totals.theirs, 1);
-      const MIN_D = 92, MAX_D = 190;
-      const sizeFor = (t) => Math.round(MIN_D + (MAX_D - MIN_D) * Math.sqrt(t / maxTotal));
-      const bubble = (label, kind, amount, d) => `
-        <div class="shared-bubble is-${kind}" style="width:${d}px;height:${d}px">
-          <div class="shared-bubble-name">${esc(label)}</div>
-          <div class="shared-bubble-amount">${kind === 'debtor' ? '-' : ''}${fmtDisp(amount)}</div>
-          ${kind === 'debtor' ? '<div class="shared-bubble-caption">debería pagar</div>' : ''}
-        </div>`;
-      const dMine = sizeFor(totals.mine), dTheirs = sizeFor(totals.theirs);
-      const bubbles = balAbs < 0.01
-        ? [bubble(meLabel, 'even', totals.mine, dMine), bubble(partnerName, 'even', totals.theirs, dTheirs)]
-        : meIsDebtor
-          ? [bubble(meLabel, 'debtor', balAbs, dMine), bubble(partnerName, 'creditor', balAbs, dTheirs)]
-          : [bubble(partnerName, 'debtor', balAbs, dTheirs), bubble(meLabel, 'creditor', balAbs, dMine)];
-      bubblesHTML = `<div class="shared-bubbles">${bubbles.join('')}</div>`;
-    }
+    // Imagen según quién debe (chiste privado entre los dos): la de "estás
+    // en el horno" si el balance es negativo, la de "te deben" si es positivo.
+    // No se muestra si están a mano, no aporta nada en ese caso.
+    const imageHTML = (partner && balAbs >= 0.01)
+      ? `<div class="shared-image">
+          <img src="assets/${meIsDebtor ? 'compartido-debes.jpg' : 'compartido-te-deben.jpg'}"
+               alt="${meIsDebtor ? 'Le debés plata' : 'Te deben plata'}">
+        </div>`
+      : '';
+
+    // Hoja de balance con números concretos en vez de una visualización
+    // aproximada: cuánto puso cada uno, el total en común y el neto.
+    const ledgerHTML = partner ? `
+      <div class="shared-ledger">
+        <div class="shared-ledger-row"><span>Pagado por ${esc(myName)}</span><b>${fmtDisp(totals.mine)}</b></div>
+        <div class="shared-ledger-row"><span>Pagado por ${esc(partnerName)}</span><b>${fmtDisp(totals.theirs)}</b></div>
+        <div class="shared-ledger-row"><span>Total gastado en común</span><b>${fmtDisp(totals.mine + totals.theirs)}</b></div>
+        <div class="shared-ledger-row total ${balAbs < 0.01 ? '' : (meIsDebtor ? 'neg' : 'pos')}">
+          <span>${balAbs < 0.01 ? 'Balance' : (meIsDebtor ? `Le debés a ${esc(partnerName)}` : `${esc(partnerName)} te debe`)}</span>
+          <b>${balAbs < 0.01 ? 'Están a mano' : fmtDisp(balAbs)}</b>
+        </div>
+      </div>` : '';
 
     // Combina gastos y pagos en una sola lista cronológica.
     const feed = [
@@ -3524,7 +3558,7 @@
         </div>`;
       }
       const paidByMe = item.paid_by === me.id;
-      const who = paidByMe ? meLabel : esc(partnerLabel(partner));
+      const who = paidByMe ? esc(myName) : esc(partnerLabel(partner));
       return `<div class="agenda-item">
         <div class="shared-avatar ${paidByMe ? 'me' : 'partner'}">${esc(initials(who))}</div>
         <div class="agenda-body">
@@ -3535,7 +3569,7 @@
         <div class="agenda-trailing">
           <div class="agenda-amount">${fmtMoney(item.amount, item.currency)}</div>
           <div class="shared-participants">
-            <span class="shared-mini-avatar">${esc(initials(meLabel))}</span>
+            <span class="shared-mini-avatar">${esc(initials(myName))}</span>
             <span class="shared-mini-avatar">${esc(initials(partnerLabel(partner)))}</span>
           </div>
         </div>
@@ -3551,7 +3585,7 @@
       : `<div class="card">
           <h2 class="card-title">Deudas</h2>
           <div class="debt-row">
-            <div class="debt-row-text"><b>${esc(meIsDebtor ? meLabel : partnerName)}</b> le debe a <b>${esc(meIsDebtor ? partnerName : meLabel)}</b></div>
+            <div class="debt-row-text"><b>${esc(meIsDebtor ? myName : partnerName)}</b> le debe a <b>${esc(meIsDebtor ? partnerName : myName)}</b></div>
             <div class="debt-row-amount">${fmtDisp(balAbs)}</div>
           </div>
           <button class="btn btn-primary btn-sm" id="btn-settle-debt" style="margin-top:10px">Registrar pago</button>
@@ -3559,8 +3593,12 @@
 
     el.innerHTML = `
       <div class="hero">
-        <div class="hero-label">◇ ${partner ? `Balance con ${esc(partnerName)}` : 'Balance'}</div>
-        ${bubblesHTML}
+        <div class="hero-label">
+          <span>◇ ${partner ? `Balance con ${esc(partnerName)}` : 'Balance'}</span>
+          ${partner ? '<button class="link-btn" id="btn-edit-name" style="margin-left:auto">✎ Tu nombre</button>' : ''}
+        </div>
+        ${imageHTML}
+        ${ledgerHTML}
         ${!partner ? '<div class="hero-split"><div class="k">Esperando a que tu pareja se una con el código de invitación.</div></div>' : ''}
       </div>
 
@@ -3586,6 +3624,8 @@
     if (addSettle) addSettle.addEventListener('click', settlementForm);
     const settleDebt = $('#btn-settle-debt', el);
     if (settleDebt) settleDebt.addEventListener('click', settlementForm);
+    const editName = $('#btn-edit-name', el);
+    if (editName) editName.addEventListener('click', editNameForm);
     $('#btn-refresh-shared', el).addEventListener('click', () => {
       shared.loaded = false;
       render();

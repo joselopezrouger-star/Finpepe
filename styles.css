@@ -1396,43 +1396,28 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .agenda-sub { font-size: 12px; color: var(--muted); }
 .agenda-amount { font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* ---------- Compartido: burbujas de balance, avatares y deudas ---------- */
-.shared-bubbles {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  flex-wrap: wrap;
-  padding: 22px 16px 14px;
-}
-.shared-bubble {
-  border-radius: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 10px;
-  flex: none;
-}
-.shared-bubble-name { font-size: 13px; font-weight: 600; opacity: 0.85; }
-.shared-bubble-amount { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 2px; }
-.shared-bubble-caption { font-size: 11px; opacity: 0.75; margin-top: 1px; }
-.shared-bubble.is-debtor {
-  background: color-mix(in srgb, var(--crit) 22%, var(--surface));
-  color: var(--crit);
-  border: 1px solid color-mix(in srgb, var(--crit) 35%, transparent);
-}
-.shared-bubble.is-creditor {
-  background: color-mix(in srgb, var(--income) 18%, var(--surface));
-  color: var(--income);
-  border: 1px solid color-mix(in srgb, var(--income) 32%, transparent);
-}
-.shared-bubble.is-even {
-  background: var(--surface-2);
-  color: var(--ink);
+/* ---------- Compartido: imagen de estado, hoja de balance, avatares y deudas ---------- */
+.shared-image {
+  margin: 14px 16px 0;
+  border-radius: 10px;
+  overflow: hidden;
   border: 1px solid var(--border);
+  max-height: 220px;
 }
+.shared-image img { display: block; width: 100%; height: 100%; max-height: 220px; object-fit: cover; object-position: center 18%; }
+
+.shared-ledger { margin: 14px 16px 16px; display: grid; gap: 0; }
+.shared-ledger-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px; color: var(--ink);
+}
+.shared-ledger-row b { font-variant-numeric: tabular-nums; font-weight: 650; }
+.shared-ledger-row.total { border-bottom: none; padding-top: 12px; font-weight: 650; }
+.shared-ledger-row.total b { font-size: 18px; }
+.shared-ledger-row.total.neg b { color: var(--crit); }
+.shared-ledger-row.total.pos b { color: var(--income); }
 
 .shared-avatar {
   width: 34px; height: 34px; border-radius: 50%; flex: none;
