@@ -849,11 +849,30 @@ table.data.cat-breakdown-table th, table.data.cat-breakdown-table td { padding: 
 table.data.cat-breakdown-table th:first-child, table.data.cat-breakdown-table td:first-child { padding-left: 0; }
 table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20px; }
 
-/* Compras en cuotas: leyenda de colores del gráfico apilado (una serie por
-   compra) y lista de filas con el detalle — sin tabla ni scroll lateral,
-   se acomoda sola en el ancho de la tarjeta. */
-.inst-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; }
-.inst-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+/* Compras en cuotas: Gantt en grilla CSS (una fila por compra, una columna
+   por mes) — la barra de cada compra va del mes de su primera cuota al de
+   la última, y una columna resaltada marca el mes actual. Todo con
+   grid-row/grid-column puestos por JS según la duración real de cada
+   compra, así la barra queda perfecta debajo de sus meses sin cuentas de
+   porcentajes. Puede necesitar scroll lateral si el rango de meses es
+   largo (a diferencia de la lista de abajo, achicarlo no tendría sentido:
+   es lo que hace a un Gantt un Gantt). */
+.gantt-wrap { overflow-x: auto; }
+.gantt { display: grid; min-width: 480px; }
+.gantt-cell { padding: 4px 6px; }
+.gantt-monthlabel { text-align: center; font-size: 10.5px; color: var(--muted); padding-bottom: 8px; }
+.gantt-monthlabel.is-today { color: var(--accent); }
+.gantt-label {
+  font-size: 12px; color: var(--ink); align-self: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding-right: 10px;
+}
+.gantt-track { border-bottom: 1px solid var(--border); }
+.gantt-today { background: var(--accent-wash); }
+.gantt-bar { align-self: center; height: 16px; border-radius: 5px; margin: 0 2px; }
+
+/* Lista de filas con el detalle — sin tabla ni scroll lateral, se acomoda
+   sola en el ancho de la tarjeta. */
 .inst-row-list { display: grid; gap: 8px; }
 .inst-row {
   display: flex; align-items: center; gap: 12px;

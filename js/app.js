@@ -2512,28 +2512,51 @@
     return rows.sort((a, b) => a.next.date.localeCompare(b.next.date));
   }
 
-  // Una serie por compra (coloreada con la misma paleta que las categorías
-  // en otros gráficos), con el monto de su cuota en cada uno de los
-  // próximos meses — 0 los meses donde esa compra no tiene cuota. Se
-  // apilan en Charts.stackedBars para responder de un vistazo "cuánto
-  // tengo comprometido en cuotas este mes y los que vienen", sin tener
-  // que sumar a mano ni leer una grilla de números. Usa TODAS las cuotas
-  // del grupo (no solo las pendientes): la de este mes ya cobrada hoy
-  // sigue siendo parte del total de este mes.
-  function installmentChartSeries(rows, months) {
-    return rows.map((r, i) => ({
+  // Gantt de verdad: una fila por compra, una barra que va del mes de la
+  // primera cuota al mes de la última (mostrando cuánto dura en el tiempo),
+  // y una columna resaltada marcando en qué mes estás parado hoy. La
+  // ventana de meses se arma sola: desde el arranque más viejo entre las
+  // compras activas hasta el final más nuevo (siempre incluyendo el mes
+  // actual, aunque ninguna compra arranque o termine justo ahí).
+  function installmentGanttHTML(rows) {
+    const today = curMonth();
+    let minMk = today, maxMk = today;
+    for (const r of rows) {
+      const start = effectiveMonthOf(r.all[0]);
+      const end = effectiveMonthOf(r.all[r.all.length - 1]);
+      if (start < minMk) minMk = start;
+      if (end > maxMk) maxMk = end;
+    }
+    const months = [];
+    for (let mk = minMk, guard = 0; mk <= maxMk && guard < 60; mk = addMonthsKey(mk, 1), guard++) months.push(mk);
+    const todayIdx = months.indexOf(today);
+
+    const barRows = rows.map((r, i) => ({
       label: r.note || catName(r.categoryId),
       color: CAT_PALETTE[i % CAT_PALETTE.length],
-      values: months.map((mk) => {
-        const t = r.all.find((x) => effectiveMonthOf(x) === mk);
-        return t ? (convOrNull(t.amount, t.currency) || 0) : 0;
-      }),
+      startIdx: months.indexOf(effectiveMonthOf(r.all[0])),
+      endIdx: months.indexOf(effectiveMonthOf(r.all[r.all.length - 1])),
     }));
-  }
 
-  function installmentLegendHTML(series) {
-    return `<div class="inst-legend">${series.map((s) => `
-      <span class="inst-legend-item"><span class="hbar-dot" style="background:${s.color}"></span>${esc(s.label)}</span>`).join('')}</div>`;
+    const nRows = barRows.length;
+    const cols = `96px repeat(${months.length}, minmax(26px, 1fr))`;
+    const gridRows = `auto repeat(${nRows}, 30px)`;
+    const cells = [];
+    if (todayIdx >= 0) {
+      cells.push(`<div class="gantt-today" style="grid-row:1 / span ${nRows + 1};grid-column:${todayIdx + 2}"></div>`);
+    }
+    cells.push(`<div class="gantt-cell gantt-corner" style="grid-row:1;grid-column:1"></div>`);
+    months.forEach((mo, i) => {
+      cells.push(`<div class="gantt-cell gantt-monthlabel ${i === todayIdx ? 'is-today' : ''}" style="grid-row:1;grid-column:${i + 2}">${esc(monthShortLabel(mo))}</div>`);
+    });
+    barRows.forEach((r, ri) => {
+      const gr = ri + 2;
+      cells.push(`<div class="gantt-cell gantt-label" style="grid-row:${gr};grid-column:1" title="${esc(r.label)}">${esc(r.label)}</div>`);
+      cells.push(`<div class="gantt-track" style="grid-row:${gr};grid-column:2 / -1"></div>`);
+      cells.push(`<div class="gantt-bar" style="grid-row:${gr};grid-column:${r.startIdx + 2} / ${r.endIdx + 3};background:${r.color}"></div>`);
+    });
+
+    return `<div class="gantt-wrap"><div class="gantt" style="grid-template-columns:${cols};grid-template-rows:${gridRows}">${cells.join('')}</div></div>`;
   }
 
   function vPlan(el) {
@@ -2541,7 +2564,6 @@
     const monthTx = S().transactions.filter(
       (t) => t.type === 'gasto' && effectiveMonthOf(t) === mk);
     const instRows = activeInstallmentGroups();
-    const instMonths = Array.from({ length: 6 }, (_, i) => addMonthsKey(mk, i));
 
     const budgetRows = S().budgets.map((b) => {
       const spent = sumDisp(monthTx.filter((t) => topCategoryOf(t.categoryId) === b.categoryId));
@@ -2550,15 +2572,12 @@
       return { b, spent, limit, pct };
     }).sort((a, x) => (x.pct || 0) - (a.pct || 0));
 
-    const instSeries = installmentChartSeries(instRows, instMonths);
-
     el.innerHTML = `
       <div class="card">
         <h2 class="card-title">Compras en cuotas</h2>
         ${instRows.length ? `
-        <div class="hint" style="margin-bottom:6px">Cuánto suma cada compra en cuotas, mes a mes (próximos 6 meses).</div>
-        <div id="chart-installments"></div>
-        ${installmentLegendHTML(instSeries)}
+        <div class="hint" style="margin-bottom:10px">Cuándo empieza y termina cada compra, con hoy marcado.</div>
+        ${installmentGanttHTML(instRows)}
         <div class="inst-row-list" style="margin-top:16px">
           ${instRows.map((r) => `
             <div class="inst-row rowlink" data-instgroup="${esc(r.groupId)}">
@@ -2629,11 +2648,6 @@
         : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos cada mes.</div>'}
       </div>`;
 
-    if (instRows.length) {
-      Charts.stackedBars($('#chart-installments', el), instMonths.map(monthShortLabel), instSeries, {
-        ariaLabel: 'Compromiso mensual de compras en cuotas',
-      });
-    }
     $$('[data-instgroup]', el).forEach((row) => row.addEventListener('click', () => {
       const g = instRows.find((r) => r.groupId === row.dataset.instgroup);
       if (g) txForm(g.next);
