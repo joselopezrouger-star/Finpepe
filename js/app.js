@@ -3618,6 +3618,8 @@
         </div>`);
 
     el.innerHTML = `
+      ${deudasHTML}
+
       <div class="hero">
         <div class="hero-label">
           <span>◇ ${partner ? `Balance con ${esc(partnerName)}` : 'Balance'}</span>
@@ -3640,9 +3642,7 @@
       <div class="card">
         <h2 class="card-title">Transacciones</h2>
         <div class="agenda">${feed.length ? feed.map(rowHTML).join('') : '<div class="empty">Todavía no cargaron ningún gasto compartido.</div>'}</div>
-      </div>
-
-      ${deudasHTML}`;
+      </div>`;
 
     $('#btn-add-se', el).addEventListener('click', sharedExpenseForm);
     const addSettle = $('#btn-add-settle', el);
