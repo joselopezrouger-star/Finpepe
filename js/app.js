@@ -3538,9 +3538,9 @@
     const meIsDebtor = bal < -0.01;
     const totals = partner ? sharedTotals() : { mine: 0, theirs: 0 };
 
-    // Imagen según quién debe (chiste privado entre los dos): la de "estás
-    // en el horno" si el balance es negativo, la de "te deben" si es positivo.
-    // No se muestra si están a mano, no aporta nada en ese caso.
+    // Imagen según quién debe (chiste privado entre los dos), dentro de la
+    // tarjeta Deudas: la de "estás en el horno" si el balance es negativo,
+    // la de "te deben" si es positivo. No se muestra si están a mano.
     const imageHTML = (partner && balAbs >= 0.01)
       ? `<div class="shared-image">
           <img src="assets/${meIsDebtor ? 'compartido-debes.jpg' : 'compartido-te-deben.jpg'}"
@@ -3609,6 +3609,7 @@
         </div>`
       : `<div class="card">
           <h2 class="card-title">Deudas</h2>
+          ${imageHTML}
           <div class="debt-row">
             <div class="debt-row-text"><b>${esc(meIsDebtor ? myName : partnerName)}</b> le debe a <b>${esc(meIsDebtor ? partnerName : myName)}</b></div>
             <div class="debt-row-amount">${fmtDisp(balAbs)}</div>
@@ -3622,7 +3623,6 @@
           <span>◇ ${partner ? `Balance con ${esc(partnerName)}` : 'Balance'}</span>
           ${partner ? '<button class="link-btn" id="btn-edit-name" style="margin-left:auto">✎ Tu nombre</button>' : ''}
         </div>
-        ${imageHTML}
         ${ledgerHTML}
         ${!partner ? '<div class="hero-split"><div class="k">Esperando a que tu pareja se una con el código de invitación.</div></div>' : ''}
       </div>
