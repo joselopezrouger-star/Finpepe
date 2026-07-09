@@ -658,6 +658,10 @@
       catGroupExpand: null, // id del grupo de categoría "abierto" en la grilla, o null (nivel superior)
       note: editing ? (tx.note || '') : '',
       inst: 1,
+      // 'total': el monto tipeado arriba es el precio total de la compra (se
+      // reparte entre las n cuotas). 'per': el monto tipeado ya es el valor
+      // de UNA cuota (se multiplica por n para saber el total).
+      instMode: 'total',
       // Al cargar un movimiento nuevo se pide de a una cosa por vez (tipo,
       // fecha, monto, categoría, cuenta...) en vez de mostrar todo el
       // formulario junto; wstep es el índice dentro de wizardSteps(). Editar
@@ -746,9 +750,23 @@
     // numérico pelado: las opciones más comunes quedan a un toque, y "Otra"
     // despliega el número para casos puntuales.
     const INST_PRESETS = [1, 3, 6, 12];
+
+    // Con cuotas, el monto tipeado en la calculadora es ambiguo (¿el precio
+    // total de la compra, o lo que sale cada cuota?) — instMode lo saca de
+    // dudas, y esto calcula ambos valores para mostrarlos antes de guardar.
+    function instAmounts(n) {
+      const entered = Math.round(finalAmount() * 100) / 100;
+      if (!(entered > 0) || !(n > 1)) return null;
+      if (draft.instMode === 'per') {
+        return { per: entered, total: Math.round(entered * n * 100) / 100 };
+      }
+      return { per: Math.round((entered / n) * 100) / 100, total: entered };
+    }
+
     function installmentsPickerHTML() {
       const cur = Number(draft.inst);
       const isCustom = !INST_PRESETS.includes(cur);
+      const amounts = instAmounts(cur);
       return `
         <div class="tx-row-note">
           <label>Cuotas</label>
@@ -757,7 +775,20 @@
             <button type="button" class="inst-opt ${isCustom ? 'sel' : ''}" data-inst-custom>Otra</button>
           </div>
           ${isCustom ? `<input type="number" id="tx-inst" min="1" max="36" step="1" value="${esc(draft.inst)}" placeholder="Cantidad de cuotas" class="inst-custom-input">` : ''}
-        </div>`;
+        </div>
+        ${cur > 1 ? `
+        <div class="tx-row-note">
+          <label>El monto de arriba es…</label>
+          <div class="inst-picker inst-mode-picker">
+            <button type="button" class="inst-opt ${draft.instMode !== 'per' ? 'sel' : ''}" data-inst-mode="total">el total de la compra</button>
+            <button type="button" class="inst-opt ${draft.instMode === 'per' ? 'sel' : ''}" data-inst-mode="per">el valor de 1 cuota</button>
+          </div>
+          <div class="hint inst-preview">
+            ${amounts
+              ? `${cur} cuotas de <b>${esc(fmtMoney(amounts.per, draft.currency))}</b> c/u — total <b>${esc(fmtMoney(amounts.total, draft.currency))}</b>`
+              : 'Ingresá un monto arriba para ver cómo queda cada cuota.'}
+          </div>
+        </div>` : ''}`;
     }
 
     // Grilla de tarjetas (categoría/subcategoría), con las que tienen hijos
@@ -1146,14 +1177,18 @@
       if (instCustomBtn) instCustomBtn.addEventListener('click', () => { draft.inst = ''; paint(); });
       const instEl = $('#tx-inst', dlg);
       if (instEl) instEl.addEventListener('input', (e) => { draft.inst = e.target.value; });
+      $$('[data-inst-mode]', dlg).forEach((b) => b.addEventListener('click', () => {
+        draft.instMode = b.dataset.instMode;
+        paint();
+      }));
       const pctEl = $('#tx-share-pct', dlg);
       if (pctEl) pctEl.addEventListener('input', (e) => { draft.sharePct = e.target.value; });
     }
 
     async function onSave() {
       if (draft._saving) return;
-      const amount = Math.round(finalAmount() * 100) / 100;
-      if (!(amount > 0)) { alert('Ingresá un monto mayor a 0.'); return; }
+      const entered = Math.round(finalAmount() * 100) / 100;
+      if (!(entered > 0)) { alert('Ingresá un monto mayor a 0.'); return; }
       if (!draft.methodId) { alert(draft.type === 'transferencia' ? 'Elegí la cuenta de origen.' : 'Elegí una cuenta.'); return; }
       if (draft.type === 'transferencia') {
         if (!draft.toMethodId) { alert('Elegí la cuenta de destino.'); return; }
@@ -1161,6 +1196,12 @@
       } else if (!draft.categoryId) {
         alert('Elegí una categoría.'); return;
       }
+      // Con cuotas en modo "el monto de arriba es 1 cuota", lo tipeado no es
+      // el total sino el valor de cada cuota — hay que multiplicarlo por n
+      // para saber cuánto sale la compra entera (usado en la nota, el gasto
+      // compartido y demás lugares donde importa el total, no una cuota).
+      const n = !editing && showInstallments() ? Math.max(1, parseInt(draft.inst || '1', 10) || 1) : 1;
+      const amount = (n > 1 && draft.instMode === 'per') ? Math.round(entered * n * 100) / 100 : entered;
       // Buscar la cotización histórica es una llamada de red: evita que un
       // doble click dispare el guardado dos veces mientras espera.
       draft._saving = true;
@@ -1182,12 +1223,11 @@
         base.usdSnapshot = keepSnapshot ? tx.usdSnapshot : await usdSnapshotForDate(amount, draft.currency, draft.date);
         Object.assign(tx, base);
       } else {
-        const n = showInstallments() ? Math.max(1, parseInt(draft.inst || '1', 10) || 1) : 1;
         if (n === 1) {
           S().transactions.push({ id: Store.uid(), ...base, usdSnapshot: await usdSnapshotForDate(amount, draft.currency, draft.date) });
         } else {
           const groupId = Store.uid();
-          const per = Math.round((amount / n) * 100) / 100;
+          const per = (draft.instMode === 'per') ? entered : Math.round((amount / n) * 100) / 100;
           const start = parseDate(draft.date);
           for (let k = 1; k <= n; k++) {
             const cuota = (k === n) ? Math.round((amount - per * (n - 1)) * 100) / 100 : per;

@@ -684,6 +684,12 @@ dialog[open].dialog-tx.dialog-tx-wiz {
 .inst-opt.sel { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); }
 .inst-custom-input { margin-top: 8px; }
 
+/* El toggle de "total vs 1 cuota" tiene frases, no dígitos: letra más chica
+   y sin negrita para que entre cómodo en dos mitades. */
+.inst-mode-picker .inst-opt { font: 600 12.5px/1.25 var(--font); padding: 9px 6px; }
+.inst-preview { margin-top: 8px; line-height: 1.4; }
+.inst-preview b { color: var(--ink); font-weight: 700; }
+
 .tx-keypad {
   flex: none;
   display: grid;
