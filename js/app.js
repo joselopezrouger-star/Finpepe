@@ -2512,50 +2512,28 @@
     return rows.sort((a, b) => a.next.date.localeCompare(b.next.date));
   }
 
-  // Cuánto suman TODAS las compras en cuotas activas, mes a mes (para
-  // responder "cuánto tengo comprometido este mes y los que vienen"). Usa
-  // TODAS las cuotas del grupo (no solo las pendientes): la cuota de este
-  // mes ya cobrada hoy sigue siendo parte del total de este mes.
-  function installmentMonthTotals(rows, months) {
-    const totals = Object.fromEntries(months.map((m) => [m, 0]));
-    for (const r of rows) {
-      for (const t of r.all) {
-        const mk = effectiveMonthOf(t);
-        if (mk in totals) {
-          const amt = convOrNull(t.amount, t.currency);
-          if (amt != null) totals[mk] += amt;
-        }
-      }
-    }
-    return totals;
+  // Una serie por compra (coloreada con la misma paleta que las categorías
+  // en otros gráficos), con el monto de su cuota en cada uno de los
+  // próximos meses — 0 los meses donde esa compra no tiene cuota. Se
+  // apilan en Charts.stackedBars para responder de un vistazo "cuánto
+  // tengo comprometido en cuotas este mes y los que vienen", sin tener
+  // que sumar a mano ni leer una grilla de números. Usa TODAS las cuotas
+  // del grupo (no solo las pendientes): la de este mes ya cobrada hoy
+  // sigue siendo parte del total de este mes.
+  function installmentChartSeries(rows, months) {
+    return rows.map((r, i) => ({
+      label: r.note || catName(r.categoryId),
+      color: CAT_PALETTE[i % CAT_PALETTE.length],
+      values: months.map((mk) => {
+        const t = r.all.find((x) => effectiveMonthOf(x) === mk);
+        return t ? (convOrNull(t.amount, t.currency) || 0) : 0;
+      }),
+    }));
   }
 
-  // Vista tipo Gantt: una fila por compra, una columna por mes, celda
-  // llena cuando esa compra tiene una cuota ese mes — así se ve de un
-  // vistazo qué meses se pisan varias cuotas, sin tener que sumar a mano.
-  function installmentGanttHTML(rows, months) {
-    const totals = installmentMonthTotals(rows, months);
-    const cellFor = (r, mk) => r.all.find((t) => effectiveMonthOf(t) === mk) || null;
-    return `
-      <div class="table-scroll"><table class="data inst-gantt">
-        <thead><tr>
-          <th>Compra</th>
-          ${months.map((mk) => `<th class="num">${esc(monthShortLabel(mk))}</th>`).join('')}
-        </tr></thead>
-        <tbody>
-          ${rows.map((r) => `<tr class="rowlink" data-instgroup="${esc(r.groupId)}">
-            <td><b>${esc(r.note || catName(r.categoryId))}</b></td>
-            ${months.map((mk) => {
-              const t = cellFor(r, mk);
-              return `<td class="num inst-gantt-cell ${t ? 'has' : ''}">${t ? esc(fmtMoney(t.amount, r.currency)) : '—'}</td>`;
-            }).join('')}
-          </tr>`).join('')}
-        </tbody>
-        <tfoot><tr>
-          <td>Total</td>
-          ${months.map((mk) => `<td class="num">${fmtDisp(totals[mk])}</td>`).join('')}
-        </tr></tfoot>
-      </table></div>`;
+  function installmentLegendHTML(series) {
+    return `<div class="inst-legend">${series.map((s) => `
+      <span class="inst-legend-item"><span class="hbar-dot" style="background:${s.color}"></span>${esc(s.label)}</span>`).join('')}</div>`;
   }
 
   function vPlan(el) {
@@ -2572,25 +2550,29 @@
       return { b, spent, limit, pct };
     }).sort((a, x) => (x.pct || 0) - (a.pct || 0));
 
+    const instSeries = installmentChartSeries(instRows, instMonths);
+
     el.innerHTML = `
       <div class="card">
         <h2 class="card-title">Compras en cuotas</h2>
         ${instRows.length ? `
-        <div class="hint" style="margin-bottom:10px">Cuánto suma cada compra en cuotas, mes a mes (próximos 6 meses).</div>
-        ${installmentGanttHTML(instRows, instMonths)}
-        <div class="table-scroll" style="margin-top:14px"><table class="data">
-          <thead><tr>
-            <th>Compra</th><th>Cuota</th><th class="num">Monto de la cuota</th><th>Próximo cargo</th><th class="num">Restan pagar</th>
-          </tr></thead>
-          <tbody>${instRows.map((r) => `
-            <tr class="rowlink" data-instgroup="${esc(r.groupId)}">
-              <td><b>${esc(r.note || catName(r.categoryId))}</b><div class="cell-sub">${esc(methodName(r.methodId))}</div></td>
-              <td class="cell-sub">${r.nextK}/${r.n}</td>
-              <td class="num">${fmtMoney(r.next.amount, r.currency)}</td>
-              <td class="cell-sub">${esc(fmtDateShort(r.next.date))}</td>
-              <td class="num">${fmtMoney(r.totalPending, r.currency)}</td>
-            </tr>`).join('')}</tbody>
-        </table></div>`
+        <div class="hint" style="margin-bottom:6px">Cuánto suma cada compra en cuotas, mes a mes (próximos 6 meses).</div>
+        <div id="chart-installments"></div>
+        ${installmentLegendHTML(instSeries)}
+        <div class="inst-row-list" style="margin-top:16px">
+          ${instRows.map((r) => `
+            <div class="inst-row rowlink" data-instgroup="${esc(r.groupId)}">
+              <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(r.categoryId))}</div>
+              <div class="inst-row-main">
+                <div class="inst-row-title">${esc(r.note || catName(r.categoryId))}</div>
+                <div class="inst-row-sub">${esc(methodName(r.methodId))} · cuota ${r.nextK}/${r.n} · próx. ${esc(fmtDateShort(r.next.date))}</div>
+              </div>
+              <div class="inst-row-amounts">
+                <div class="inst-row-amount">${fmtMoney(r.next.amount, r.currency)} <span class="inst-row-amount-label">cuota</span></div>
+                <div class="inst-row-total">${fmtMoney(r.totalPending, r.currency)} <span class="inst-row-amount-label">restan</span></div>
+              </div>
+            </div>`).join('')}
+        </div>`
         : '<div class="empty">Cuando cargues una compra en cuotas desde "+ Movimiento", la vas a ver acá con cuántas cuotas faltan.</div>'}
       </div>
 
@@ -2647,7 +2629,12 @@
         : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos cada mes.</div>'}
       </div>`;
 
-    $$('tr[data-instgroup]', el).forEach((row) => row.addEventListener('click', () => {
+    if (instRows.length) {
+      Charts.stackedBars($('#chart-installments', el), instMonths.map(monthShortLabel), instSeries, {
+        ariaLabel: 'Compromiso mensual de compras en cuotas',
+      });
+    }
+    $$('[data-instgroup]', el).forEach((row) => row.addEventListener('click', () => {
       const g = instRows.find((r) => r.groupId === row.dataset.instgroup);
       if (g) txForm(g.next);
     }));
