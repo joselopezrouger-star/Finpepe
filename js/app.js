@@ -3179,7 +3179,7 @@
   // para dar una pista accionable en vez de mostrar el error crudo.
   function friendlyCloudError(e) {
     const raw = (e && (e.message || String(e))) || 'Error desconocido.';
-    if (/row-level security/i.test(raw)) {
+    if (/row-level security/i.test(raw) || /column .* does not exist/i.test(raw)) {
       return raw + '\n\nProbablemente falta correr (o está desactualizado) el script supabase-schema.sql ' +
         'en tu proyecto de Supabase: Supabase → SQL Editor → pegá todo el contenido de ese archivo → Run. ' +
         'Es seguro volver a correrlo, no borra datos existentes.';
@@ -3190,7 +3190,7 @@
   /* ================= Vista: Compartido (gastos en pareja) ================= */
   // Caché en memoria: esta vista vive en Supabase, no en Store (la usan dos
   // cuentas distintas a la vez), así que se carga aparte de forma asíncrona.
-  const shared = { loaded: false, loading: false, household: null, expenses: [], settlements: [] };
+  const shared = { loaded: false, loading: false, household: null, expenses: [], settlements: [], error: null };
 
   function sharedMe() { return Cloud.user(); }
   function sharedPartner() {
@@ -3202,6 +3202,7 @@
   async function loadShared() {
     if (shared.loading) return;
     shared.loading = true;
+    shared.error = null;
     try {
       shared.household = await Cloud.getHousehold();
       if (shared.household) {
@@ -3215,6 +3216,10 @@
       }
     } catch (e) {
       console.error('Error al cargar gastos compartidos', e);
+      // No pisar shared.household con null: si ya lo teníamos cargado de
+      // antes (ej. un refresh que falló), mejor mostrar lo viejo que hacer
+      // desaparecer de golpe el hogar y ofrecer "crear hogar" de nuevo.
+      shared.error = friendlyCloudError(e);
     }
     shared.loaded = true;
     shared.loading = false;
@@ -3484,6 +3489,26 @@
     if (!shared.loaded) {
       el.innerHTML = `<div class="card"><div class="empty">Cargando…</div></div>`;
       loadShared();
+      return;
+    }
+
+    if (!shared.household && shared.error) {
+      // Si falló la carga no hay forma de saber si es porque de verdad no
+      // tenés hogar o porque la consulta explotó (ej. falta correr una
+      // migración de supabase-schema.sql) — mostrar el onboarding de
+      // "crear hogar" en ese caso arriesga a que crees uno duplicado.
+      el.innerHTML = `<div class="card">
+        <h2 class="card-title">Gastos compartidos</h2>
+        <div class="empty">
+          No se pudo cargar tu hogar compartido.<br><br>
+          <span class="hint">${esc(shared.error)}</span><br><br>
+          <button class="btn btn-primary btn-sm" id="btn-retry-shared">Reintentar</button>
+        </div>
+      </div>`;
+      $('#btn-retry-shared', el).addEventListener('click', () => {
+        shared.loaded = false;
+        render();
+      });
       return;
     }
 
