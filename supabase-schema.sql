@@ -213,3 +213,14 @@ end;
 $$;
 
 grant execute on function public.redeem_household_invite(text) to authenticated;
+
+-- ============================================================================
+-- Nombre a elección para la vista Compartido (en vez de mostrar el usuario
+-- de tu email). Cada quien solo puede editar su propia fila.
+-- ============================================================================
+
+alter table public.household_members add column if not exists display_name text;
+
+drop policy if exists "household_members_update_self" on public.household_members;
+create policy "household_members_update_self" on public.household_members
+  for update using (user_id = auth.uid()) with check (user_id = auth.uid());

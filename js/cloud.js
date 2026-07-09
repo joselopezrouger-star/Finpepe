@@ -200,10 +200,19 @@ const Cloud = (() => {
     const household = rows[0].households;
     const { data: members, error: mErr } = await cl
       .from('household_members')
-      .select('user_id, email')
+      .select('user_id, email, display_name')
       .eq('household_id', household.id);
     if (mErr) throw mErr;
     return { ...household, members: members || [] };
+  }
+
+  async function updateDisplayName(householdId, name) {
+    const cl = ensureClient();
+    if (!cl || !user()) throw new Error('Iniciá sesión primero.');
+    const { error } = await cl.from('household_members')
+      .update({ display_name: name.trim() || null })
+      .eq('household_id', householdId).eq('user_id', user().id);
+    if (error) throw error;
   }
 
   async function createHousehold(name) {
@@ -296,7 +305,7 @@ const Cloud = (() => {
   return {
     available, config, saveConfig, clearConfig, isConfigured, hasDefaults,
     init, user, signUp, signIn, signOut, signInWithGoogle, linkGoogle, hasGoogle, pull, push, schedulePush,
-    getHousehold, createHousehold, createInvite, redeemInvite, leaveHousehold,
+    getHousehold, createHousehold, createInvite, redeemInvite, leaveHousehold, updateDisplayName,
     listSharedExpenses, addSharedExpense, deleteSharedExpense,
     listSettlements, addSettlement, deleteSettlement,
     get lastError() { return lastError; },
