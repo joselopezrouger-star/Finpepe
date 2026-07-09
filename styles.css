@@ -849,22 +849,28 @@ table.data.cat-breakdown-table th, table.data.cat-breakdown-table td { padding: 
 table.data.cat-breakdown-table th:first-child, table.data.cat-breakdown-table td:first-child { padding-left: 0; }
 table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20px; }
 
-/* Compras en cuotas: mini-Gantt (una fila por compra, una columna por mes;
-   celda llena = esa compra tiene cuota ese mes). La fila de Total va con
-   borde propio para separarla del resto, como un pie de tabla. */
-.inst-gantt-cell { color: var(--muted); }
-.inst-gantt-cell.has {
-  color: var(--ink);
-  font-weight: 650;
-  background: var(--accent-wash);
-  border-radius: 6px;
+/* Compras en cuotas: leyenda de colores del gráfico apilado (una serie por
+   compra) y lista de filas con el detalle — sin tabla ni scroll lateral,
+   se acomoda sola en el ancho de la tarjeta. */
+.inst-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; }
+.inst-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.inst-row-list { display: grid; gap: 8px; }
+.inst-row {
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
 }
-table.data.inst-gantt tfoot td {
-  border-top: 2px solid var(--border-strong);
-  border-bottom: 0;
-  font-weight: 700;
-  color: var(--ink);
-}
+.inst-row.rowlink { cursor: pointer; }
+.inst-row.rowlink:hover { border-color: var(--border-strong); }
+.inst-row-main { flex: 1; min-width: 0; }
+.inst-row-title { font-size: 13px; font-weight: 500; color: var(--ink); }
+.inst-row-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.inst-row-amounts { text-align: right; flex: none; }
+.inst-row-amount { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.inst-row-total { font-size: 11.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.inst-row-amount-label { color: var(--muted); font-size: 10.5px; }
 
 /* Selector de mes de "Categorías": misma píldora que la tarjeta principal
    pero suelta (no dentro de una columna de anillo). */
