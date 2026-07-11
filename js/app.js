@@ -3659,12 +3659,19 @@
     const totals = partner ? sharedTotals() : { mine: 0, theirs: 0 };
 
     // Imagen según quién debe (chiste privado entre los dos), dentro de la
-    // tarjeta Deudas: la de "estás en el horno" si el balance es negativo,
-    // la de "te deben" si es positivo. No se muestra si están a mano.
+    // tarjeta Deudas. A diferencia del resto de la tarjeta (que habla en
+    // segunda persona, relativo a quien mira), la imagen tiene que ser la
+    // MISMA para los dos integrantes del hogar — si no, cada uno vería la
+    // versión "vos debés/te deben" desde su propia perspectiva y verían
+    // fotos distintas mirando la misma pantalla. Por eso se ancla a quién
+    // creó el hogar (un dato fijo, igual para ambos) en vez de a "me".
+    const creatorIsDebtor = partner
+      ? (shared.household.created_by === sharedMe().id ? meIsDebtor : !meIsDebtor)
+      : false;
     const imageHTML = (partner && balAbs >= 0.01)
       ? `<div class="shared-image">
-          <img src="assets/${meIsDebtor ? 'compartido-debes.jpg' : 'compartido-te-deben.jpg'}"
-               alt="${meIsDebtor ? 'Le debés plata' : 'Te deben plata'}">
+          <img src="assets/${creatorIsDebtor ? 'compartido-debes.jpg' : 'compartido-te-deben.jpg'}"
+               alt="${creatorIsDebtor ? 'Le debés plata' : 'Te deben plata'}">
         </div>`
       : '';
 
