@@ -63,6 +63,8 @@ const Store = (() => {
       ratesUpdatedAt: null,     // ISO string
       useSubcategories: true,   // false = todas las categorías en una sola lista plana
       cardMonthBasis: 'compra', // 'compra' | 'vencimiento' — en qué mes cuenta un gasto con tarjeta de crédito
+      autoLeftoverIncome: false, // true = acredita el Balance del mes anterior (si dio positivo) como Ingreso al empezar cada mes
+      leftoverLastGen: null,     // 'YYYY-MM' del último mes ya acreditado — ver generateLeftoverIncome() en app.js
     },
     categories: seedCategories(),
     methods: seedMethods(),
