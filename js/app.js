@@ -541,6 +541,69 @@
     return monthKeyOf(t.date);
   }
 
+  /* Ahorros acumulados hasta fin de un mes (suma de entries con fecha
+     anterior al 1° del mes siguiente, convertidos a moneda de
+     visualización). Se usa tanto en Resumen ("aportado este mes" = la
+     diferencia entre dos de estos) como en monthBalance() de abajo. */
+  function savingsAtEndOf(mk) {
+    const cutoff = `${addMonthsKey(mk, 1)}-01`;
+    let total = 0;
+    for (const s of S().savings) {
+      const v = convOrNull(s.entries.filter((e) => e.date < cutoff).reduce((a, e) => a + e.amount, 0), s.currency);
+      if (v != null) total += v;
+    }
+    return total;
+  }
+
+  /* Balance de un mes cualquiera: mismo cálculo que "Balance del mes" en
+     Resumen (ingresos − gastos − aportado a ahorros ese mes). Se usa para
+     el sobrante automático del mes anterior, ver generateLeftoverIncome(). */
+  function monthBalance(mk) {
+    const inMonth = S().transactions.filter((t) => effectiveMonthOf(t) === mk);
+    const inc = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
+    const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
+    const savingsMonth = savingsAtEndOf(mk) - savingsAtEndOf(addMonthsKey(mk, -1));
+    return inc - exp - savingsMonth;
+  }
+
+  /* ================= Sobrante del mes anterior: generación automática =================
+     Si está activado en Ajustes, cada vez que arranca un mes nuevo se le
+     acredita como Ingreso el Balance del mes recién terminado, cuando dio
+     positivo. Sin esto, si ese sobrante se termina usando más adelante
+     (por ejemplo, para comprar más ahorro), "Balance del mes" de ESE mes
+     posterior queda mentiroso: resta el aporte a ahorros completo aunque
+     una parte de esa plata no salió del ingreso de ese mes. */
+  function otrosIngresosCategoryId() {
+    if (S().categories.some((c) => c.id === 'c-otros-i')) return 'c-otros-i';
+    const fallback = S().categories.find((c) => c.type === 'ingreso');
+    return fallback ? fallback.id : null;
+  }
+  function generateLeftoverIncome() {
+    if (!S().settings.autoLeftoverIncome) return;
+    const catId = otrosIngresosCategoryId();
+    if (!catId) return; // no hay ninguna categoría de ingreso para asignarle
+    const cm = curMonth();
+    const s = S().settings;
+    let m = s.leftoverLastGen ? addMonthsKey(s.leftoverLastGen, 1) : cm;
+    let changed = false;
+    while (m <= cm) {
+      const amt = Math.round(monthBalance(addMonthsKey(m, -1)) * 100) / 100;
+      if (amt > 0) {
+        const [y, mo] = m.split('-').map(Number);
+        const d = clampDate(y, mo - 1, 1);
+        S().transactions.push({
+          id: Store.uid(), date: dateToStr(d), type: 'ingreso', amount: amt,
+          currency: disp(), categoryId: catId, note: 'Sobrante mes anterior',
+          leftoverGen: true, usdSnapshot: usdSnapshotFor(amt, disp()),
+        });
+        changed = true;
+      }
+      s.leftoverLastGen = m;
+      m = addMonthsKey(m, 1);
+    }
+    if (changed) Store.save();
+  }
+
   /* ================= Recurrentes: generación automática ================= */
   function generateRecurring() {
     const cm = curMonth();
@@ -1344,15 +1407,6 @@
     // acumulado al final del mes y al final del mes anterior. Usar el
     // total acumulado directo rompería "Balance del mes" (se iría cada vez
     // más negativo con los meses, aunque no cambie el ritmo de ahorro).
-    const savingsUpTo = (cutoff) => {
-      let total = 0;
-      for (const s of S().savings) {
-        const v = convOrNull(s.entries.filter((e) => e.date < cutoff).reduce((a, e) => a + e.amount, 0), s.currency);
-        if (v != null) total += v;
-      }
-      return total;
-    };
-    const savingsAtEndOf = (mkk) => savingsUpTo(`${addMonthsKey(mkk, 1)}-01`);
     const totalSavings = savingsAtEndOf(mk);
     const totalSavingsPrev = savingsAtEndOf(prevMk);
     const savingsMonth = totalSavings - totalSavingsPrev;
@@ -1702,7 +1756,7 @@
                   </div>`;
                 }
                 const inst = t.installment ? ` · cuota ${t.installment.k}/${t.installment.n}` : '';
-                const rec = t.recurringId ? ' · fijo' : '';
+                const rec = t.recurringId ? ' · fijo' : (t.leftoverGen ? ' · sobrante' : '');
                 const cur = t.currency === 'USD' ? ' · USD' : '';
                 const isIncome = t.type === 'ingreso';
                 const sign = isIncome ? '+' : '−';
@@ -2909,6 +2963,25 @@
 
         <div class="card">
           <h2 class="card-title">
+            <span>Sobrante del mes anterior</span>
+            <label class="subcats-toggle">
+              Automático
+              <input type="checkbox" id="set-leftover" ${s.autoLeftoverIncome ? 'checked' : ''}>
+            </label>
+          </h2>
+          <div class="hint">
+            Si al terminar un mes te queda plata sin gastar ni ahorrar y la usás recién el mes
+            siguiente (por ejemplo, para comprar más ahorro), esa plata no es un ingreso nuevo de
+            ese mes — pero si no se registra como tal, el Balance del mes queda mentiroso.
+            Con esto activado, apenas empieza un mes se carga solo un Ingreso ("Sobrante mes
+            anterior", categoría Otros ingresos) por el Balance del mes que acaba de terminar,
+            si dio positivo. Se genera una sola vez por mes y después se puede editar o borrar
+            como cualquier movimiento.
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">
             <span>Categorías</span>
             <label class="subcats-toggle">
               Subcategorías
@@ -2978,6 +3051,19 @@
     $('#set-cardmonth', el).addEventListener('change', (e) => {
       S().settings.cardMonthBasis = e.target.value;
       Store.save();
+      render();
+    });
+    $('#set-leftover', el).addEventListener('change', (e) => {
+      S().settings.autoLeftoverIncome = e.target.checked;
+      // Al activarlo por primera vez, arranca desde el mes actual (no
+      // acredita retroactivamente años de historial sin que el usuario lo
+      // pida) — igual que un movimiento fijo nuevo, que tampoco genera
+      // meses pasados.
+      if (e.target.checked && !S().settings.leftoverLastGen) {
+        S().settings.leftoverLastGen = addMonthsKey(curMonth(), -1);
+      }
+      Store.save();
+      generateLeftoverIncome();
       render();
     });
     $('#set-subcats', el).addEventListener('change', (e) => {
@@ -3908,6 +3994,7 @@
 
   function init() {
     generateRecurring();
+    generateLeftoverIncome();
 
     $$('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
       const grp = GROUPS.find((g) => g.key === b.dataset.group);
