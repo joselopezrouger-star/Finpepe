@@ -373,25 +373,34 @@
   }
   /* Los candidatos de 'closingDay' para un mes dado: el valor "efectivo"
      de ese mes (el ajuste puntual si tiene uno, si no el día habitual de
-     la tarjeta) y, si tiene un ajuste puntual, TAMBIÉN el día habitual sin
-     ajustar — porque en la vida real ambos pueden caer el mismo mes
-     calendario. Por ejemplo: cierre habitual día 30, pero un ajuste
-     puntual corrió el cierre de julio al día 2 (el banco lo adelantó); el
-     ciclo siguiente vuelve a cerrar normalmente, y ese cierre "de
-     siempre" (30) cae en el mismo julio, ~28 días después del ajustado.
-     Ignorar esa segunda fecha hace que el próximo cierre salte directo a
-     agosto, un mes de más.
+     la tarjeta) y, si tiene un ajuste puntual BIEN separado del día
+     habitual, TAMBIÉN el día habitual sin ajustar — porque en la vida
+     real ambos pueden caer el mismo mes calendario. Por ejemplo: cierre
+     habitual día 30, pero un ajuste puntual corrió el cierre de julio al
+     día 2 (el banco lo adelantó); el ciclo siguiente vuelve a cerrar
+     normalmente, y ese cierre "de siempre" (30) cae en el mismo julio,
+     ~28 días después del ajustado. Ignorar esa segunda fecha hace que el
+     próximo cierre salte directo a agosto, un mes de más.
+     El mínimo de días es clave: si el ajuste es un corrimiento chico
+     (ej. día habitual 18, ajuste a día 16 — el banco lo corrió 2 días,
+     no lo adelantó un ciclo entero), el día habitual NO es un segundo
+     cierre real ese mes, es simplemente el valor viejo que dejó de
+     aplicar. Sin este mínimo, "Ver próximos resúmenes" listaba el mismo
+     mes dos veces (16/07 Y 18/07) como si fueran dos resúmenes distintos.
      Para 'dueDay' esto NO aplica: el vencimiento de un resumen es uno
      solo, no se encadena mes a mes como el cierre. Devolver también el
      día habitual como candidato hacía que un ajuste que corre el
      vencimiento para MÁS ADELANTE en el mes (ej. del 7 al 13) quedara
      ignorado — el día habitual (7) seguía "calificando" como candidato
      más temprano y le ganaba al ajuste real (13). */
+  const CARD_CYCLE_MIN_GAP_DAYS = 15;
   function cardDateCandidates(card, kind, y, m0) {
     const eff = cardDate(card, kind, y, m0);
     if (kind !== 'closingDay') return [eff];
     const base = clampDate(y, m0, card[kind]);
-    return base.getTime() === eff.getTime() ? [eff] : [eff, base].sort((a, b) => a - b);
+    if (base.getTime() === eff.getTime()) return [eff];
+    const gapDays = Math.abs(base - eff) / (24 * 60 * 60 * 1000);
+    return gapDays >= CARD_CYCLE_MIN_GAP_DAYS ? [eff, base].sort((a, b) => a - b) : [eff];
   }
   /* Próxima fecha de 'kind' a partir de 'from' (inclusive, o estrictamente
      posterior si strict=true), revisando primero los candidatos del
