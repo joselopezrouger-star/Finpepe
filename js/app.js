@@ -355,52 +355,43 @@
   };
 
   /* ================= Ciclo de tarjetas de crédito ================= */
-  /* El día de cierre/vencimiento de una tarjeta puede variar puntualmente en
-     algún período (el banco lo corre). card.overrides guarda, por mes de
-     cierre ('YYYY-MM'), el día que pisa al general de la tarjeta ese mes. */
+  /* Cada resumen (cierre + vencimiento) se carga a mano desde "Cargar
+     resumen", con su fecha real — no hay un "día habitual" fijo que se
+     define una sola vez al crear la tarjeta. card.overrides guarda, por
+     mes de cierre ('YYYY-MM'), el resumen que cargaste para ese mes.
+     Para un mes sin resumen cargado (por ejemplo, uno futuro con una
+     cuota pendiente), se asume el día del ÚLTIMO resumen cargado antes
+     de ese mes — así no hace falta cargar seis meses para adelante para
+     que el Gantt de cuotas tenga algo que mostrar, y ese valor se
+     autocorrige solo apenas cargás el resumen real de ese mes. */
   function periodKey(y, m0) {
     const d = new Date(y, m0, 1);
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
   }
   function cardDayFor(card, kind, y, m0) {
     const key = periodKey(y, m0);
-    const ov = card.overrides && card.overrides[key];
-    return (ov && ov[kind] != null) ? ov[kind] : card[kind];
+    const overrides = card.overrides || {};
+    let day = null;
+    for (const k of Object.keys(overrides).sort()) {
+      if (k > key) break;
+      if (overrides[k][kind] != null) day = overrides[k][kind];
+    }
+    // Compatibilidad con tarjetas creadas antes de este cambio, que
+    // traían un día de cierre/vencimiento fijo puesto al crearlas (a las
+    // tarjetas nuevas ya no se les pide eso: arrancan sin resúmenes
+    // cargados). Solo se usa como último recurso, para meses sin ningún
+    // resumen cargado todavía ni antes ni en ese período.
+    if (day == null && card[kind] != null) day = card[kind];
+    return day;
   }
   function cardDate(card, kind, y, m0) {
-    const d = new Date(y, m0, 1);
-    return clampDate(d.getFullYear(), d.getMonth(), cardDayFor(card, kind, y, m0));
+    const day = cardDayFor(card, kind, y, m0);
+    if (day == null) return null;
+    return clampDate(y, m0, day);
   }
-  /* Los candidatos de 'closingDay' para un mes dado: el valor "efectivo"
-     de ese mes (el ajuste puntual si tiene uno, si no el día habitual de
-     la tarjeta) y, si tiene un ajuste puntual BIEN separado del día
-     habitual, TAMBIÉN el día habitual sin ajustar — porque en la vida
-     real ambos pueden caer el mismo mes calendario. Por ejemplo: cierre
-     habitual día 30, pero un ajuste puntual corrió el cierre de julio al
-     día 2 (el banco lo adelantó); el ciclo siguiente vuelve a cerrar
-     normalmente, y ese cierre "de siempre" (30) cae en el mismo julio,
-     ~28 días después del ajustado. Ignorar esa segunda fecha hace que el
-     próximo cierre salte directo a agosto, un mes de más.
-     El mínimo de días es clave: si el ajuste es un corrimiento chico
-     (ej. día habitual 18, ajuste a día 16 — el banco lo corrió 2 días,
-     no lo adelantó un ciclo entero), el día habitual NO es un segundo
-     cierre real ese mes, es simplemente el valor viejo que dejó de
-     aplicar. Sin este mínimo, "Ver próximos resúmenes" listaba el mismo
-     mes dos veces (16/07 Y 18/07) como si fueran dos resúmenes distintos.
-     Para 'dueDay' esto NO aplica: el vencimiento de un resumen es uno
-     solo, no se encadena mes a mes como el cierre. Devolver también el
-     día habitual como candidato hacía que un ajuste que corre el
-     vencimiento para MÁS ADELANTE en el mes (ej. del 7 al 13) quedara
-     ignorado — el día habitual (7) seguía "calificando" como candidato
-     más temprano y le ganaba al ajuste real (13). */
-  const CARD_CYCLE_MIN_GAP_DAYS = 15;
   function cardDateCandidates(card, kind, y, m0) {
     const eff = cardDate(card, kind, y, m0);
-    if (kind !== 'closingDay') return [eff];
-    const base = clampDate(y, m0, card[kind]);
-    if (base.getTime() === eff.getTime()) return [eff];
-    const gapDays = Math.abs(base - eff) / (24 * 60 * 60 * 1000);
-    return gapDays >= CARD_CYCLE_MIN_GAP_DAYS ? [eff, base].sort((a, b) => a - b) : [eff];
+    return eff ? [eff] : [];
   }
   /* Próxima fecha de 'kind' a partir de 'from' (inclusive, o estrictamente
      posterior si strict=true), revisando primero los candidatos del
@@ -427,22 +418,26 @@
     }
     return cardDate(card, kind, before.getFullYear(), before.getMonth() - 3);
   }
+  // Devuelve null si la tarjeta todavía no tiene ningún resumen cargado
+  // (ni uno propio ni el día fijo de compatibilidad de tarjetas viejas):
+  // no hay nada de qué partir para calcular un ciclo.
   function cardCycle(card) {
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const close = nextCardDate(card, 'closingDay', now, false);
+    if (!close) return null;
     const prevClose = prevCardDate(card, 'closingDay', close);
-    const prevPrevClose = prevCardDate(card, 'closingDay', prevClose);
-    const dueAfter = (c) => nextCardDate(card, 'dueDay', c, true);
+    const prevPrevClose = prevClose ? prevCardDate(card, 'closingDay', prevClose) : null;
+    const dueAfter = (c) => c ? nextCardDate(card, 'dueDay', c, true) : null;
     return { close, prevClose, prevPrevClose, due: dueAfter(close), prevDue: dueAfter(prevClose) };
   }
 
   /* Próximos N resúmenes (cierre + vencimiento), arrancando por el ciclo
-     actual, respetando los overrides puntuales que ya estén cargados. */
+     actual, respetando los resúmenes puntuales que ya estén cargados. */
   function cardUpcomingCycles(card, n) {
     const now = new Date(); now.setHours(0, 0, 0, 0);
     let close = nextCardDate(card, 'closingDay', now, false);
     const out = [];
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < n && close; i++) {
       const due = nextCardDate(card, 'dueDay', close, true);
       out.push({ close, due });
       close = nextCardDate(card, 'closingDay', close, true);
@@ -452,18 +447,47 @@
 
   const DAY_MS = 24 * 60 * 60 * 1000;
   /* Línea de tiempo del ciclo: último cierre → su vencimiento → próximo
-     cierre, con los puntos y el tramo recorrido pintados. */
+     cierre, con los puntos y el tramo recorrido pintados. Si todavía no
+     se cargó ningún resumen (tarjeta nueva) o solo se cargó el que viene
+     (sin uno anterior de referencia), se muestra una versión más simple
+     en vez de romper con datos faltantes. */
   function cardCycleTimeline(card) {
     const cy = cardCycle(card);
+    if (!cy) {
+      return `<div class="cycle-card"><div class="empty">Todavía no cargaste ningún resumen de esta tarjeta. Usá "Cargar resumen" para agregar el cierre y vencimiento actuales.</div></div>`;
+    }
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const daysToClose = Math.round((cy.close - today) / DAY_MS);
+    const daysLine = `<div class="cycle-days">${daysToClose <= 0 ? 'Cierra hoy.' : `Faltan ${daysToClose} día${daysToClose === 1 ? '' : 's'} para el cierre.`}</div>`;
+    const shortDate = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+
+    if (!cy.prevClose || !cy.prevDue) {
+      // Solo tenemos el próximo cierre (y su vencimiento): timeline de 2
+      // puntos, sin el tramo recorrido del ciclo anterior.
+      return `
+        <div class="cycle-card">
+          ${daysLine}
+          <div class="cycle-track cycle-track-2">
+            <span class="cd-date" style="grid-column:1;grid-row:1;justify-self:start">${esc(shortDate(cy.close))}</span>
+            <span class="cd-date" style="grid-column:3;grid-row:1;justify-self:end">${cy.due ? esc(shortDate(cy.due)) : '—'}</span>
+
+            <span class="cycle-dot filled" style="grid-column:1;grid-row:2;justify-self:start"></span>
+            <span class="cycle-line" style="grid-column:2;grid-row:2;--p:0%"></span>
+            <span class="cycle-dot" style="grid-column:3;grid-row:2;justify-self:end"></span>
+
+            <span class="cd-tag" style="grid-column:1;grid-row:3;justify-self:start">Próx. cierre</span>
+            <span class="cd-tag" style="grid-column:3;grid-row:3;justify-self:end">Vencimiento</span>
+          </div>
+          <div class="hint" style="margin-top:8px">Cargá también el resumen anterior desde "Cargar resumen" para ver el progreso completo del ciclo.</div>
+        </div>`;
+    }
+
     const segTotal = cy.close - cy.prevDue;
     const segDone = Math.min(Math.max(today - cy.prevDue, 0), Math.max(segTotal, 1));
     const pct2 = segTotal > 0 ? Math.round((segDone / segTotal) * 100) : 100;
-    const shortDate = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
     return `
       <div class="cycle-card">
-        <div class="cycle-days">${daysToClose <= 0 ? 'Cierra hoy.' : `Faltan ${daysToClose} día${daysToClose === 1 ? '' : 's'} para el cierre.`}</div>
+        ${daysLine}
         <div class="cycle-track">
           <span class="cd-date" style="grid-column:1;grid-row:1;justify-self:start">${esc(shortDate(cy.prevClose))}</span>
           <span class="cd-date" style="grid-column:3;grid-row:1;justify-self:center">${esc(shortDate(cy.prevDue))}</span>
@@ -491,10 +515,12 @@
   }
 
   /* Igual que cardCycle(), pero para el cierre/vencimiento que le toca a una
-     COMPRA puntual (no a "hoy"): a qué resumen cae y cuándo vence ese resumen. */
+     COMPRA puntual (no a "hoy"): a qué resumen cae y cuándo vence ese resumen.
+     Devuelve null si la tarjeta todavía no tiene ningún resumen cargado. */
   function cardCycleFor(card, purchaseDate) {
     const p = new Date(purchaseDate); p.setHours(0, 0, 0, 0);
     const close = nextCardDate(card, 'closingDay', p, false);
+    if (!close) return null;
     const due = nextCardDate(card, 'dueDay', close, true);
     return { close, due };
   }
@@ -507,7 +533,10 @@
   function effectiveMonthOf(t) {
     if (t.type === 'gasto' && S().settings.cardMonthBasis === 'vencimiento') {
       const m = methodById(t.methodId);
-      if (m && m.kind === 'credito') return monthKeyOf(dateToStr(cardCycleFor(m, parseDate(t.date)).due));
+      if (m && m.kind === 'credito') {
+        const cyc = cardCycleFor(m, parseDate(t.date));
+        if (cyc && cyc.due) return monthKeyOf(dateToStr(cyc.due));
+      }
     }
     return monthKeyOf(t.date);
   }
@@ -1395,16 +1424,19 @@
       };
     }).filter((r) => r.income > 0 || r.expense > 0);
 
-    // Vencimientos de tarjetas
+    // Vencimientos de tarjetas: solo las que ya tienen al menos dos
+    // resúmenes cargados (el actual y el anterior) — sin eso no hay un
+    // "próximo vencimiento" resoluble para mostrar todavía.
     const cards = S().methods.filter((m) => m.kind === 'credito');
     const cardRows = cards.map((c) => {
       const cy = cardCycle(c);
+      if (!cy || !cy.prevClose || !cy.prevDue) return null;
       return {
         card: c, cy,
         current: cardPeriodTotal(c.id, cy.prevClose, cy.close),
-        toPay: cardPeriodTotal(c.id, cy.prevPrevClose, cy.prevClose),
+        toPay: cardPeriodTotal(c.id, cy.prevPrevClose || new Date(0), cy.prevClose),
       };
-    }).sort((a, b) => a.cy.due - b.cy.due);
+    }).filter(Boolean).sort((a, b) => a.cy.due - b.cy.due);
 
     const pctLeft = (exp <= 0 && savingsMonth <= 0) ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round((balance / inc) * 100))) : 0);
     const pctMonthLeft = monthLeftPct(mk);
@@ -1519,7 +1551,7 @@
 
       <div class="card">
         <h2 class="card-title">Próximos vencimientos</h2>
-        ${cards.length ? `
+        ${cardRows.length ? `
         <div class="due-card-list">
           ${cardRows.slice().sort((a, b) => a.cy.prevDue - b.cy.prevDue).map((r) => {
             const today0 = new Date(); today0.setHours(0, 0, 0, 0);
@@ -1539,7 +1571,9 @@
             </div>`;
           }).join('')}
         </div>`
-        : '<div class="empty">Agregá tus tarjetas de crédito en “Tarjetas y medios” para ver cierres, vencimientos y cuánto vas a pagar.</div>'}
+        : `<div class="empty">${cards.length
+            ? 'Cargá al menos dos resúmenes (el actual y el anterior) desde "Cargar resumen" en cada tarjeta para ver acá cierres, vencimientos y cuánto vas a pagar.'
+            : 'Agregá tus tarjetas de crédito en “Tarjetas y medios” para ver cierres, vencimientos y cuánto vas a pagar.'}</div>`}
       </div>`;
 
     // Gráficos
@@ -1874,7 +1908,7 @@
   /* ================= Vista: Tarjetas y medios ================= */
   function methodForm(method) {
     const editing = !!method;
-    const m = method || { name: '', kind: 'efectivo', closingDay: 25, dueDay: 5 };
+    const m = method || { name: '', kind: 'efectivo' };
     const body = `
       <div class="field">
         <label for="m-name">Nombre</label>
@@ -1888,25 +1922,11 @@
             `<option value="${k}" ${m.kind === k ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
       </div>
-      <div class="field-row" id="m-card-days" hidden>
-        <div class="field">
-          <label for="m-close">Día de cierre</label>
-          <input type="number" name="closingDay" id="m-close" min="1" max="31" step="1" value="${esc(m.closingDay ?? 25)}">
-        </div>
-        <div class="field">
-          <label for="m-due">Día de vencimiento</label>
-          <input type="number" name="dueDay" id="m-due" min="1" max="31" step="1" value="${esc(m.dueDay ?? 5)}">
-        </div>
-      </div>
-      <span class="hint" id="m-hint" hidden>Si el vencimiento cae con un número de día menor al de cierre (por ej. cierre 25, vencimiento 5), la app entiende que es al mes siguiente. En meses más cortos, el día 29-31 se ajusta solo al último día del mes. Si un mes puntual el banco corre la fecha, lo podés ajustar después desde "Ajustar fechas" en la tarjeta.</span>`;
+      <span class="hint" id="m-hint" hidden>El cierre y vencimiento de cada resumen se cargan a mano, con su fecha real, desde "Cargar resumen" en la tarjeta (una vez guardada acá).</span>`;
 
     const dlg = openDialog(editing ? 'Editar medio de pago' : 'Nuevo medio de pago', body, {
       onSubmit(d) {
         const data = { name: d.name.trim(), kind: d.kind };
-        if (d.kind === 'credito') {
-          data.closingDay = Math.min(31, Math.max(1, parseInt(d.closingDay, 10) || 25));
-          data.dueDay = Math.min(31, Math.max(1, parseInt(d.dueDay, 10) || 5));
-        }
         if (editing) Object.assign(method, data);
         else S().methods.push({ id: Store.uid(), ...data });
         Store.save();
@@ -1915,32 +1935,31 @@
     });
     const toggle = () => {
       const isCredit = $('#m-kind', dlg).value === 'credito';
-      $('#m-card-days', dlg).hidden = !isCredit;
       $('#m-hint', dlg).hidden = !isCredit;
     };
     $('#m-kind', dlg).addEventListener('change', toggle);
     toggle();
   }
 
-  /* Ajuste puntual de cierre/vencimiento para un período (mes) puntual,
-     para cuando el banco corre la fecha ese mes en particular. */
-  // Ajuste puntual: se pide la fecha REAL de cierre/vencimiento (no un
-  // número de día suelto) para no tener que adivinar a qué mes corresponde
-  // cada uno — el día de mes que usa la lógica de ciclos se saca de ahí.
+  /* Carga a mano el cierre y vencimiento REALES de un resumen puntual (no
+     un número de día suelto): cada resumen es un dato explícito que vos
+     cargás, no algo que la app adivine de un "día habitual" fijo. El día
+     de mes que usa el resto de la lógica de ciclos se saca de acá — ver
+     cardDayFor(). */
   function cardOverrideForm(card) {
     const cy = cardCycle(card);
     const overrides = card.overrides || {};
-    // Si el período que toca editar ya tiene un ajuste cargado, precargar
-    // SUS fechas (no las recalculadas de cy.close/cy.due): una vez que el
-    // día ajustado ya pasó dentro del mes, cardCycle() salta al cierre
-    // "de siempre" siguiente para saber cuál es el PRÓXIMO cierre — pero
-    // reabrir este formulario es para editar el ajuste ya cargado de ese
-    // período, no ese cierre recalculado. Sin esto, reabrir el diálogo y
-    // guardar sin tocar nada pisaba el ajuste real con la fecha de
-    // siempre y borraba el vencimiento ya guardado.
-    const curKey = periodKey(cy.close.getFullYear(), cy.close.getMonth());
-    const curOv = overrides[curKey];
-    const prefClose = (curOv && curOv.closeDateStr) || dateToStr(cy.close);
+    // Si el período que toca cargar ya tiene un resumen guardado,
+    // precargar SUS fechas (no las recalculadas de cy.close/cy.due): una
+    // vez que el día cargado ya pasó dentro del mes, cardCycle() salta al
+    // siguiente para saber cuál es el PRÓXIMO cierre — pero reabrir este
+    // formulario es para editar el resumen ya cargado de ese período, no
+    // ese cierre recalculado. Sin esto, reabrir el diálogo y guardar sin
+    // tocar nada pisaba el dato real con la fecha recalculada y borraba
+    // el vencimiento ya guardado.
+    const curKey = cy ? periodKey(cy.close.getFullYear(), cy.close.getMonth()) : null;
+    const curOv = curKey ? overrides[curKey] : null;
+    const prefClose = (curOv && curOv.closeDateStr) || (cy ? dateToStr(cy.close) : '');
     const prefDue = (curOv && curOv.dueDateStr) || '';
     const rows = Object.keys(overrides).sort().map((key) => {
       const ov = overrides[key];
@@ -1952,26 +1971,26 @@
       else if (ov.dueDay != null) parts.push(`vencimiento día ${ov.dueDay}`);
       return `<div class="ov-row" data-ovrow="${esc(key)}">
         <span>${esc(label)}: ${parts.join(' · ') || 'sin cambios'}</span>
-        <button type="button" class="row-del" data-ovdel="${esc(key)}" aria-label="Quitar ajuste">✕</button>
+        <button type="button" class="row-del" data-ovdel="${esc(key)}" aria-label="Quitar">✕</button>
       </div>`;
     }).join('');
 
     const body = `
       <div class="field">
-        <label for="ov-close">Fecha real de cierre este período</label>
+        <label for="ov-close">Fecha real de cierre de este resumen</label>
         <input type="date" name="closeDate" id="ov-close" value="${esc(prefClose)}" required>
       </div>
       <div class="field">
-        <label for="ov-due">Fecha real de vencimiento este período <span class="hint">(opcional, si también cambió)</span></label>
-        <input type="date" name="dueDate" id="ov-due" value="${esc(prefDue)}" placeholder="usual: ${esc(dateToStr(cy.due))}">
+        <label for="ov-due">Fecha real de vencimiento de este resumen <span class="hint">(opcional, si no la sabés todavía)</span></label>
+        <input type="date" name="dueDate" id="ov-due" value="${esc(prefDue)}" ${cy && cy.due ? `placeholder="ej: ${esc(dateToStr(cy.due))}"` : ''}>
       </div>
-      <span class="hint">Elegí la fecha de cierre tal cual va a caer este período (aunque no cambie, ancla a qué mes aplica el ajuste); la de vencimiento solo si también se corrió.</span>
-      ${rows ? `<div class="ov-list"><span class="hint">Ajustes ya cargados:</span>${rows}</div>` : ''}
+      <span class="hint">Cargá la fecha tal cual va a caer (o cayó) este resumen — no hay un "día habitual" fijo, cada resumen se carga con su fecha real.</span>
+      ${rows ? `<div class="ov-list"><span class="hint">Resúmenes cargados:</span>${rows}</div>` : ''}
       <button type="button" class="link-btn" id="ov-toggle-upcoming">Ver próximos resúmenes</button>
       <div id="ov-upcoming" hidden></div>`;
 
-    const dlg = openDialog(`Ajustar fechas de ${card.name}`, body, {
-      submitLabel: 'Guardar ajuste',
+    const dlg = openDialog(`Cargar resumen de ${card.name}`, body, {
+      submitLabel: 'Guardar resumen',
       onSubmit(d) {
         if (!d.closeDate) return false;
         const closeDate = parseDate(d.closeDate);
@@ -2005,15 +2024,17 @@
       const btn = ev.currentTarget;
       const willShow = upcomingBox.hidden;
       if (willShow && !upcomingBox.dataset.filled) {
-        const rowsHtml = cardUpcomingCycles(card, 6).map((c) => `<tr>
-          <td>${esc(monthLabel(periodKey(c.close.getFullYear(), c.close.getMonth())))}</td>
-          <td>${esc(fmtDateShort(dateToStr(c.close)))}</td>
-          <td>${esc(fmtDateShort(dateToStr(c.due)))}</td>
-        </tr>`).join('');
-        upcomingBox.innerHTML = `<div class="table-scroll"><table class="data">
-          <thead><tr><th>Resumen</th><th>Cierre</th><th>Vencimiento</th></tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table></div>`;
+        const cycles = cardUpcomingCycles(card, 6);
+        upcomingBox.innerHTML = cycles.length
+          ? `<div class="table-scroll"><table class="data">
+              <thead><tr><th>Resumen</th><th>Cierre</th><th>Vencimiento</th></tr></thead>
+              <tbody>${cycles.map((c) => `<tr>
+                <td>${esc(monthLabel(periodKey(c.close.getFullYear(), c.close.getMonth())))}</td>
+                <td>${esc(fmtDateShort(dateToStr(c.close)))}</td>
+                <td>${c.due ? esc(fmtDateShort(dateToStr(c.due))) : '—'}</td>
+              </tr>`).join('')}</tbody>
+            </table></div>`
+          : '<div class="empty">Cargá el cierre de este resumen arriba para poder proyectar los próximos.</div>';
         upcomingBox.dataset.filled = '1';
       }
       upcomingBox.hidden = !willShow;
@@ -2034,17 +2055,15 @@
           let details = '';
           if (m.kind === 'credito') {
             const cy = cardCycle(m);
-            const current = cardPeriodTotal(m.id, cy.prevClose, cy.close);
-            const toPay = cardPeriodTotal(m.id, cy.prevPrevClose, cy.prevClose);
-            const closeAdj = cy.close.getDate() !== m.closingDay;
-            const dueAdj = cy.prevDue.getDate() !== m.dueDay;
             const nOv = Object.keys(m.overrides || {}).length;
-            details = `${cardCycleTimeline(m)}
-            <dl>
-              <dt>Resumen en curso</dt><dd>${fmtDisp(current)}</dd>
-              <dt>Último resumen</dt><dd>${fmtDisp(toPay)}</dd>
-              ${nOv ? `<dt>Ajustes puntuales</dt><dd>${nOv}${(closeAdj || dueAdj) ? ' (aplicado este período)' : ''}</dd>` : ''}
-            </dl>`;
+            const totalsHTML = cy
+              ? `<dl>
+                  <dt>Resumen en curso</dt><dd>${fmtDisp(cardPeriodTotal(m.id, cy.prevClose || new Date(0), cy.close))}</dd>
+                  ${cy.prevPrevClose ? `<dt>Último resumen</dt><dd>${fmtDisp(cardPeriodTotal(m.id, cy.prevPrevClose, cy.prevClose))}</dd>` : ''}
+                  ${nOv ? `<dt>Resúmenes cargados</dt><dd>${nOv}</dd>` : ''}
+                </dl>`
+              : '';
+            details = `${cardCycleTimeline(m)}${totalsHTML}`;
           } else {
             const monthTotal = sumDisp(S().transactions.filter(
               (t) => t.methodId === m.id && t.type === 'gasto' && monthKeyOf(t.date) === curMonth()));
@@ -2057,7 +2076,7 @@
             </div>
             ${details}
             <div class="entity-actions">
-              ${m.kind === 'credito' ? `<button class="btn btn-sm" data-adjust="${esc(m.id)}">Ajustar fechas</button>` : ''}
+              ${m.kind === 'credito' ? `<button class="btn btn-sm" data-adjust="${esc(m.id)}">Cargar resumen</button>` : ''}
               <button class="btn btn-sm" data-edit="${esc(m.id)}">Editar</button>
               <button class="btn btn-sm btn-danger" data-del="${esc(m.id)}">Eliminar</button>
             </div>
@@ -2065,7 +2084,7 @@
         }).join('')}
       </div>
       ${methods.some((m) => m.kind === 'credito') ? '' :
-        '<div class="card"><div class="empty">Todavía no cargaste ninguna tarjeta de crédito. Agregala con su día de cierre y de vencimiento para seguir tus resúmenes y compras en cuotas.</div></div>'}`;
+        '<div class="card"><div class="empty">Todavía no cargaste ninguna tarjeta de crédito. Agregala y después cargá el cierre y vencimiento de tu resumen actual con "Cargar resumen".</div></div>'}`;
 
     $('#btn-add-method', el).addEventListener('click', () => methodForm(null));
     $$('[data-edit]', el).forEach((b) => b.addEventListener('click', () => {
@@ -2107,11 +2126,13 @@
 
     for (const c of S().methods.filter((m) => m.kind === 'credito')) {
       const due = cardDate(c, 'dueDay', y, mo - 1);
+      if (!due) continue; // todavía no cargó ningún resumen con vencimiento en este mes
       // Resumen que vence en esa fecha: el que cerró justo antes del vencimiento.
       let close = cardDate(c, 'closingDay', due.getFullYear(), due.getMonth());
-      if (close >= due) close = cardDate(c, 'closingDay', due.getFullYear(), due.getMonth() - 1);
+      if (!close || close >= due) close = cardDate(c, 'closingDay', due.getFullYear(), due.getMonth() - 1);
+      if (!close) continue;
       const prevClose = cardDate(c, 'closingDay', close.getFullYear(), close.getMonth() - 1);
-      const amount = cardPeriodTotal(c.id, prevClose, close); // ya en moneda visible
+      const amount = cardPeriodTotal(c.id, prevClose || new Date(0), close); // ya en moneda visible
       events.push({
         date: dateToStr(due), kind: 'card', icon: '💳',
         title: c.name, sub: 'Vencimiento tarjeta · día ' + due.getDate(),
