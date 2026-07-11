@@ -371,18 +371,25 @@
     const d = new Date(y, m0, 1);
     return clampDate(d.getFullYear(), d.getMonth(), cardDayFor(card, kind, y, m0));
   }
-  /* Los candidatos de 'kind' (closingDay/dueDay) para un mes dado: el
-     valor "efectivo" de ese mes (el ajuste puntual si tiene uno, si no el
-     día habitual de la tarjeta) y, si tiene un ajuste puntual, TAMBIÉN el
-     día habitual sin ajustar — porque en la vida real ambos pueden caer
-     el mismo mes calendario. Por ejemplo: cierre habitual día 30, pero un
-     ajuste puntual corrió el cierre de julio al día 2 (el banco lo
-     adelantó); el ciclo siguiente vuelve a cerrar normalmente, y ese
-     cierre "de siempre" (30) cae en el mismo julio, ~28 días después del
-     ajustado. Ignorar esa segunda fecha hace que el próximo cierre salte
-     directo a agosto, un mes de más. */
+  /* Los candidatos de 'closingDay' para un mes dado: el valor "efectivo"
+     de ese mes (el ajuste puntual si tiene uno, si no el día habitual de
+     la tarjeta) y, si tiene un ajuste puntual, TAMBIÉN el día habitual sin
+     ajustar — porque en la vida real ambos pueden caer el mismo mes
+     calendario. Por ejemplo: cierre habitual día 30, pero un ajuste
+     puntual corrió el cierre de julio al día 2 (el banco lo adelantó); el
+     ciclo siguiente vuelve a cerrar normalmente, y ese cierre "de
+     siempre" (30) cae en el mismo julio, ~28 días después del ajustado.
+     Ignorar esa segunda fecha hace que el próximo cierre salte directo a
+     agosto, un mes de más.
+     Para 'dueDay' esto NO aplica: el vencimiento de un resumen es uno
+     solo, no se encadena mes a mes como el cierre. Devolver también el
+     día habitual como candidato hacía que un ajuste que corre el
+     vencimiento para MÁS ADELANTE en el mes (ej. del 7 al 13) quedara
+     ignorado — el día habitual (7) seguía "calificando" como candidato
+     más temprano y le ganaba al ajuste real (13). */
   function cardDateCandidates(card, kind, y, m0) {
     const eff = cardDate(card, kind, y, m0);
+    if (kind !== 'closingDay') return [eff];
     const base = clampDate(y, m0, card[kind]);
     return base.getTime() === eff.getTime() ? [eff] : [eff, base].sort((a, b) => a - b);
   }
@@ -1914,6 +1921,18 @@
   function cardOverrideForm(card) {
     const cy = cardCycle(card);
     const overrides = card.overrides || {};
+    // Si el período que toca editar ya tiene un ajuste cargado, precargar
+    // SUS fechas (no las recalculadas de cy.close/cy.due): una vez que el
+    // día ajustado ya pasó dentro del mes, cardCycle() salta al cierre
+    // "de siempre" siguiente para saber cuál es el PRÓXIMO cierre — pero
+    // reabrir este formulario es para editar el ajuste ya cargado de ese
+    // período, no ese cierre recalculado. Sin esto, reabrir el diálogo y
+    // guardar sin tocar nada pisaba el ajuste real con la fecha de
+    // siempre y borraba el vencimiento ya guardado.
+    const curKey = periodKey(cy.close.getFullYear(), cy.close.getMonth());
+    const curOv = overrides[curKey];
+    const prefClose = (curOv && curOv.closeDateStr) || dateToStr(cy.close);
+    const prefDue = (curOv && curOv.dueDateStr) || '';
     const rows = Object.keys(overrides).sort().map((key) => {
       const ov = overrides[key];
       const label = monthLabel(key);
@@ -1931,11 +1950,11 @@
     const body = `
       <div class="field">
         <label for="ov-close">Fecha real de cierre este período</label>
-        <input type="date" name="closeDate" id="ov-close" value="${esc(dateToStr(cy.close))}" required>
+        <input type="date" name="closeDate" id="ov-close" value="${esc(prefClose)}" required>
       </div>
       <div class="field">
         <label for="ov-due">Fecha real de vencimiento este período <span class="hint">(opcional, si también cambió)</span></label>
-        <input type="date" name="dueDate" id="ov-due" placeholder="usual: ${esc(dateToStr(cy.due))}">
+        <input type="date" name="dueDate" id="ov-due" value="${esc(prefDue)}" placeholder="usual: ${esc(dateToStr(cy.due))}">
       </div>
       <span class="hint">Elegí la fecha de cierre tal cual va a caer este período (aunque no cambie, ancla a qué mes aplica el ajuste); la de vencimiento solo si también se corrió.</span>
       ${rows ? `<div class="ov-list"><span class="hint">Ajustes ya cargados:</span>${rows}</div>` : ''}
@@ -1950,10 +1969,16 @@
         const key = periodKey(closeDate.getFullYear(), closeDate.getMonth());
         const dueDate = d.dueDate ? parseDate(d.dueDate) : null;
         card.overrides = card.overrides || {};
+        // Fusiona con lo que ya hubiera para este período en vez de
+        // reemplazarlo entero: dejar el campo de vencimiento en blanco
+        // significa "no cambiar lo que ya tenía cargado", no "borrarlo".
+        const prevOv = card.overrides[key];
         card.overrides[key] = {
           closingDay: closeDate.getDate(),
           closeDateStr: d.closeDate,
-          ...(dueDate ? { dueDay: dueDate.getDate(), dueDateStr: d.dueDate } : {}),
+          ...(dueDate
+            ? { dueDay: dueDate.getDate(), dueDateStr: d.dueDate }
+            : (prevOv && prevOv.dueDay != null ? { dueDay: prevOv.dueDay, dueDateStr: prevOv.dueDateStr } : {})),
         };
         Store.save();
         render();
@@ -3634,12 +3659,19 @@
     const totals = partner ? sharedTotals() : { mine: 0, theirs: 0 };
 
     // Imagen según quién debe (chiste privado entre los dos), dentro de la
-    // tarjeta Deudas: la de "estás en el horno" si el balance es negativo,
-    // la de "te deben" si es positivo. No se muestra si están a mano.
+    // tarjeta Deudas. A diferencia del resto de la tarjeta (que habla en
+    // segunda persona, relativo a quien mira), la imagen tiene que ser la
+    // MISMA para los dos integrantes del hogar — si no, cada uno vería la
+    // versión "vos debés/te deben" desde su propia perspectiva y verían
+    // fotos distintas mirando la misma pantalla. Por eso se ancla a quién
+    // creó el hogar (un dato fijo, igual para ambos) en vez de a "me".
+    const creatorIsDebtor = partner
+      ? (shared.household.created_by === sharedMe().id ? meIsDebtor : !meIsDebtor)
+      : false;
     const imageHTML = (partner && balAbs >= 0.01)
       ? `<div class="shared-image">
-          <img src="assets/${meIsDebtor ? 'compartido-debes.jpg' : 'compartido-te-deben.jpg'}"
-               alt="${meIsDebtor ? 'Le debés plata' : 'Te deben plata'}">
+          <img src="assets/${creatorIsDebtor ? 'compartido-debes.jpg' : 'compartido-te-deben.jpg'}"
+               alt="${creatorIsDebtor ? 'Le debés plata' : 'Te deben plata'}">
         </div>`
       : '';
 
