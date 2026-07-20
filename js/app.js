@@ -1444,6 +1444,20 @@
       return `<div class="tile-delta"><span class="${cls}">${pctLabel}</span></div>`;
     })();
 
+    // Tasa de ahorro del mes: qué % de los ingresos terminó ahorrado (puede
+    // ser negativa si el aporte del mes fue un retiro). Sin ingresos ese mes
+    // el % no tiene una base válida.
+    const savingsRatePct = inc > 0 ? Math.round((savingsMonth / inc) * 100) : null;
+    const savingsRatePctPrev = incPrev > 0 ? Math.round((savingsMonthPrev / incPrev) * 100) : null;
+    const savingsRateDeltaHTML = (() => {
+      if (savingsRatePct == null || savingsRatePctPrev == null) return '';
+      const diff = savingsRatePct - savingsRatePctPrev;
+      if (diff === 0) return `<div class="tile-delta">= MoM</div>`;
+      const up = diff > 0;
+      const cls = up ? 'up-good' : 'down-bad';
+      return `<div class="tile-delta"><span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(diff)} pp MoM</span></div>`;
+    })();
+
     // Gastos por categoría (top 3 + Otros, para que la tarjeta principal
     // entre compacta al lado del anillo)
     const byCat = new Map();
@@ -1477,6 +1491,22 @@
         expense: sumDisp(list.filter((t) => t.type === 'gasto')),
       };
     }).filter((r) => r.income > 0 || r.expense > 0);
+
+    // Misma ventana de meses, pero para la tasa de ahorro (ahorro/ingresos):
+    // a diferencia del gráfico de arriba, acá sí interesa ver un mes en $0
+    // si no hubo ingresos (una caída real, no un hueco en el eje).
+    const savingsRateRows = months.map((m) => {
+      const list = txs.filter((t) => effectiveMonthOf(t) === m);
+      const incM = sumDisp(list.filter((t) => t.type === 'ingreso'));
+      const savM = savingsAtEndOf(m) - savingsAtEndOf(addMonthsKey(m, -1));
+      const [y, mo] = m.split('-').map(Number);
+      return {
+        label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
+        rate: incM > 0 ? Math.round((savM / incM) * 100) : 0,
+        hasIncome: incM > 0,
+      };
+    });
+    const hasSavingsRateData = savingsRateRows.some((r) => r.hasIncome);
 
     // Vencimientos de tarjetas: solo las que ya tienen al menos dos
     // resúmenes cargados (el actual y el anterior) — sin eso no hay un
@@ -1586,6 +1616,18 @@
         </div>
       </div>
 
+      <div class="grid-2 grid-2-tight">
+        <div class="card tile">
+          <div class="tile-label">Tasa de ahorro · ${esc(monthLabel(mk))}</div>
+          <div class="tile-value ${savingsRatePct == null ? '' : savingsRatePct > 0 ? 'pos' : savingsRatePct < 0 ? 'neg' : ''}">${savingsRatePct == null ? '—' : savingsRatePct + '%'}</div>
+          ${savingsRateDeltaHTML}
+        </div>
+        <div class="card">
+          <h2 class="card-title">Tasa de ahorro · últimos 6 meses</h2>
+          ${hasSavingsRateData ? `<div id="chart-savings-rate"></div>` : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}
+        </div>
+      </div>
+
       <div class="card">
         <h2 class="card-title">
           <span>Ingresos vs. gastos · últimos 6 meses</span>
@@ -1654,6 +1696,11 @@
       Charts.trend(trendEl, trendRows, {});
     }
     Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {});
+    if (hasSavingsRateData) {
+      Charts.lines($('#chart-savings-rate', el), savingsRateRows.map((r) => r.label), [
+        { label: 'Tasa de ahorro', color: Charts.COLORS.income, values: savingsRateRows.map((r) => r.rate) },
+      ], { fmtAxis: (v) => Math.round(v) + '%', ariaLabel: 'Tasa de ahorro por mes' });
+    }
 
     $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
       ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
