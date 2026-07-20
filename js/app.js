@@ -454,7 +454,7 @@
   function cardCycleTimeline(card) {
     const cy = cardCycle(card);
     if (!cy) {
-      return `<div class="cycle-card"><div class="empty">Todavía no cargaste ningún resumen de esta tarjeta. Usá "Cargar resumen" para agregar el cierre y vencimiento actuales.</div></div>`;
+      return `<div class="cycle-card"><div class="empty">Todavía no cargaste ningún resumen de esta tarjeta. Usá "Resúmenes" para agregar el cierre y vencimiento actuales.</div></div>`;
     }
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const daysToClose = Math.round((cy.close - today) / DAY_MS);
@@ -478,7 +478,7 @@
             <span class="cd-tag" style="grid-column:1;grid-row:3;justify-self:start">Próx. cierre</span>
             <span class="cd-tag" style="grid-column:3;grid-row:3;justify-self:end">Vencimiento</span>
           </div>
-          <div class="hint" style="margin-top:8px">Cargá también el resumen anterior desde "Cargar resumen" para ver el progreso completo del ciclo.</div>
+          <div class="hint" style="margin-top:8px">Cargá también el resumen anterior desde "Resúmenes" para ver el progreso completo del ciclo.</div>
         </div>`;
     }
 
@@ -1626,7 +1626,7 @@
           }).join('')}
         </div>`
         : `<div class="empty">${cards.length
-            ? 'Cargá al menos dos resúmenes (el actual y el anterior) desde "Cargar resumen" en cada tarjeta para ver acá cierres, vencimientos y cuánto vas a pagar.'
+            ? 'Cargá al menos dos resúmenes (el actual y el anterior) desde "Resúmenes" en cada tarjeta para ver acá cierres, vencimientos y cuánto vas a pagar.'
             : 'Agregá tus tarjetas de crédito en “Tarjetas y medios” para ver cierres, vencimientos y cuánto vas a pagar.'}</div>`}
       </div>`;
 
@@ -1976,7 +1976,7 @@
             `<option value="${k}" ${m.kind === k ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
       </div>
-      <span class="hint" id="m-hint" hidden>El cierre y vencimiento de cada resumen se cargan a mano, con su fecha real, desde "Cargar resumen" en la tarjeta (una vez guardada acá).</span>`;
+      <span class="hint" id="m-hint" hidden>El cierre y vencimiento de cada resumen se cargan a mano, con su fecha real, desde "Resúmenes" en la tarjeta (una vez guardada acá).</span>`;
 
     const dlg = openDialog(editing ? 'Editar medio de pago' : 'Nuevo medio de pago', body, {
       onSubmit(d) {
@@ -1995,83 +1995,102 @@
     toggle();
   }
 
-  /* Carga a mano el cierre y vencimiento REALES de un resumen puntual (no
-     un número de día suelto): cada resumen es un dato explícito que vos
-     cargás, no algo que la app adivine de un "día habitual" fijo. El día
-     de mes que usa el resto de la lógica de ciclos se saca de acá — ver
-     cardDayFor(). */
-  function cardOverrideForm(card) {
-    const cy = cardCycle(card);
+  /* Cada resumen se identifica por sus DOS fechas (cierre y vencimiento),
+     nunca por "el mes" — es ambiguo apenas cierre y vencimiento caen en
+     meses distintos, o el vencimiento de un resumen cae en medio del
+     ciclo siguiente (algo bastante común). cardResumeRows() arma la
+     lista cronológica de resúmenes ya cargados, más uno "fantasma" al
+     final con la fecha que se ASUME (mismo día que el último cargado)
+     para poder cargarlo con un toque en vez de adivinar a qué mes
+     corresponde un formulario suelto. */
+  function cardResumeRows(card) {
     const overrides = card.overrides || {};
-    // Si el período que toca cargar ya tiene un resumen guardado,
-    // precargar SUS fechas (no las recalculadas de cy.close/cy.due): una
-    // vez que el día cargado ya pasó dentro del mes, cardCycle() salta al
-    // siguiente para saber cuál es el PRÓXIMO cierre — pero reabrir este
-    // formulario es para editar el resumen ya cargado de ese período, no
-    // ese cierre recalculado. Sin esto, reabrir el diálogo y guardar sin
-    // tocar nada pisaba el dato real con la fecha recalculada y borraba
-    // el vencimiento ya guardado.
-    const curKey = cy ? periodKey(cy.close.getFullYear(), cy.close.getMonth()) : null;
-    const curOv = curKey ? overrides[curKey] : null;
-    const prefClose = (curOv && curOv.closeDateStr) || (cy ? dateToStr(cy.close) : '');
-    const prefDue = (curOv && curOv.dueDateStr) || '';
     const rows = Object.keys(overrides).sort().map((key) => {
       const ov = overrides[key];
-      const label = monthLabel(key);
-      const parts = [];
-      if (ov.closeDateStr) parts.push(`cierre ${esc(fmtDateShort(ov.closeDateStr))}`);
-      else if (ov.closingDay != null) parts.push(`cierre día ${ov.closingDay}`);
-      if (ov.dueDateStr) parts.push(`vencimiento ${esc(fmtDateShort(ov.dueDateStr))}`);
-      else if (ov.dueDay != null) parts.push(`vencimiento día ${ov.dueDay}`);
-      return `<div class="ov-row" data-ovrow="${esc(key)}">
-        <span>${esc(label)}: ${parts.join(' · ') || 'sin cambios'}</span>
-        <button type="button" class="row-del" data-ovdel="${esc(key)}" aria-label="Quitar">✕</button>
+      const close = ov.closeDateStr ? parseDate(ov.closeDateStr) : null;
+      const due = ov.dueDateStr ? parseDate(ov.dueDateStr)
+        : (close ? nextCardDate(card, 'dueDay', close, true) : null);
+      return { key, close, due, dueAssumed: !ov.dueDateStr, real: true };
+    }).filter((r) => r.close);
+
+    const lastClose = rows.length ? rows[rows.length - 1].close : null;
+    let nextClose = lastClose
+      ? nextCardDate(card, 'closingDay', lastClose, true)
+      : nextCardDate(card, 'closingDay', new Date(), false);
+    // Tarjeta sin ningún resumen cargado todavía (ni un día habitual de
+    // compatibilidad): no hay ninguna fecha de la cual partir. Mostrar
+    // igual una fila para cargar el primer resumen, arrancando de hoy
+    // como sugerencia editable en vez de dejar la lista vacía.
+    if (!nextClose && !lastClose) {
+      nextClose = new Date();
+      nextClose.setHours(0, 0, 0, 0);
+    }
+    if (nextClose) {
+      rows.push({
+        key: periodKey(nextClose.getFullYear(), nextClose.getMonth()),
+        close: nextClose, due: nextCardDate(card, 'dueDay', nextClose, true),
+        dueAssumed: true, real: false,
+      });
+    }
+    return rows;
+  }
+
+  /* El resumen "actual" de la lista: el último que ya cerró pero todavía
+     no venció (el que hay que pagar ahora). Si no hay ninguno así (por
+     ejemplo, recién arrancando la tarjeta), el próximo que va a cerrar. */
+  function cardActualRowIndex(rows) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let idx = -1;
+    rows.forEach((r, i) => { if (r.close <= today && (!r.due || today <= r.due)) idx = i; });
+    if (idx === -1) idx = rows.findIndex((r) => r.close > today);
+    return idx === -1 ? rows.length - 1 : idx;
+  }
+
+  /* Lista de resúmenes de una tarjeta: cada fila son sus dos fechas, sin
+     nombre de mes. Tocar una fila abre su edición puntual (sin adivinar
+     a qué período corresponde un formulario suelto). */
+  function cardResumesDialog(card) {
+    const rows = cardResumeRows(card);
+    const actualIdx = cardActualRowIndex(rows);
+    const rowsHTML = rows.map((r, i) => {
+      const closeLabel = fmtDateShort(dateToStr(r.close));
+      const dueLabel = r.due ? `${r.dueAssumed ? '~' : ''}${fmtDateShort(dateToStr(r.due))}` : 'sin cargar';
+      return `<div class="resume-row ${r.real ? '' : 'is-ghost'}" data-resumeidx="${i}">
+        <div class="resume-row-main">
+          <div class="resume-row-top">
+            ${i === actualIdx ? '<span class="resume-badge">Actual</span>' : ''}
+            <span class="resume-row-dates">Cierre ${esc(closeLabel)} → Vence ${esc(dueLabel)}</span>
+          </div>
+          ${!r.real ? '<div class="hint">Todavía no cargado — tocá para confirmar la fecha real</div>' : ''}
+        </div>
+        ${r.real ? `<button type="button" class="row-del" data-resumedel="${esc(r.key)}" aria-label="Quitar">✕</button>` : ''}
       </div>`;
     }).join('');
 
     const body = `
-      <div class="field">
-        <label for="ov-close">Fecha real de cierre de este resumen</label>
-        <input type="date" name="closeDate" id="ov-close" value="${esc(prefClose)}" required>
-      </div>
-      <div class="field">
-        <label for="ov-due">Fecha real de vencimiento de este resumen <span class="hint">(opcional, si no la sabés todavía)</span></label>
-        <input type="date" name="dueDate" id="ov-due" value="${esc(prefDue)}" ${cy && cy.due ? `placeholder="ej: ${esc(dateToStr(cy.due))}"` : ''}>
-      </div>
-      <span class="hint">Cargá la fecha tal cual va a caer (o cayó) este resumen — no hay un "día habitual" fijo, cada resumen se carga con su fecha real.</span>
-      ${rows ? `<div class="ov-list"><span class="hint">Resúmenes cargados:</span>${rows}</div>` : ''}
-      <button type="button" class="link-btn" id="ov-toggle-upcoming">Ver próximos resúmenes</button>
+      <div class="resume-list">${rowsHTML}</div>
+      <div class="hint" style="margin-top:10px">Tocá un resumen para cargar o corregir su fecha real de cierre y vencimiento.</div>
+      <button type="button" class="link-btn" id="ov-toggle-upcoming">Ver más adelante</button>
       <div id="ov-upcoming" hidden></div>`;
 
-    const dlg = openDialog(`Cargar resumen de ${card.name}`, body, {
-      submitLabel: 'Guardar resumen',
-      onSubmit(d) {
-        if (!d.closeDate) return false;
-        const closeDate = parseDate(d.closeDate);
-        const key = periodKey(closeDate.getFullYear(), closeDate.getMonth());
-        const dueDate = d.dueDate ? parseDate(d.dueDate) : null;
-        card.overrides = card.overrides || {};
-        // Fusiona con lo que ya hubiera para este período en vez de
-        // reemplazarlo entero: dejar el campo de vencimiento en blanco
-        // significa "no cambiar lo que ya tenía cargado", no "borrarlo".
-        const prevOv = card.overrides[key];
-        card.overrides[key] = {
-          closingDay: closeDate.getDate(),
-          closeDateStr: d.closeDate,
-          ...(dueDate
-            ? { dueDay: dueDate.getDate(), dueDateStr: d.dueDate }
-            : (prevOv && prevOv.dueDay != null ? { dueDay: prevOv.dueDay, dueDateStr: prevOv.dueDateStr } : {})),
-        };
-        Store.save();
-        render();
-      },
+    const dlg = openDialog(`Resúmenes de ${card.name}`, body, {
+      submitLabel: 'Cerrar',
+      onSubmit() {},
     });
-    $$('[data-ovdel]', dlg).forEach((b) => b.addEventListener('click', () => {
-      delete card.overrides[b.dataset.ovdel];
+    $$('[data-resumeidx]', dlg).forEach((rowEl) => rowEl.addEventListener('click', (e) => {
+      if (e.target.closest('[data-resumedel]')) return;
+      const row = rows[Number(rowEl.dataset.resumeidx)];
+      dlg.close();
+      cardResumeEditForm(card, row);
+    }));
+    $$('[data-resumedel]', dlg).forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!confirm('¿Quitar este resumen?')) return;
+      delete card.overrides[b.dataset.resumedel];
       Store.save();
       dlg.close();
       render();
-      cardOverrideForm(card);
+      cardResumesDialog(card);
     }));
     const upcomingBox = $('#ov-upcoming', dlg);
     $('#ov-toggle-upcoming', dlg).addEventListener('click', (ev) => {
@@ -2081,18 +2100,61 @@
         const cycles = cardUpcomingCycles(card, 6);
         upcomingBox.innerHTML = cycles.length
           ? `<div class="table-scroll"><table class="data">
-              <thead><tr><th>Resumen</th><th>Cierre</th><th>Vencimiento</th></tr></thead>
+              <thead><tr><th>Cierre</th><th>Vencimiento</th></tr></thead>
               <tbody>${cycles.map((c) => `<tr>
-                <td>${esc(monthLabel(periodKey(c.close.getFullYear(), c.close.getMonth())))}</td>
                 <td>${esc(fmtDateShort(dateToStr(c.close)))}</td>
                 <td>${c.due ? esc(fmtDateShort(dateToStr(c.due))) : '—'}</td>
               </tr>`).join('')}</tbody>
             </table></div>`
-          : '<div class="empty">Cargá el cierre de este resumen arriba para poder proyectar los próximos.</div>';
+          : '<div class="empty">Cargá el cierre de un resumen arriba para poder proyectar los próximos.</div>';
         upcomingBox.dataset.filled = '1';
       }
       upcomingBox.hidden = !willShow;
-      btn.textContent = willShow ? 'Ocultar próximos resúmenes' : 'Ver próximos resúmenes';
+      btn.textContent = willShow ? 'Ocultar' : 'Ver más adelante';
+    });
+  }
+
+  /* Carga o corrige el cierre y vencimiento REALES de UN resumen puntual
+     ya identificado (row viene de cardResumeRows/cardResumesDialog, así
+     que no hay que adivinar a qué período corresponde el formulario). */
+  function cardResumeEditForm(card, row) {
+    const body = `
+      <div class="field">
+        <label for="ov-close">Fecha real de cierre de este resumen</label>
+        <input type="date" name="closeDate" id="ov-close" value="${esc(dateToStr(row.close))}" required>
+      </div>
+      <div class="field">
+        <label for="ov-due">Fecha real de vencimiento de este resumen</label>
+        <input type="date" name="dueDate" id="ov-due" value="${row.due ? esc(dateToStr(row.due)) : ''}">
+      </div>
+      <span class="hint">${row.real
+        ? 'Corregí las fechas de este resumen si hace falta.'
+        : 'Es una fecha estimada (mismo día que tu último resumen cargado) — confirmala o corregila con la real.'}</span>`;
+
+    openDialog(row.real ? 'Editar resumen' : 'Cargar resumen', body, {
+      submitLabel: 'Guardar',
+      onSubmit(d, dlg) {
+        if (!d.closeDate) return false;
+        const closeDate = parseDate(d.closeDate);
+        const newKey = periodKey(closeDate.getFullYear(), closeDate.getMonth());
+        const dueDate = d.dueDate ? parseDate(d.dueDate) : null;
+        card.overrides = card.overrides || {};
+        // Si cambió de mes de cierre, mover la entrada a la clave nueva
+        // en vez de dejar una copia vieja huérfana.
+        if (row.real && row.key !== newKey) delete card.overrides[row.key];
+        card.overrides[newKey] = {
+          closingDay: closeDate.getDate(), closeDateStr: d.closeDate,
+          ...(dueDate ? { dueDay: dueDate.getDate(), dueDateStr: d.dueDate } : {}),
+        };
+        Store.save();
+        render();
+        // Hay que cerrar ESTE diálogo antes de reabrir la lista: son el
+        // mismo <dialog> nativo por debajo, y reabrirlo (showModal) antes
+        // de que termine de cerrarse lo dejaba en un estado roto.
+        dlg.close();
+        cardResumesDialog(card);
+        return false;
+      },
     });
   }
 
@@ -2130,7 +2192,7 @@
             </div>
             ${details}
             <div class="entity-actions">
-              ${m.kind === 'credito' ? `<button class="btn btn-sm" data-adjust="${esc(m.id)}">Cargar resumen</button>` : ''}
+              ${m.kind === 'credito' ? `<button class="btn btn-sm" data-adjust="${esc(m.id)}">Resúmenes</button>` : ''}
               <button class="btn btn-sm" data-edit="${esc(m.id)}">Editar</button>
               <button class="btn btn-sm btn-danger" data-del="${esc(m.id)}">Eliminar</button>
             </div>
@@ -2138,14 +2200,14 @@
         }).join('')}
       </div>
       ${methods.some((m) => m.kind === 'credito') ? '' :
-        '<div class="card"><div class="empty">Todavía no cargaste ninguna tarjeta de crédito. Agregala y después cargá el cierre y vencimiento de tu resumen actual con "Cargar resumen".</div></div>'}`;
+        '<div class="card"><div class="empty">Todavía no cargaste ninguna tarjeta de crédito. Agregala y después cargá el cierre y vencimiento de tu resumen actual con "Resúmenes".</div></div>'}`;
 
     $('#btn-add-method', el).addEventListener('click', () => methodForm(null));
     $$('[data-edit]', el).forEach((b) => b.addEventListener('click', () => {
       methodForm(methodById(b.dataset.edit));
     }));
     $$('[data-adjust]', el).forEach((b) => b.addEventListener('click', () => {
-      cardOverrideForm(methodById(b.dataset.adjust));
+      cardResumesDialog(methodById(b.dataset.adjust));
     }));
     $$('[data-del]', el).forEach((b) => b.addEventListener('click', () => {
       const id = b.dataset.del;
