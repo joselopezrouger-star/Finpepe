@@ -174,9 +174,23 @@ const Charts = (() => {
     const iw = W - m.l - m.r;
     const ih = H - m.t - m.b;
 
-    const maxVal = Math.max(1, ...series.flatMap((s) => s.values));
-    const { top, ticks } = niceTicks(maxVal, 4);
-    const y = (v) => m.t + ih - (v / top) * ih;
+    // El eje sólo baja de cero si alguna serie realmente tiene un valor
+    // negativo (ej. una tasa de ahorro negativa un mes) — si todo es
+    // positivo, no tiene sentido reservar la mitad del gráfico de más.
+    const allVals = series.flatMap((s) => s.values);
+    const maxVal = Math.max(0, ...allVals);
+    const minVal = Math.min(0, ...allVals);
+    let top, bottom, ticks;
+    if (minVal >= 0) {
+      const nt = niceTicks(Math.max(1, maxVal), 4);
+      top = nt.top; bottom = 0; ticks = nt.ticks;
+    } else {
+      top = niceTicks(Math.max(maxVal, -minVal, 1), 3).top;
+      bottom = -top;
+      ticks = [bottom, bottom / 2, 0, top / 2, top];
+    }
+    const range = top - bottom;
+    const y = (v) => m.t + ih - ((v - bottom) / range) * ih;
     const band = iw / months.length;
     const x = (i) => m.l + band * i + band / 2;
 
