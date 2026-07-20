@@ -65,6 +65,7 @@ const Store = (() => {
       cardMonthBasis: 'compra', // 'compra' | 'vencimiento' — en qué mes cuenta un gasto con tarjeta de crédito
       autoLeftoverIncome: false, // true = acredita el Balance del mes anterior (si dio positivo) como Ingreso al empezar cada mes
       leftoverLastGen: null,     // 'YYYY-MM' del último mes ya acreditado — ver generateLeftoverIncome() en app.js
+      methodsSortedOnce: false, // true = ya se hizo el ordenamiento automático de tarjetas primero (una sola vez), ver sortMethodsOnce() en app.js
     },
     categories: seedCategories(),
     methods: seedMethods(),

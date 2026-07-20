@@ -2167,15 +2167,15 @@
         <button class="btn btn-primary btn-sm" id="btn-add-method">+ Agregar medio</button>
       </div>
       <div class="entity-grid">
-        ${methods.map((m) => {
+        ${methods.map((m, i) => {
           let details = '';
           if (m.kind === 'credito') {
             const cy = cardCycle(m);
             const nOv = Object.keys(m.overrides || {}).length;
             const totalsHTML = cy
               ? `<dl>
-                  <dt>Resumen en curso</dt><dd>${fmtDisp(cardPeriodTotal(m.id, cy.prevClose || new Date(0), cy.close))}</dd>
-                  ${cy.prevPrevClose ? `<dt>Último resumen</dt><dd>${fmtDisp(cardPeriodTotal(m.id, cy.prevPrevClose, cy.prevClose))}</dd>` : ''}
+                  <dt>Resumen en curso</dt><dd><button type="button" class="dd-link" data-detail="cur:${esc(m.id)}">${fmtDisp(cardPeriodTotal(m.id, cy.prevClose || new Date(0), cy.close))}</button></dd>
+                  ${cy.prevPrevClose ? `<dt>Último resumen</dt><dd><button type="button" class="dd-link" data-detail="last:${esc(m.id)}">${fmtDisp(cardPeriodTotal(m.id, cy.prevPrevClose, cy.prevClose))}</button></dd>` : ''}
                   ${nOv ? `<dt>Resúmenes cargados</dt><dd>${nOv}</dd>` : ''}
                 </dl>`
               : '';
@@ -2183,7 +2183,7 @@
           } else {
             const monthTotal = sumDisp(S().transactions.filter(
               (t) => t.methodId === m.id && t.type === 'gasto' && monthKeyOf(t.date) === curMonth()));
-            details = `<dl><dt>Gastado este mes</dt><dd>${fmtDisp(monthTotal)}</dd></dl>`;
+            details = `<dl><dt>Gastado este mes</dt><dd><button type="button" class="dd-link" data-detail="month:${esc(m.id)}">${fmtDisp(monthTotal)}</button></dd></dl>`;
           }
           return `<div class="entity">
             <div class="entity-head">
@@ -2192,6 +2192,10 @@
             </div>
             ${details}
             <div class="entity-actions">
+              <div class="entity-reorder">
+                <button type="button" class="icon-btn" data-move="${esc(m.id)}:-1" ${i === 0 ? 'disabled' : ''} aria-label="Mover arriba">↑</button>
+                <button type="button" class="icon-btn" data-move="${esc(m.id)}:1" ${i === methods.length - 1 ? 'disabled' : ''} aria-label="Mover abajo">↓</button>
+              </div>
               ${m.kind === 'credito' ? `<button class="btn btn-sm" data-adjust="${esc(m.id)}">Resúmenes</button>` : ''}
               <button class="btn btn-sm" data-edit="${esc(m.id)}">Editar</button>
               <button class="btn btn-sm btn-danger" data-del="${esc(m.id)}">Eliminar</button>
@@ -2203,11 +2207,35 @@
         '<div class="card"><div class="empty">Todavía no cargaste ninguna tarjeta de crédito. Agregala y después cargá el cierre y vencimiento de tu resumen actual con "Resúmenes".</div></div>'}`;
 
     $('#btn-add-method', el).addEventListener('click', () => methodForm(null));
+    $$('[data-move]', el).forEach((b) => b.addEventListener('click', () => {
+      const [id, dir] = b.dataset.move.split(':');
+      moveMethod(id, Number(dir));
+    }));
     $$('[data-edit]', el).forEach((b) => b.addEventListener('click', () => {
       methodForm(methodById(b.dataset.edit));
     }));
     $$('[data-adjust]', el).forEach((b) => b.addEventListener('click', () => {
       cardResumesDialog(methodById(b.dataset.adjust));
+    }));
+    $$('[data-detail]', el).forEach((b) => b.addEventListener('click', () => {
+      const [kind, id] = b.dataset.detail.split(':');
+      const m = methodById(id);
+      if (!m) return;
+      if (kind === 'month') {
+        const txs = S().transactions.filter(
+          (t) => t.methodId === id && t.type === 'gasto' && monthKeyOf(t.date) === curMonth());
+        methodPeriodDetailDialog(`${m.name} · ${monthLabel(curMonth())}`, txs);
+        return;
+      }
+      const cy = cardCycle(m);
+      if (!cy) return;
+      const from = kind === 'cur' ? (cy.prevClose || new Date(0)) : cy.prevPrevClose;
+      const to = kind === 'cur' ? cy.close : cy.prevClose;
+      if (!from || !to) return;
+      const a = dateToStr(from), bStr = dateToStr(to);
+      const txs = S().transactions.filter(
+        (t) => t.type === 'gasto' && t.methodId === id && t.date > a && t.date <= bStr);
+      methodPeriodDetailDialog(`${m.name} · ${kind === 'cur' ? 'Resumen en curso' : 'Último resumen'}`, txs);
     }));
     $$('[data-del]', el).forEach((b) => b.addEventListener('click', () => {
       const id = b.dataset.del;
@@ -2221,6 +2249,43 @@
       S().methods = S().methods.filter((m) => m.id !== id);
       Store.save();
       render();
+    }));
+  }
+
+  /* Detalle de los movimientos que componen un total mostrado en "Tarjetas y
+     medios" (resumen de tarjeta o gasto mensual de una cuenta): fecha, monto
+     y descripción de cada uno que se está sumando. */
+  function methodPeriodDetailDialog(title, txs) {
+    const sorted = txs.slice().sort((a, b) => b.date.localeCompare(a.date));
+    const bodyHTML = `
+      <div class="dialog-total">Total: ${fmtDisp(sumDisp(sorted))}</div>
+      ${sorted.length ? dayGroups(sorted).map(({ dateStr, items }) => `
+        <div class="tx-day-group">
+          <div class="tx-day-label">${esc(dayGroupLabel(dateStr))}</div>
+          <div class="tx-card-list">
+            ${items.map((t) => {
+              const rowTitle = t.note || catName(t.categoryId);
+              const subParts = [];
+              if (t.note) subParts.push(catName(t.categoryId));
+              const inst = t.installment ? ` · cuota ${t.installment.k}/${t.installment.n}` : '';
+              return `<div class="tx-card-row" data-tx="${esc(t.id)}">
+                <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(t.categoryId))}</div>
+                <div class="tx-card-main">
+                  <div class="tx-card-title">${esc(rowTitle)}</div>
+                  <div class="tx-card-sub">${esc(subParts.join(' · '))}${inst}</div>
+                </div>
+                <div class="tx-card-amount">
+                  <div class="v">${fmtMoney(t.amount, t.currency)}</div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`).join('')
+        : '<div class="empty">No hay movimientos en este período.</div>'}`;
+    const dlg = openDialog(title, bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
+    $$('.tx-card-row', dlg).forEach((row) => row.addEventListener('click', () => {
+      const tx = S().transactions.find((t) => t.id === row.dataset.tx);
+      if (tx) { dlg.close(); txForm(tx); }
     }));
   }
 
@@ -4054,9 +4119,32 @@
     VIEWS[ui.view]($('.view-content', el));
   }
 
+  // Ordena las tarjetas de crédito primero en "Tarjetas y medios" — pero
+  // solo la primera vez que se abre la app después de este cambio: si el
+  // usuario después reordena a mano (moveMethod), no queremos volver a
+  // pisar ese orden en cada carga.
+  function sortMethodsOnce() {
+    if (S().settings.methodsSortedOnce) return;
+    S().methods.sort((a, b) => (b.kind === 'credito' ? 1 : 0) - (a.kind === 'credito' ? 1 : 0));
+    S().settings.methodsSortedOnce = true;
+    Store.save();
+  }
+
+  /* Reordena manualmente un medio de pago en "Tarjetas y medios". */
+  function moveMethod(id, dir) {
+    const arr = S().methods;
+    const idx = arr.findIndex((m) => m.id === id);
+    const swapIdx = idx + dir;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= arr.length) return;
+    [arr[idx], arr[swapIdx]] = [arr[swapIdx], arr[idx]];
+    Store.save();
+    render();
+  }
+
   function init() {
     generateRecurring();
     generateLeftoverIncome();
+    sortMethodsOnce();
 
     $$('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
       const grp = GROUPS.find((g) => g.key === b.dataset.group);

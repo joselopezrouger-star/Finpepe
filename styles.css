@@ -1056,7 +1056,20 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 }
 .entity dt { color: var(--muted); }
 .entity dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-.entity-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.entity-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.entity-reorder { display: flex; gap: 4px; margin-right: auto; }
+.entity-reorder .icon-btn { width: 26px; height: 26px; font-size: 12px; }
+.entity-reorder .icon-btn:disabled { opacity: 0.35; cursor: default; }
+.entity-reorder .icon-btn:disabled:hover { border-color: var(--border); color: var(--ink-2); }
+
+/* Montos de "Tarjetas y medios" que se pueden apretar para ver el detalle. */
+.dd-link {
+  border: 0; background: none; padding: 0; margin: 0; font: inherit;
+  color: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px;
+}
+.dd-link:hover { color: var(--accent); }
+
+.dialog-total { font: 700 13.5px var(--font-heading); color: var(--ink); margin-bottom: 2px; }
 
 /* ---------- Ícono circular (movimientos, próximos vencimientos) ---------- */
 .row-icon {
