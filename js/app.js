@@ -298,6 +298,85 @@
       <text x="${viewW / 2}" y="${labelTopY}" text-anchor="middle" dominant-baseline="hanging" font-size="${labelSize}" font-weight="800" fill="${textColor}" font-family="var(--font-heading)">${Math.round(pct)}%</text>
     </svg>`;
   }
+  // Línea de tendencia de la tasa de ahorro, con una etiqueta redondeada
+  // arriba de cada punto (el último, resaltado en sólido) y relleno en
+  // degradé debajo de la curva. Sin eje numérico: los valores los da cada
+  // etiqueta, no una escala de fondo. rows: [{label, rate}] (rate en %,
+  // puede ser negativo).
+  function savingsRateTrendSvg(rows) {
+    if (!rows.length) return '';
+    const W = 640, H = 230;
+    const topPad = 46, bottomPad = 34, padX = 30;
+    const plotTop = topPad, plotBottom = H - bottomPad;
+    const plotH = plotBottom - plotTop;
+    const plotLeft = padX, plotRight = W - padX;
+    const plotW = plotRight - plotLeft;
+    const band = rows.length > 1 ? plotW / rows.length : plotW;
+    const x = (i) => rows.length > 1 ? plotLeft + band * i + band / 2 : plotLeft + plotW / 2;
+
+    const rates = rows.map((r) => r.rate);
+    const domainMax = Math.max(...rates);
+    const domainMin = Math.min(...rates);
+    const span = Math.max(domainMax - domainMin, 1);
+    const pad = span * 0.2;
+    const scaledMax = domainMax + pad, scaledMin = domainMin - pad;
+    const scaledRange = scaledMax - scaledMin || 1;
+    const y = (v) => plotTop + (scaledMax - v) / scaledRange * plotH;
+
+    // Últimos 6 meses en verde (buena racha); si el mes en curso quedó
+    // negativo (retiro neto), toda la curva pasa a la paleta de alerta.
+    const bad = rates[rates.length - 1] < 0;
+    const lineColor = bad ? 'var(--crit)' : 'var(--income)';
+    const fillColor = bad ? 'var(--crit)' : 'var(--income)';
+    const gradId = 'savRateGrad' + Math.round(Math.random() * 1e6);
+
+    const pts = rows.map((r, i) => ({ x: x(i), y: y(r.rate), rate: r.rate, label: r.label }));
+    const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+    const areaPath = `${linePath} L${pts[pts.length - 1].x},${plotBottom} L${pts[0].x},${plotBottom} Z`;
+
+    const gridLines = pts.map((p) => `<line x1="${p.x}" y1="${p.y}" x2="${p.x}" y2="${plotBottom}"
+      stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>`).join('');
+
+    const bubbles = pts.map((p, i) => {
+      const isLast = i === pts.length - 1;
+      const text = `${p.rate}%`;
+      const w = Math.max(34, text.length * 11 + 14);
+      const h = isLast ? 30 : 26;
+      const bx = Math.min(Math.max(p.x - w / 2, 2), W - w - 2);
+      const by = p.y - h - 14;
+      const bg = isLast ? lineColor : 'var(--surface-2)';
+      const fg = isLast ? 'var(--on-accent)' : 'var(--ink-2)';
+      return `<g>
+        <rect x="${bx}" y="${by}" width="${w}" height="${h}" rx="${h / 2}" fill="${bg}"/>
+        <text x="${bx + w / 2}" y="${by + h / 2 + 4}" text-anchor="middle"
+          font-size="${isLast ? 14 : 12}" font-weight="${isLast ? 800 : 700}" fill="${fg}" font-family="var(--font-heading)">${esc(text)}</text>
+      </g>`;
+    }).join('');
+
+    const dots = pts.map((p, i) => {
+      const isLast = i === pts.length - 1;
+      return `<circle cx="${p.x}" cy="${p.y}" r="${isLast ? 5.5 : 4}" fill="${lineColor}" stroke="var(--surface)" stroke-width="2"/>`;
+    }).join('');
+
+    const labels = pts.map((p) => `<text x="${p.x}" y="${H - 10}" text-anchor="middle" class="tick-label">${esc(p.label)}</text>`).join('');
+
+    return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="Evolución de la tasa de ahorro">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${fillColor}" stop-opacity="0.28"/>
+          <stop offset="100%" stop-color="${fillColor}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <line x1="${plotLeft}" y1="${plotBottom}" x2="${plotRight}" y2="${plotBottom}" stroke="var(--axis)" stroke-width="1"/>
+      ${gridLines}
+      <path d="${areaPath}" fill="url(#${gradId})" stroke="none"/>
+      <path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+      ${bubbles}
+      ${labels}
+    </svg>`;
+  }
+
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
   // terminó) — para dibujar el arco del anillo, que necesita una escala 0-100.
   function monthLeftPct(mk) {
@@ -1452,10 +1531,10 @@
     const savingsRateDeltaHTML = (() => {
       if (savingsRatePct == null || savingsRatePctPrev == null) return '';
       const diff = savingsRatePct - savingsRatePctPrev;
-      if (diff === 0) return `<div class="tile-delta">= MoM</div>`;
+      if (diff === 0) return `<span class="savings-rate-pill">= MoM</span>`;
       const up = diff > 0;
-      const cls = up ? 'up-good' : 'down-bad';
-      return `<div class="tile-delta"><span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(diff)} pp MoM</span></div>`;
+      const cls = up ? 'pos' : 'neg';
+      return `<span class="savings-rate-pill ${cls}">${up ? '▲' : '▼'} ${Math.abs(diff)} pp MoM</span>`;
     })();
 
     // Gastos por categoría (top 3 + Otros, para que la tarjeta principal
@@ -1617,15 +1696,23 @@
         </div>
       </div>
 
-      <div class="grid-2 grid-2-tight">
-        <div class="card tile">
-          <div class="tile-label">Tasa de ahorro · ${esc(monthLabel(mk))}</div>
-          <div class="tile-value ${savingsRatePct == null ? '' : savingsRatePct > 0 ? 'pos' : savingsRatePct < 0 ? 'neg' : ''}">${savingsRatePct == null ? '—' : savingsRatePct + '%'}</div>
-          ${savingsRateDeltaHTML}
+      <div class="card savings-rate-card">
+        <div class="savings-rate-left">
+          <div class="savings-rate-head">
+            <span class="tile-badge tile-badge-income savings-rate-icon">${iconSvg('trend')}</span>
+            <div>
+              <div class="savings-rate-title">Tasa de ahorro</div>
+              <div class="savings-rate-sub">Últimos 6 meses</div>
+            </div>
+          </div>
+          <div class="savings-rate-stat">
+            <div class="savings-rate-month">${esc(monthLabel(mk))}</div>
+            <div class="savings-rate-value ${savingsRatePct == null ? '' : savingsRatePct > 0 ? 'pos' : savingsRatePct < 0 ? 'neg' : ''}">${savingsRatePct == null ? '—' : savingsRatePct + '%'}</div>
+            ${savingsRateDeltaHTML}
+          </div>
         </div>
-        <div class="card">
-          <h2 class="card-title">Tasa de ahorro · últimos 6 meses</h2>
-          ${hasSavingsRateData ? `<div id="chart-savings-rate"></div>` : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}
+        <div class="savings-rate-chart">
+          ${hasSavingsRateData ? savingsRateTrendSvg(savingsRateRows) : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}
         </div>
       </div>
 
@@ -1697,11 +1784,6 @@
       Charts.trend(trendEl, trendRows, {});
     }
     Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {});
-    if (hasSavingsRateData) {
-      Charts.lines($('#chart-savings-rate', el), savingsRateRows.map((r) => r.label), [
-        { label: 'Tasa de ahorro', color: Charts.COLORS.income, values: savingsRateRows.map((r) => r.rate) },
-      ], { fmtAxis: (v) => Math.round(v) + '%', ariaLabel: 'Tasa de ahorro por mes' });
-    }
 
     $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
       ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
