@@ -344,30 +344,12 @@
     const gridLines = pts.map((p) => `<line x1="${p.x}" y1="${p.y}" x2="${p.x}" y2="${plotBottom}"
       stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>`).join('');
 
-    const bubbles = pts.map((p, i) => {
-      const isLast = i === pts.length - 1;
-      const text = `${p.rate}%`;
-      const w = Math.max(34, text.length * 11 + 14);
-      const h = isLast ? 30 : 26;
-      const bx = Math.min(Math.max(p.x - w / 2, 2), W - w - 2);
-      const by = p.y - h - 14;
-      const bg = isLast ? lineColor : 'var(--surface-2)';
-      const fg = isLast ? 'var(--on-accent)' : 'var(--ink-2)';
-      return `<g>
-        <rect x="${bx}" y="${by}" width="${w}" height="${h}" rx="${h / 2}" fill="${bg}"/>
-        <text x="${bx + w / 2}" y="${by + h / 2 + 4}" text-anchor="middle"
-          font-size="${isLast ? 14 : 12}" font-weight="${isLast ? 800 : 700}" fill="${fg}" font-family="var(--font-heading)">${esc(text)}</text>
-      </g>`;
-    }).join('');
-
     const dots = pts.map((p, i) => {
       const isLast = i === pts.length - 1;
       return `<circle cx="${p.x}" cy="${p.y}" r="${isLast ? 5.5 : 4}" fill="${lineColor}" stroke="var(--surface)" stroke-width="2"/>`;
     }).join('');
 
-    const labels = pts.map((p) => `<text x="${p.x}" y="${H - 10}" text-anchor="middle" class="tick-label">${esc(p.label)}</text>`).join('');
-
-    return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="Evolución de la tasa de ahorro">
+    const svg = `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="Evolución de la tasa de ahorro">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="${fillColor}" stop-opacity="0.28"/>
@@ -379,9 +361,31 @@
       <path d="${areaPath}" fill="url(#${gradId})" stroke="none"/>
       <path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       ${dots}
-      ${bubbles}
-      ${labels}
     </svg>`;
+
+    // Las etiquetas van como HTML encima del SVG (no como <text> adentro):
+    // un SVG escala todo por igual, así que en una tarjeta angosta el texto
+    // de las burbujas se volvía ilegible junto con el resto del dibujo. Como
+    // overlay en % sobre el mismo contenedor, el tamaño de letra queda fijo
+    // sin importar cuánto se achique la curva.
+    const pctX = (px) => (px / W) * 100;
+    const pctY = (py) => (py / H) * 100;
+    // En una pantalla angosta no entran 5 o 6 burbujas sin pisarse entre
+    // ellas — ahí se etiquetan solo la primera y la actual (el punto de
+    // partida y adónde se llegó), y el resto queda solo como puntos sobre
+    // la línea, sin perder la forma de la curva.
+    const narrow = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 560px)').matches;
+    const showBubble = (i) => !narrow || rows.length <= 3 || i === 0 || i === pts.length - 1;
+    const bubblesHTML = pts.map((p, i) => {
+      if (!showBubble(i)) return '';
+      const isLast = i === pts.length - 1;
+      const posStyle = `left:${pctX(p.x)}%;top:${pctY(p.y)}%`;
+      const colorStyle = isLast ? `;background:${lineColor};color:var(--on-accent)` : '';
+      return `<span class="savings-rate-bubble${isLast ? ' current' : ''}" style="${posStyle}${colorStyle}">${p.rate}%</span>`;
+    }).join('');
+    const monthLabelsHTML = pts.map((p) => `<span class="savings-rate-xlabel" style="left:${pctX(p.x)}%;top:${pctY(H - 6)}%">${esc(p.label)}</span>`).join('');
+
+    return `<div class="savings-rate-chart-inner">${svg}${bubblesHTML}${monthLabelsHTML}</div>`;
   }
 
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya

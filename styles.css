@@ -366,12 +366,15 @@ a { color: var(--accent-down); }
 .tile-delta .up-good { color: var(--income); }
 .tile-delta .down-bad { color: var(--crit); }
 
-/* ---------- Tasa de ahorro (Resumen): una sola tarjeta, stat + tendencia ---------- */
-.savings-rate-card { display: flex; align-items: stretch; gap: 24px; }
+/* ---------- Tasa de ahorro (Resumen): una sola tarjeta, stat + tendencia ----------
+   Siempre lado a lado (valor a la izquierda, curva a la derecha) — no se
+   apila ni siquiera en pantallas angostas, a pedido explícito: el diseño de
+   referencia es ese, en todos los tamaños. */
+.savings-rate-card { display: flex; align-items: stretch; gap: 16px; }
 .savings-rate-left {
   flex: none; width: 200px;
   display: flex; flex-direction: column; justify-content: space-between; gap: 18px;
-  padding-right: 24px;
+  padding-right: 16px;
   border-right: 1px solid var(--border);
 }
 .savings-rate-head { display: flex; align-items: center; gap: 10px; }
@@ -395,16 +398,38 @@ a { color: var(--accent-down); }
 .savings-rate-pill.pos { background: var(--accent-wash); color: var(--accent-down); }
 .savings-rate-pill.neg { background: var(--danger-bg); color: var(--danger-ink); }
 .savings-rate-chart { flex: 1; min-width: 0; display: flex; align-items: center; }
-.savings-rate-chart .empty { margin: auto; }
+.savings-rate-chart .empty { margin: auto; font-size: 13px; }
+.savings-rate-chart-inner { position: relative; width: 100%; }
+.savings-rate-chart-inner svg { display: block; width: 100%; height: auto; }
+/* Las burbujas de valor y los meses van en tamaño de letra fijo (no dentro
+   del SVG, que escala todo por igual) — así siguen siendo legibles aunque
+   la curva se achique mucho en una tarjeta angosta. */
+.savings-rate-bubble {
+  position: absolute; transform: translate(-50%, calc(-100% - 10px));
+  white-space: nowrap; font: 700 11.5px var(--font-heading);
+  padding: 4px 9px; border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-2);
+  pointer-events: none;
+}
+.savings-rate-bubble.current { font-size: 13.5px; font-weight: 800; padding: 5px 11px; }
+.savings-rate-xlabel {
+  position: absolute; transform: translate(-50%, 0);
+  font-size: 11px; color: var(--muted); white-space: nowrap; pointer-events: none;
+}
 
-@media (max-width: 820px) {
-  .savings-rate-card { flex-direction: column; gap: 16px; }
-  .savings-rate-left {
-    width: auto; flex-direction: row; align-items: center; justify-content: space-between;
-    padding-right: 0; padding-bottom: 16px;
-    border-right: 0; border-bottom: 1px solid var(--border);
-  }
-  .savings-rate-stat { text-align: right; }
+/* Pantalla angosta: la columna del valor se achica (no se apila) para
+   dejarle más lugar a la curva, que si no queda demasiado apretada. El
+   ícono se oculta acá — a este ancho, entre el ícono y "Tasa de ahorro"
+   no entraban las dos cosas sin que el título se partiera en dos líneas. */
+@media (max-width: 560px) {
+  .savings-rate-card { gap: 8px; }
+  .savings-rate-left { width: 128px; padding-right: 8px; gap: 10px; }
+  .savings-rate-icon { display: none; }
+  .savings-rate-title { font-size: 10.5px; letter-spacing: 0.01em; }
+  .savings-rate-sub { font-size: 9.5px; }
+  .savings-rate-month { font-size: 9px; }
+  .savings-rate-value { font-size: 22px; }
+  .savings-rate-pill { font-size: 10px; padding: 3px 7px; margin-top: 5px; }
 }
 
 /* ---------- Controles de mes ---------- */
