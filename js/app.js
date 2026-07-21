@@ -311,8 +311,15 @@
     const plotH = plotBottom - plotTop;
     const plotLeft = padX, plotRight = W - padX;
     const plotW = plotRight - plotLeft;
-    const band = rows.length > 1 ? plotW / rows.length : plotW;
-    const x = (i) => rows.length > 1 ? plotLeft + band * i + band / 2 : plotLeft + plotW / 2;
+    // Con pocos meses (recién arrancando la app) no tiene sentido estirar la
+    // línea a lo ancho de toda la tarjeta: se limita el espacio entre
+    // puntos y se centra el tramo usado, en vez de un diagonal exagerado
+    // de punta a punta.
+    const MAX_BAND = 120;
+    const band = rows.length > 1 ? Math.min(MAX_BAND, plotW / rows.length) : plotW;
+    const usedWidth = rows.length > 1 ? band * rows.length : band;
+    const startX = plotLeft + Math.max(0, (plotW - usedWidth) / 2);
+    const x = (i) => rows.length > 1 ? startX + band * i + band / 2 : startX + usedWidth / 2;
 
     const rates = rows.map((r) => r.rate);
     const domainMax = Math.max(...rates);
@@ -367,7 +374,7 @@
           <stop offset="100%" stop-color="${fillColor}" stop-opacity="0"/>
         </linearGradient>
       </defs>
-      <line x1="${plotLeft}" y1="${plotBottom}" x2="${plotRight}" y2="${plotBottom}" stroke="var(--axis)" stroke-width="1"/>
+      <line x1="${startX}" y1="${plotBottom}" x2="${startX + usedWidth}" y2="${plotBottom}" stroke="var(--axis)" stroke-width="1"/>
       ${gridLines}
       <path d="${areaPath}" fill="url(#${gradId})" stroke="none"/>
       <path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
