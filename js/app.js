@@ -1493,20 +1493,21 @@
     }).filter((r) => r.income > 0 || r.expense > 0);
 
     // Misma ventana de meses, pero para la tasa de ahorro (ahorro/ingresos):
-    // a diferencia del gráfico de arriba, acá sí interesa ver un mes en $0
-    // si no hubo ingresos (una caída real, no un hueco en el eje).
+    // se omiten los meses sin ningún movimiento (no tiene sentido mostrar
+    // un 0% en el eje para un mes que ni siquiera había arrancado la app).
     const savingsRateRows = months.map((m) => {
       const list = txs.filter((t) => effectiveMonthOf(t) === m);
       const incM = sumDisp(list.filter((t) => t.type === 'ingreso'));
+      const expM = sumDisp(list.filter((t) => t.type === 'gasto'));
       const savM = savingsAtEndOf(m) - savingsAtEndOf(addMonthsKey(m, -1));
       const [y, mo] = m.split('-').map(Number);
       return {
         label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
         rate: incM > 0 ? Math.round((savM / incM) * 100) : 0,
-        hasIncome: incM > 0,
+        hasActivity: incM > 0 || expM > 0,
       };
-    });
-    const hasSavingsRateData = savingsRateRows.some((r) => r.hasIncome);
+    }).filter((r) => r.hasActivity);
+    const hasSavingsRateData = savingsRateRows.length > 0;
 
     // Vencimientos de tarjetas: solo las que ya tienen al menos dos
     // resúmenes cargados (el actual y el anterior) — sin eso no hay un
@@ -1822,7 +1823,7 @@
                     <div class="tx-card-sub">${esc(subParts.join(' · '))}${inst}${rec}${cur}</div>
                   </div>
                   <div class="tx-card-amount">
-                    <div class="v ${isIncome ? 'pos' : ''}${bigClass(t)}">${sign} ${fmtMoney(t.amount, t.currency)}</div>
+                    <div class="v ${isIncome ? 'pos' : 'neg'}${bigClass(t)}">${sign} ${fmtMoney(t.amount, t.currency)}</div>
                     ${usdLine}
                   </div>
                   <button class="tx-card-del" data-del="${esc(t.id)}" aria-label="Eliminar">✕</button>
@@ -1935,6 +1936,46 @@
 
     const pct = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0) + '%';
 
+    // Un solo color por categoría, asignado según su peso en la ventana de
+    // 6 meses (más estable que el ranking de un solo mes) y reutilizado
+    // tanto en la torta como en las barras apiladas — así una categoría se
+    // reconoce por su color en los dos gráficos, no solo en uno.
+    const catColorOf = new Map(windowBreakdown.map((g, i) => [g.id, CAT_PALETTE[i % CAT_PALETTE.length]]));
+    const OTROS_COLOR = '#64748b';
+
+    // Torta cilindro: categorías del mes elegido (misma tabla de arriba).
+    const pieItems = breakdown.map((g) => ({
+      label: g.name, value: g.total, color: catColorOf.get(g.id) || CAT_PALETTE[0],
+    }));
+
+    // Barras apiladas al 100%: hasta 6 categorías con más peso en la
+    // ventana de 6 meses + "Otros" con el resto, para que no se amontonen
+    // demasiadas tiritas finas en una sola barra.
+    const STACK_MAX = 6;
+    const stackTop = windowBreakdown.slice(0, STACK_MAX);
+    const stackRest = windowBreakdown.slice(STACK_MAX);
+    const stackCats = stackTop.map((g) => ({ id: g.id, name: g.name, color: catColorOf.get(g.id) }));
+    if (stackRest.length) stackCats.push({ id: '__otros', name: 'Otros', color: OTROS_COLOR });
+    const stackIds = new Set(stackTop.map((g) => g.id));
+    const stackRows = months.map((m) => {
+      const gastoM = txs.filter((t) => t.type === 'gasto' && effectiveMonthOf(t) === m);
+      const totalM = sumDisp(gastoM);
+      const byCat = new Map();
+      for (const t of gastoM) {
+        const v = txDispAmount(t);
+        if (v == null) continue;
+        const topId = topCatKeyOf(t);
+        const key = stackIds.has(topId) ? topId : '__otros';
+        byCat.set(key, (byCat.get(key) || 0) + v);
+      }
+      const [y, mo] = m.split('-').map(Number);
+      return {
+        label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
+        total: totalM,
+        shares: stackCats.map((c) => (totalM > 0 ? ((byCat.get(c.id) || 0) / totalM) * 100 : 0)),
+      };
+    });
+
     const rowsHtml = breakdown.map((g) => {
       const showSubs = g.subs.length && !(g.subs.length === 1 && g.total === g.direct && g.subs[0].name === 'Otros (sin subcategoría)');
       const subsHtml = showSubs ? g.subs.map((s) => `
@@ -1981,6 +2022,28 @@
           <span><span class="key" style="background:${Charts.COLORS.income}"></span>% de tus ingresos</span>
         </div>
         <div id="chart-cat-evo"></div>` : '<div class="empty">Todavía no hay suficientes movimientos para ver una evolución.</div>'}
+      </div>
+
+      <div class="card">
+        <h2 class="card-title"><span>Distribución de gastos · ${esc(monthLabel(mk))}</span></h2>
+        ${pieItems.length ? `
+        <div class="pie-cylinder-wrap">
+          <div id="chart-cat-pie"></div>
+          <div class="chart-legend chart-legend-col">
+            ${pieItems.map((it) => `<span><span class="key" style="background:${it.color}"></span>${esc(it.label)} · ${pct(it.value, exp)}</span>`).join('')}
+          </div>
+        </div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
+      </div>
+
+      <div class="card">
+        <h2 class="card-title"><span>Participación por categoría · últimos 6 meses</span></h2>
+        ${stackRows.some((r) => r.total > 0) ? `
+        <div class="chart-legend">
+          ${stackCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
+        </div>
+        <div id="chart-cat-stack"></div>
+        <div class="hint" style="margin-top:6px">Cada barra es el 100% de lo gastado ese mes: si una franja crece o se achica, cambió el peso de esa categoría.</div>` :
+          '<div class="empty">Todavía no hay suficientes movimientos para ver la participación mes a mes.</div>'}
       </div>`;
 
     if (windowBreakdown.length) {
@@ -1990,6 +2053,16 @@
       ], {
         fmtAxis: (v) => Math.round(v) + '%',
         ariaLabel: `Evolución del peso de ${selGroup ? selGroup.name : ''} sobre ingresos y gastos`,
+      });
+    }
+    if (pieItems.length) {
+      Charts.pieCylinder($('#chart-cat-pie', el), pieItems, {
+        ariaLabel: `Distribución de gastos de ${monthLabel(mk)}`,
+      });
+    }
+    if (stackRows.some((r) => r.total > 0)) {
+      Charts.stacked100($('#chart-cat-stack', el), stackRows, stackCats, {
+        ariaLabel: 'Participación de cada categoría por mes',
       });
     }
 
@@ -2384,6 +2457,18 @@
       byDay.get(ev.date).push(ev);
     }
 
+    // Gastado por día calendario (fecha real del movimiento, no el mes
+    // "efectivo" de una compra en cuotas o con tarjeta): sirve para pintar
+    // cada celda con un gradiente según cuánto se gastó ese día puntual.
+    const daySpend = new Map();
+    for (const t of S().transactions) {
+      if (t.type !== 'gasto' || monthKeyOf(t.date) !== mk) continue;
+      const v = txDispAmount(t);
+      if (v == null) continue;
+      daySpend.set(t.date, (daySpend.get(t.date) || 0) + v);
+    }
+    const maxDaySpend = Math.max(0, ...daySpend.values());
+
     // Total del mes a pagar (gastos fijos + tarjetas) en moneda visible
     let mesPagos = 0;
     for (const ev of events) {
@@ -2414,7 +2499,14 @@
       if (evs.length) cls.push('has');
       if (ds === today) cls.push('today');
       if (ds === ui.calSel) cls.push('sel');
-      return `<div class="${cls.join(' ')}" ${evs.length ? `data-day="${ds}"` : ''}>
+      // Gradiente de fondo según lo gastado ese día (relativo al día de más
+      // gasto del mes que se está viendo): a la selección no se le toca el
+      // fondo para que se siga viendo resaltada con su propio color.
+      const spend = daySpend.get(ds) || 0;
+      const heatStyle = (spend > 0 && maxDaySpend > 0 && ds !== ui.calSel)
+        ? ` style="background:color-mix(in srgb, var(--expense-series) ${10 + Math.round((spend / maxDaySpend) * 60)}%, transparent)"`
+        : '';
+      return `<div class="${cls.join(' ')}"${heatStyle} ${evs.length ? `data-day="${ds}"` : ''}>
         <span class="cal-num">${d}</span>
         <span class="cal-dots">${dots}</span>
       </div>`;
@@ -2482,6 +2574,7 @@
           <span><span class="key" style="background:var(--income-series)"></span>Ingreso fijo</span>
           <span><span class="key" style="background:var(--accent)"></span>Tarjeta</span>
         </div>
+        ${maxDaySpend > 0 ? '<div class="hint" style="margin-top:6px">El fondo de cada día se pinta más oscuro cuanto más gastaste esa fecha.</div>' : ''}
       </div>
 
       <div class="card">

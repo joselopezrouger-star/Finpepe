@@ -954,7 +954,8 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .chart-legend {
   display: flex;
   align-items: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 8px 14px;
   font-size: 12px;
   color: var(--ink-2);
   margin-bottom: 10px;
@@ -966,6 +967,12 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
   margin-right: 5px;
   vertical-align: -1px;
 }
+.chart-legend-col { flex-direction: column; align-items: flex-start; gap: 7px; }
+
+/* ---------- Torta cilindro (Categorías) ---------- */
+.pie-cylinder-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.pie-cylinder-wrap #chart-cat-pie { flex: 1 1 220px; max-width: 300px; min-width: 180px; }
+.pie-cylinder-wrap .chart-legend-col { flex: 1 1 160px; margin-bottom: 0; }
 
 .trend-svg { width: 100%; height: auto; display: block; }
 .tick-label { font: 11px var(--font); fill: var(--muted); }
@@ -1105,6 +1112,7 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
 .tx-card-amount { text-align: right; flex: none; white-space: nowrap; }
 .tx-card-amount .v { font: 700 14px var(--font-heading); font-variant-numeric: tabular-nums; }
 .tx-card-amount .v.pos { color: var(--income); }
+.tx-card-amount .v.neg { color: var(--crit); }
 /* Gastos grandes (relativo al máximo de la lista que se está viendo): más
    rojos cuanto más grandes, para identificarlos de un vistazo. */
 .tx-card-amount .v.amount-big { color: var(--crit); }

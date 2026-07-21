@@ -237,6 +237,145 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
+  // Oscurece un color hex (para la pared del gráfico de torta cilindro).
+  function darken(hex, factor) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+    const d = (c) => Math.max(0, Math.min(255, Math.round(c * factor)));
+    return `rgb(${d(r)},${d(g)},${d(b)})`;
+  }
+
+  /* ---------- Torta con look de cilindro/tambor (pseudo-3D) ----------
+     items: [{label, value, color}] · opts: {ariaLabel}. La "pared" del
+     frente (mitad inferior de la elipse) se pinta en tiras finas de 2° cada
+     una, coloreadas según a qué porción le toca ese ángulo — así la pared
+     queda dividida igual que la cara de arriba sin tener que recortar el
+     arco de cada gajo a mano. */
+  function pieCylinder(el, items, opts) {
+    el.replaceChildren();
+    const total = items.reduce((a, i) => a + i.value, 0);
+    if (!items.length || total <= 0) return;
+
+    const W = 300, H = 210;
+    const cx = W / 2, cy = 88, rx = 108, ry = 62, wallH = 20;
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', opts.ariaLabel || 'Distribución por categoría');
+
+    const add = (parent, tag, attrs) => {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      parent.appendChild(n);
+      return n;
+    };
+    const pt = (deg, yOff) => {
+      const rad = (deg * Math.PI) / 180;
+      return { x: cx + rx * Math.cos(rad), y: cy + ry * Math.sin(rad) + (yOff || 0) };
+    };
+
+    // Ángulo acumulado de cada gajo, arrancando arriba (-90°) en sentido horario.
+    let acc = 0;
+    const segs = items.map((it) => {
+      const a0 = -90 + (acc / total) * 360;
+      acc += it.value;
+      const a1 = -90 + (acc / total) * 360;
+      return { ...it, a0, a1 };
+    });
+    const colorAt = (deg) => {
+      let d = deg;
+      while (d < -90) d += 360;
+      while (d >= 270) d -= 360;
+      const seg = segs.find((s) => d >= s.a0 - 0.01 && d < s.a1 + 0.01);
+      return (seg || segs[segs.length - 1]).color;
+    };
+
+    // Pared frontal (0° a 180°, "sur" de la elipse — la única mitad visible
+    // porque la cara de arriba tapa el resto).
+    for (let d = 0; d < 180; d += 2) {
+      const d2 = Math.min(d + 2, 180);
+      const p1 = pt(d, 0), p2 = pt(d2, 0), p3 = pt(d2, wallH), p4 = pt(d, wallH);
+      add(svg, 'path', {
+        d: `M${p1.x},${p1.y} L${p2.x},${p2.y} L${p3.x},${p3.y} L${p4.x},${p4.y} Z`,
+        fill: darken(colorAt((d + d2) / 2), 0.7), stroke: 'none',
+      });
+    }
+
+    // Cara de arriba: los gajos de la torta.
+    segs.forEach((s) => {
+      if (s.a1 <= s.a0) return;
+      const large = s.a1 - s.a0 > 180 ? 1 : 0;
+      const p0 = pt(s.a0, 0), p1 = pt(s.a1, 0);
+      add(svg, 'path', {
+        d: `M${cx},${cy} L${p0.x},${p0.y} A${rx},${ry} 0 ${large} 1 ${p1.x},${p1.y} Z`,
+        fill: s.color, stroke: 'var(--surface)', 'stroke-width': 1.5,
+      });
+    });
+
+    el.appendChild(svg);
+  }
+
+  /* ---------- Barras apiladas al 100%: participación de cada categoría
+     mes a mes ----------
+     rows: [{label, total, shares:[pct,...]}] (shares en el mismo orden que
+     cats) · cats: [{name, color}] · opts: {ariaLabel}. Un mes sin gastos se
+     pinta como una barra gris entera (no hay participación que mostrar). */
+  function stacked100(el, rows, cats, opts) {
+    el.replaceChildren();
+    if (!rows.length) return;
+    const W = 640, H = 240;
+    const m = { t: 10, r: 8, b: 26, l: 40 };
+    const iw = W - m.l - m.r;
+    const ih = H - m.t - m.b;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('class', 'trend-svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', opts.ariaLabel || 'Participación de cada categoría por mes');
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const add = (parent, tag, attrs, text) => {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      if (text !== undefined) n.textContent = text;
+      parent.appendChild(n);
+      return n;
+    };
+
+    [0, 25, 50, 75, 100].forEach((p) => {
+      const yy = m.t + ih - (p / 100) * ih;
+      add(svg, 'line', {
+        x1: m.l, x2: W - m.r, y1: yy, y2: yy,
+        stroke: p === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1,
+        'shape-rendering': 'crispEdges',
+      });
+      add(svg, 'text', { x: m.l - 6, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label' }, p + '%');
+    });
+
+    const band = iw / rows.length;
+    const colW = Math.min(34, band * 0.5);
+    rows.forEach((r, i) => {
+      const cx = m.l + band * i + band / 2;
+      const x0 = cx - colW / 2;
+      if (r.total > 0) {
+        let yCursor = m.t + ih;
+        r.shares.forEach((pct, ci) => {
+          if (pct <= 0) return;
+          const h = (pct / 100) * ih;
+          yCursor -= h;
+          add(svg, 'rect', { x: x0, y: yCursor, width: colW, height: h, fill: cats[ci].color });
+        });
+      } else {
+        add(svg, 'rect', { x: x0, y: m.t, width: colW, height: ih, fill: 'var(--surface-2)', rx: 3 });
+      }
+      add(svg, 'text', { x: cx, y: H - 8, 'text-anchor': 'middle', class: 'tick-label' }, r.label);
+    });
+
+    el.appendChild(svg);
+  }
+
   function compact(n) {
     const sign = n < 0 ? '-' : '';
     const a = Math.abs(n);
@@ -330,5 +469,5 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
-  return { COLORS, hBars, trend, lines, dailyBalance };
+  return { COLORS, hBars, trend, lines, dailyBalance, pieCylinder, stacked100 };
 })();
