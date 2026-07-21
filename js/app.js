@@ -1593,7 +1593,11 @@
         hasActivity: incM > 0 || expM > 0,
       };
     }).filter((r) => r.hasActivity);
-    const hasSavingsRateData = savingsRateRows.length > 0;
+    // Con 1 o 2 meses de historia la línea queda como un segmento chico
+    // perdido en una tarjeta ancha (probado y rechazado: ni centrarlo se ve
+    // bien). Con tan poco recorrido no hay realmente una "tendencia" que
+    // mostrar, así que se pide un mínimo de 3 antes de intentar el gráfico.
+    const hasSavingsRateTrend = savingsRateRows.length >= 3;
 
     // Vencimientos de tarjetas: solo las que ya tienen al menos dos
     // resúmenes cargados (el actual y el anterior) — sin eso no hay un
@@ -1719,7 +1723,10 @@
           </div>
         </div>
         <div class="savings-rate-chart">
-          ${hasSavingsRateData ? savingsRateTrendSvg(savingsRateRows) : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}
+          ${hasSavingsRateTrend ? savingsRateTrendSvg(savingsRateRows)
+            : `<div class="empty">${savingsRateRows.length === 0
+                ? 'Sin ingresos registrados en los últimos 6 meses.'
+                : 'Cargá movimientos en al menos 3 meses distintos para ver acá la tendencia.'}</div>`}
         </div>
       </div>
 
