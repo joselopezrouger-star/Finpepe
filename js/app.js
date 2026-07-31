@@ -3752,6 +3752,16 @@
         console.error(e);
       }
     }
+    // Recién ACÁ, después de resolver qué versión ganó (remota o local) —
+    // no antes: si generateRecurring()/generateLeftoverIncome() corrieran
+    // apenas se abre la app (como antes), Store.save() pisaría _updatedAt
+    // con la hora actual justo antes de comparar arriba, y este dispositivo
+    // "ganaría" la sincronización SIEMPRE que generara algo, aunque el otro
+    // dispositivo tuviera cambios más nuevos todavía no bajados acá — eso
+    // podía duplicar un gasto recurrente y de paso pisar en la nube los
+    // datos reales de la otra persona con una copia vieja + el duplicado.
+    generateRecurring();
+    generateLeftoverIncome();
     render();
   }
 
@@ -3768,6 +3778,12 @@
     } catch (e) {
       console.error('Init nube', e);
       renderAccountChip();
+      // Si falló acá (ej. sin señal) nunca se llega a onAuthChanged(): sin
+      // esto, un recurrente o el sobrante del mes no se generarían nunca
+      // esta sesión.
+      generateRecurring();
+      generateLeftoverIncome();
+      render();
     }
   }
 
@@ -4376,8 +4392,15 @@
   }
 
   function init() {
-    generateRecurring();
-    generateLeftoverIncome();
+    // Con la nube configurada, generar acá (antes de sincronizar) puede
+    // duplicar un recurrente/sobrante si este dispositivo está desactualizado
+    // — ver el comentario en onAuthChanged(), que se encarga de generarlos
+    // ahí en ese caso, ya con los datos sincronizados. Sin nube no hay con
+    // quién pisarse, así que no hace falta esperar nada.
+    if (!Cloud.available() || !Cloud.isConfigured()) {
+      generateRecurring();
+      generateLeftoverIncome();
+    }
     sortMethodsOnce();
 
     $$('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
