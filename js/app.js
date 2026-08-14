@@ -832,6 +832,21 @@
     }).join('');
   }
 
+  // Como catSelectOptionsHTML(), pero para el filtro de Movimientos: ahí el
+  // grupo (ej. "Casa") también tiene que poder elegirse — filtra ese grupo
+  // MÁS todas sus subcategorías — a diferencia del formulario de carga, que
+  // solo permite elegir hojas. Por eso el grupo va como una opción más
+  // dentro de su propio <optgroup>, en vez de quedar afuera.
+  function catFilterOptionsHTML(selId) {
+    if (!useSubcats()) return selOptions(S().categories, selId);
+    return S().categories.filter((c) => !c.parentId).map((g) => {
+      const children = catChildren(g.id);
+      if (!children.length) return `<option value="${esc(g.id)}" ${g.id === selId ? 'selected' : ''}>${esc(g.name)}</option>`;
+      const groupOpt = `<option value="${esc(g.id)}" ${g.id === selId ? 'selected' : ''}>${esc(g.name)} (todas)</option>`;
+      return `<optgroup label="${esc(g.name)}">${groupOpt}${selOptions(children, selId)}</optgroup>`;
+    }).join('');
+  }
+
   /* ================= Formulario de movimiento ================= */
 
   /* Carga de movimientos: una sola pantalla con calculadora para el importe
@@ -1836,7 +1851,16 @@
     let list = txs.slice();
     if (ui.fMonth) list = list.filter((t) => effectiveMonthOf(t) === ui.fMonth);
     if (ui.fType) list = list.filter((t) => t.type === ui.fType);
-    if (ui.fCat) list = list.filter((t) => t.categoryId === ui.fCat);
+    if (ui.fCat) {
+      // Si se eligió un grupo (ej. "Casa"), tiene que traer también los
+      // movimientos cargados en sus subcategorías (ej. "Supermercado") —
+      // antes comparaba el categoryId tal cual, así que elegir un grupo con
+      // subcategorías activas siempre daba "sin movimientos".
+      const filterCat = catById(ui.fCat);
+      list = list.filter((t) => filterCat && !filterCat.parentId
+        ? topCategoryOf(t.categoryId) === ui.fCat
+        : t.categoryId === ui.fCat);
+    }
     if (ui.fMethod) list = list.filter((t) => t.methodId === ui.fMethod);
     list.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
 
@@ -1866,7 +1890,7 @@
           </select>
           <select id="fil-cat" aria-label="Categoría">
             <option value="">Todas las categorías</option>
-            ${selOptions(S().categories, ui.fCat)}
+            ${catFilterOptionsHTML(ui.fCat)}
           </select>
           <select id="fil-method" aria-label="Medio de pago">
             <option value="">Todos los medios</option>
@@ -3009,8 +3033,13 @@
     }));
 
     const nRows = barRows.length;
-    const cols = `96px repeat(${months.length}, minmax(26px, 1fr))`;
-    const gridRows = `auto repeat(${nRows}, 30px)`;
+    // La columna de nombres achica proporcionalmente en vez de un ancho
+    // fijo (minmax con piso/techo) y el texto pasa a envolver en vez de
+    // cortarse con "…" — así la compra se lee completa sin forzar scroll
+    // lateral. Las filas de datos crecen (minmax con "auto") por si el
+    // nombre necesita más de una línea.
+    const cols = `minmax(72px, 120px) repeat(${months.length}, minmax(26px, 1fr))`;
+    const gridRows = `auto repeat(${nRows}, minmax(30px, auto))`;
     const cells = [];
     if (todayIdx >= 0) {
       cells.push(`<div class="gantt-today" style="grid-row:1 / span ${nRows + 1};grid-column:${todayIdx + 2}"></div>`);

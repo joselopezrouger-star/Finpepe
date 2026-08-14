@@ -923,15 +923,19 @@ table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 20p
    porcentajes. Puede necesitar scroll lateral si el rango de meses es
    largo (a diferencia de la lista de abajo, achicarlo no tendría sentido:
    es lo que hace a un Gantt un Gantt). */
+/* Sin min-width fijo: el grid se achica solo para entrar en el ancho de la
+   tarjeta (las columnas de mes tienen un piso de 26px vía minmax), así no
+   hace falta scrollear al costado salvo que de verdad no entre (muchos
+   meses en una pantalla muy angosta) — ahí overflow-x sigue de red. */
 .gantt-wrap { overflow-x: auto; }
-.gantt { display: grid; min-width: 480px; }
+.gantt { display: grid; }
 .gantt-cell { padding: 4px 6px; }
 .gantt-monthlabel { text-align: center; font-size: 10.5px; color: var(--muted); padding-bottom: 8px; }
 .gantt-monthlabel.is-today { color: var(--accent); }
 .gantt-label {
   font-size: 12px; color: var(--ink); align-self: center;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  padding-right: 10px;
+  overflow-wrap: break-word; line-height: 1.25;
+  padding-right: 8px;
 }
 .gantt-track { border-bottom: 1px solid var(--border); }
 .gantt-today { background: var(--accent-wash); }
