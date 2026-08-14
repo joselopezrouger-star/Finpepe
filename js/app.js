@@ -4367,7 +4367,14 @@
   // encontrar nada para esa vista (y para ninguna otra que se agregue suelta).
   function groupOf(view) { return GROUPS.find((g) => g.views.includes(view)) || null; }
 
+  // Al cambiar de hoja (no en cualquier re-render — eso incluiría cosas
+  // como cambiar de mes o cerrar un diálogo, que no deberían tirarte para
+  // arriba) se vuelve al principio: si quedaste scrolleado abajo del todo
+  // en una hoja, la siguiente no debería abrir en ese mismo nivel.
+  let lastRenderedView = null;
   function render() {
+    const changingView = ui.view !== lastRenderedView;
+    lastRenderedView = ui.view;
     const grp = groupOf(ui.view);
     $$('.bottom-nav button').forEach((b) => b.classList.toggle('active', !!grp && b.dataset.group === grp.key));
     $$('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.cur === disp()));
@@ -4396,6 +4403,7 @@
       render();
     }));
     VIEWS[ui.view]($('.view-content', el));
+    if (changingView) window.scrollTo(0, 0);
   }
 
   // Ordena las tarjetas de crédito primero en "Tarjetas y medios" — pero
