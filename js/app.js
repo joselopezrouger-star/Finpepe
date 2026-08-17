@@ -1627,7 +1627,15 @@
           // ruido (un solo gasto grande el día 1 "proyectaría" un mes
           // carísimo) — se espera a tener al menos ~15% del mes andado.
           if (elapsedFrac > 0.15) {
-            const projected = exp / elapsedFrac;
+            // Un gasto fijo (recurrente o una cuota) ya pasó completo ese
+            // mes — no tiene sentido "proyectarlo" de nuevo multiplicándolo
+            // por lo que falta: pagar el alquiler el día 3 infla la
+            // proyección del resto del mes como si eso se fuera a repetir.
+            // Solo se estira al ritmo actual la parte variable; lo fijo se
+            // suma tal cual, una sola vez.
+            const fixedGasto = sumDisp(inMonth.filter((t) => t.type === 'gasto' && (t.recurringId || t.installment)));
+            const variableGasto = exp - fixedGasto;
+            const projected = fixedGasto + variableGasto / elapsedFrac;
             if (projected > expPrev * 1.15) {
               out.push({ tone: 'warn', severity: 3, icon: '📈',
                 text: `Al ritmo actual vas a terminar gastando más que el mes pasado (proyectado ${fmtDisp(projected)}).` });
