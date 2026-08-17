@@ -1582,6 +1582,103 @@
     }
     catItems = catItems.map((it, i) => ({ ...it, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
 
+    // "Cómo vas este mes": comentario automático a partir de reglas simples
+    // (nada de IA, son heurísticas sobre los datos que ya tenemos) — junta
+    // candidatos con una severidad, se queda con los 1-2 más urgentes, y si
+    // no hay nada de qué preocuparse suma un par de líneas positivas. Solo
+    // tiene sentido para el mes EN CURSO: un mes pasado ya está cerrado y
+    // uno futuro todavía no tiene datos que analizar.
+    let insights = mk !== curMonth() ? [] : (() => {
+      const out = [];
+      const byCatPrev = new Map();
+      for (const t of inPrev.filter((x) => x.type === 'gasto')) {
+        const v = txDispAmount(t);
+        if (v == null) continue;
+        const topId = topCategoryOf(t.categoryId);
+        byCatPrev.set(topId, (byCatPrev.get(topId) || 0) + v);
+      }
+
+      if (balance < 0) {
+        out.push({ tone: 'warn', severity: 5, icon: '🔴',
+          text: `Este mes vas en rojo: el balance es de ${fmtDisp(balance)}.` });
+      }
+
+      const budgetHits = S().budgets.map((b) => {
+        const spent = sumDisp(inMonth.filter((t) => t.type === 'gasto' && topCategoryOf(t.categoryId) === b.categoryId));
+        const limit = convOrNull(b.amount, b.currency);
+        return { name: catName(b.categoryId), spent, limit, over: (limit > 0) ? spent - limit : 0 };
+      }).filter((x) => x.over > 0).sort((a, b) => b.over - a.over);
+      if (budgetHits.length) {
+        const w = budgetHits[0];
+        out.push({ tone: 'warn', severity: 4, icon: '⚠️',
+          text: `Superaste el presupuesto de ${w.name}: ${fmtDisp(w.spent)} de ${fmtDisp(w.limit)}.` });
+      }
+
+      if (expPrev > 0) {
+        if (exp > expPrev) {
+          const daysLeftMk = daysLeftInMonth(mk);
+          out.push({ tone: 'warn', severity: 4, icon: '🚨',
+            text: `Ya gastaste más que todo el mes pasado (${fmtDisp(exp)} vs ${fmtDisp(expPrev)}), y todavía quedan ${daysLeftMk} día${daysLeftMk === 1 ? '' : 's'}.` });
+        } else {
+          const [ky, kmo] = mk.split('-').map(Number);
+          const daysInMk = new Date(ky, kmo, 0).getDate();
+          const elapsedFrac = new Date().getDate() / daysInMk;
+          // Con muy pocos días recorridos cualquier proyección es puro
+          // ruido (un solo gasto grande el día 1 "proyectaría" un mes
+          // carísimo) — se espera a tener al menos ~15% del mes andado.
+          if (elapsedFrac > 0.15) {
+            const projected = exp / elapsedFrac;
+            if (projected > expPrev * 1.15) {
+              out.push({ tone: 'warn', severity: 3, icon: '📈',
+                text: `Al ritmo actual vas a terminar gastando más que el mes pasado (proyectado ${fmtDisp(projected)}).` });
+            }
+          }
+        }
+      }
+
+      let worstCat = null;
+      for (const [id, val] of byCat.entries()) {
+        const prevVal = byCatPrev.get(id) || 0;
+        const diffAmt = val - prevVal;
+        if (prevVal <= 0 || diffAmt <= 0) continue;
+        const pct = diffAmt / prevVal;
+        // Umbral doble (% Y monto mínimo) para no alertar por una categoría
+        // chica que se duplicó de $500 a $1.000.
+        if (pct >= 0.3 && diffAmt >= Math.max(3000, inc * 0.02)) {
+          if (!worstCat || diffAmt > worstCat.diffAmt) worstCat = { id, diffAmt, pct };
+        }
+      }
+      if (worstCat) {
+        out.push({ tone: 'warn', severity: 2, icon: '👀',
+          text: `Cuidado con ${catName(worstCat.id)}: gastaste ${fmtDisp(worstCat.diffAmt)} más que el mes pasado (+${Math.round(worstCat.pct * 100)}%).` });
+      }
+
+      if (savingsRatePct != null && savingsRatePctPrev != null && savingsRatePct < savingsRatePctPrev - 10) {
+        out.push({ tone: 'warn', severity: 1, icon: '💸',
+          text: `Tu tasa de ahorro bajó de ${savingsRatePctPrev}% a ${savingsRatePct}% respecto al mes pasado.` });
+      }
+
+      out.sort((a, b) => b.severity - a.severity);
+
+      if (!out.length) {
+        if (expPrev > 0 && exp < expPrev * 0.9) {
+          out.push({ tone: 'good', icon: '🎉',
+            text: `Vas bien: gastaste ${Math.round((1 - exp / expPrev) * 100)}% menos que el mes pasado.` });
+        }
+        if (savingsRatePct != null && savingsRatePctPrev != null && savingsRatePct > savingsRatePctPrev + 5) {
+          out.push({ tone: 'good', icon: '📈',
+            text: `Tu tasa de ahorro mejoró: ${savingsRatePctPrev}% → ${savingsRatePct}%.` });
+        }
+        if (!out.length) {
+          out.push({ tone: 'neutral', icon: '🙂',
+            text: (incPrev > 0 || expPrev > 0)
+              ? 'Vas en línea con el mes pasado, sin sobresaltos.'
+              : 'Todavía no hay un mes anterior con qué comparar.' });
+        }
+      }
+      return out.slice(0, 2);
+    })();
+
     // Tendencia: últimos 6 meses hasta el mes elegido, salvo los que no
     // tengan ningún movimiento (no tiene sentido mostrar un mes vacío en
     // el eje si nunca se cargó nada ese mes).
@@ -1696,6 +1793,18 @@
 
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
       ${sharedWidget}
+
+      ${insights.length ? `
+      <div class="card insight-card">
+        <h2 class="card-title">Cómo vas este mes</h2>
+        <div class="insight-list">
+          ${insights.map((ins) => `
+            <div class="insight-row insight-${ins.tone}">
+              <span class="insight-icon">${ins.icon}</span>
+              <span class="insight-text">${esc(ins.text)}</span>
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
 
       <div class="grid-2 grid-2-tight">
         <div class="card card-compact">
