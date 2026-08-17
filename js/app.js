@@ -1627,7 +1627,15 @@
           // ruido (un solo gasto grande el día 1 "proyectaría" un mes
           // carísimo) — se espera a tener al menos ~15% del mes andado.
           if (elapsedFrac > 0.15) {
-            const projected = exp / elapsedFrac;
+            // Un gasto fijo (recurrente o una cuota) ya pasó completo ese
+            // mes — no tiene sentido "proyectarlo" de nuevo multiplicándolo
+            // por lo que falta: pagar el alquiler el día 3 infla la
+            // proyección del resto del mes como si eso se fuera a repetir.
+            // Solo se estira al ritmo actual la parte variable; lo fijo se
+            // suma tal cual, una sola vez.
+            const fixedGasto = sumDisp(inMonth.filter((t) => t.type === 'gasto' && (t.recurringId || t.installment)));
+            const variableGasto = exp - fixedGasto;
+            const projected = fixedGasto + variableGasto / elapsedFrac;
             if (projected > expPrev * 1.15) {
               out.push({ tone: 'warn', severity: 3, icon: '📈',
                 text: `Al ritmo actual vas a terminar gastando más que el mes pasado (proyectado ${fmtDisp(projected)}).` });
@@ -2132,6 +2140,31 @@
     const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
     const breakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'gasto'));
 
+    // Variación contra el mes anterior, por grupo y por subcategoría, para
+    // la columna nueva de la tabla — se arman dos mapas (id → monto) a
+    // partir del mismo categoryBreakdown() del mes pasado, así queda
+    // consistente con cómo se agrupan las subcategorías en todos lados.
+    const prevMkCat = addMonthsKey(mk, -1);
+    const prevBreakdown = categoryBreakdown(
+      txs.filter((t) => t.type === 'gasto' && effectiveMonthOf(t) === prevMkCat));
+    const prevGroupTotals = new Map(prevBreakdown.map((g) => [g.id, g.total]));
+    const prevSubTotals = new Map();
+    for (const g of prevBreakdown) for (const s of g.subs) prevSubTotals.set(s.id, s.value);
+    const momHTML = (cur, prevVal) => {
+      if (!(prevVal > 0)) {
+        if (!(cur > 0)) return '<span class="cat-mom flat">—</span>';
+        return `<span class="cat-mom new">nuevo · ${fmtDisp(cur)}</span>`;
+      }
+      const diff = cur - prevVal;
+      const pctVar = Math.round((diff / prevVal) * 100);
+      if (pctVar === 0) return '<span class="cat-mom flat">= mes pasado</span>';
+      const up = diff > 0;
+      // Es una tabla de GASTOS: gastar más que el mes pasado es la señal
+      // "mala" (arriba, rojo, bien visible) y gastar menos es la "buena"
+      // (abajo, verde) — al revés de una variación de ingresos.
+      return `<span class="cat-mom ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${Math.abs(pctVar)}% · ${up ? '+' : '−'}${fmtDisp(Math.abs(diff))}</span>`;
+    };
+
     // Últimos 6 meses hasta el mes elegido, para el selector y el gráfico
     // de evolución (una categoría sin gasto este mes puede igual mostrarse
     // si tuvo peso en algún mes reciente).
@@ -2211,12 +2244,14 @@
           <td class="num cell-sub">${fmtDisp(s.value)}</td>
           <td class="num cell-sub">${pct(s.value, exp)}</td>
           <td class="num cell-sub">${pct(s.value, inc)}</td>
+          <td class="num cell-sub">${momHTML(s.value, prevSubTotals.get(s.id) || 0)}</td>
         </tr>`).join('') : '';
       return `<tr>
         <td>${esc(g.name)}</td>
         <td class="num amount-out">${fmtDisp(g.total)}</td>
         <td class="num">${pct(g.total, exp)}</td>
         <td class="num">${pct(g.total, inc)}</td>
+        <td class="num">${momHTML(g.total, prevGroupTotals.get(g.id) || 0)}</td>
       </tr>${subsHtml}`;
     }).join('');
 
@@ -2231,7 +2266,7 @@
         </div>
         ${breakdown.length ? `
         <div class="table-scroll"><table class="data cat-breakdown-table">
-          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">% gastos</th><th class="num">% ingr.</th></tr></thead>
+          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">% gastos</th><th class="num">% ingr.</th><th class="num">vs. mes pasado</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
       </div>
