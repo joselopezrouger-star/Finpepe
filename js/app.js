@@ -2242,16 +2242,16 @@
         <tr class="cat-sub-row">
           <td class="cell-sub">${esc(s.name)}</td>
           <td class="num cell-sub">${fmtDisp(s.value)}</td>
-          <td class="num cell-sub">${momHTML(s.value, prevSubTotals.get(s.id) || 0)}</td>
           <td class="num cell-sub">${pct(s.value, exp)}</td>
           <td class="num cell-sub">${pct(s.value, inc)}</td>
+          <td class="num cell-sub">${momHTML(s.value, prevSubTotals.get(s.id) || 0)}</td>
         </tr>`).join('') : '';
       return `<tr>
         <td>${esc(g.name)}</td>
         <td class="num amount-out">${fmtDisp(g.total)}</td>
-        <td class="num">${momHTML(g.total, prevGroupTotals.get(g.id) || 0)}</td>
         <td class="num">${pct(g.total, exp)}</td>
         <td class="num">${pct(g.total, inc)}</td>
+        <td class="num">${momHTML(g.total, prevGroupTotals.get(g.id) || 0)}</td>
       </tr>${subsHtml}`;
     }).join('');
 
@@ -2266,7 +2266,7 @@
         </div>
         ${breakdown.length ? `
         <div class="table-scroll"><table class="data cat-breakdown-table">
-          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">vs. mes pasado</th><th class="num">% gastos</th><th class="num">% ingr.</th></tr></thead>
+          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">% gastos</th><th class="num">% ingr.</th><th class="num">vs. mes pasado</th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
       </div>
