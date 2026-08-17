@@ -1794,18 +1794,6 @@
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
       ${sharedWidget}
 
-      ${insights.length ? `
-      <div class="card insight-card">
-        <h2 class="card-title">Cómo vas este mes</h2>
-        <div class="insight-list">
-          ${insights.map((ins) => `
-            <div class="insight-row insight-${ins.tone}">
-              <span class="insight-icon">${ins.icon}</span>
-              <span class="insight-text">${esc(ins.text)}</span>
-            </div>`).join('')}
-        </div>
-      </div>` : ''}
-
       <div class="grid-2 grid-2-tight">
         <div class="card card-compact">
           <h2 class="card-title">
@@ -1851,6 +1839,18 @@
             : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}
         </div>
       </div>
+
+      ${insights.length ? `
+      <div class="card insight-card">
+        <h2 class="card-title">Cómo vas este mes</h2>
+        <div class="insight-list">
+          ${insights.map((ins) => `
+            <div class="insight-row insight-${ins.tone}">
+              <span class="insight-icon">${ins.icon}</span>
+              <span class="insight-text">${esc(ins.text)}</span>
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
 
       <div class="card">
         <h2 class="card-title">
