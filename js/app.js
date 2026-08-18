@@ -4576,8 +4576,8 @@
     // aproximada: cuánto puso cada uno, el total en común y el neto.
     const ledgerHTML = partner ? `
       <div class="shared-ledger">
-        <div class="shared-ledger-row"><span>Pagado por ${esc(myName)}</span><b>${fmtDisp(totals.mine)}</b></div>
-        <div class="shared-ledger-row"><span>Pagado por ${esc(partnerName)}</span><b>${fmtDisp(totals.theirs)}</b></div>
+        <div class="shared-ledger-row"><span><i class="ledger-dot me"></i>Pagado por ${esc(myName)}</span><b>${fmtDisp(totals.mine)}</b></div>
+        <div class="shared-ledger-row"><span><i class="ledger-dot partner"></i>Pagado por ${esc(partnerName)}</span><b>${fmtDisp(totals.theirs)}</b></div>
         <div class="shared-ledger-row"><span>Total gastado en común</span><b>${fmtDisp(totals.mine + totals.theirs)}</b></div>
         <div class="shared-ledger-row total ${balAbs < 0.01 ? '' : (meIsDebtor ? 'neg' : 'pos')}">
           <span>${balAbs < 0.01 ? 'Balance' : (meIsDebtor ? `Le debés a ${esc(partnerName)}` : `${esc(partnerName)} te debe`)}</span>
@@ -4618,8 +4618,8 @@
         <div class="agenda-trailing">
           <div class="agenda-amount">${fmtMoney(item.amount, item.currency)}</div>
           <div class="shared-participants">
-            <span class="shared-mini-avatar">${esc(initials(myName))}</span>
-            <span class="shared-mini-avatar">${esc(initials(partnerLabel(partner)))}</span>
+            <span class="shared-mini-avatar me">${esc(initials(myName))}</span>
+            <span class="shared-mini-avatar partner">${esc(initials(partnerLabel(partner)))}</span>
           </div>
         </div>
         <button class="row-del" data-delexp="${esc(item.id)}" aria-label="Eliminar">✕</button>
@@ -4634,8 +4634,11 @@
       : `<div class="card">
           <h2 class="card-title">Deudas</h2>
           <div class="debt-row">
-            <div class="debt-row-text"><b>${esc(meIsDebtor ? myName : partnerName)}</b> le debe a <b>${esc(meIsDebtor ? partnerName : myName)}</b></div>
-            <div class="debt-row-amount">${fmtDisp(balAbs)}</div>
+            <div class="debt-row-who">
+              <span class="shared-avatar ${meIsDebtor ? 'me' : 'partner'}">${esc(initials(meIsDebtor ? myName : partnerName))}</span>
+              <div class="debt-row-text"><b>${esc(meIsDebtor ? myName : partnerName)}</b> le debe a <b>${esc(meIsDebtor ? partnerName : myName)}</b></div>
+            </div>
+            <div class="debt-row-amount ${meIsDebtor ? 'neg' : 'pos'}">${fmtDisp(balAbs)}</div>
           </div>
           <button class="btn btn-primary btn-sm" id="btn-settle-debt" style="margin-top:10px">Registrar pago</button>
         </div>`);
@@ -4645,7 +4648,7 @@
 
       <div class="hero">
         <div class="hero-label">
-          <span>◇ ${partner ? `Balance con ${esc(partnerName)}` : 'Balance'}</span>
+          <span class="hero-label-text">${iconSvg('heart')}${partner ? `Balance con ${esc(partnerName)}` : 'Balance'}</span>
           ${partner ? '<button class="link-btn" id="btn-edit-name" style="margin-left:auto">✎ Tu nombre</button>' : ''}
         </div>
         ${ledgerHTML}
@@ -4658,14 +4661,14 @@
         <div class="spacer"></div>
         <button class="link-btn" id="btn-refresh-shared">↻ Actualizar</button>
         ${!partner ? '<button class="link-btn" id="btn-invite">Generar código para tu pareja</button>' : ''}
-        <button class="link-btn" id="btn-leave-house">Salir del hogar</button>
       </div>
       <div id="invite-box"></div>
 
       <div class="card">
         <h2 class="card-title">Transacciones</h2>
         <div class="agenda">${feed.length ? feed.map(rowHTML).join('') : '<div class="empty">Todavía no cargaron ningún gasto compartido.</div>'}</div>
-      </div>`;
+      </div>
+      <button class="link-btn shared-leave" id="btn-leave-house">Salir del hogar</button>`;
 
     $('#btn-add-se', el).addEventListener('click', sharedExpenseForm);
     const addSettle = $('#btn-add-settle', el);
