@@ -441,14 +441,16 @@
   /* ================= Estado de la interfaz ================= */
   const ui = {
     view: 'resumen',
-    month: curMonth(),        // mes del resumen
-    fMonth: curMonth(),       // filtros de movimientos
-    fAllMonths: false,        // true = ignora fMonth, trae todos los meses
+    // Un solo mes compartido por Inicio, Movimientos, Categorías y
+    // Calendario: elegir un mes en cualquiera de esas hojas te lo deja
+    // elegido en todas — antes cada una tenía su propia variable
+    // (month/fMonth/calMonth) y quedaban desincronizadas entre sí.
+    month: curMonth(),
+    fAllMonths: false,        // true = ignora el mes, trae todos (filtro de Movimientos)
     fType: '', fCat: '', fMethod: '',
     trendTable: false,
     dailyBalancePrev: false,  // comparar balance por día con el mes anterior
     openSavings: {},          // id -> bool (historial expandido)
-    calMonth: curMonth(),     // mes del calendario
     calSel: null,             // 'YYYY-MM-DD' día seleccionado en el calendario
     catAnalysisId: null,      // categoría elegida para el gráfico de evolución
   };
@@ -2044,7 +2046,7 @@
     const txs = S().transactions;
 
     let list = txs.slice();
-    if (!ui.fAllMonths) list = list.filter((t) => effectiveMonthOf(t) === ui.fMonth);
+    if (!ui.fAllMonths) list = list.filter((t) => effectiveMonthOf(t) === ui.month);
     if (ui.fType) list = list.filter((t) => t.type === ui.fType);
     if (ui.fCat) {
       // Si se eligió un grupo (ej. "Casa"), tiene que traer también los
@@ -2081,10 +2083,10 @@
         </h2>
         <div class="month-bar${ui.fAllMonths ? ' month-bar-disabled' : ''}">
           <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior" ${ui.fAllMonths ? 'disabled' : ''}>‹</button>
-          <span class="month-bar-label">${iconSvg('calendar')}${ui.fAllMonths ? 'Todos los meses' : esc(monthLabel(ui.fMonth))}</span>
+          <span class="month-bar-label">${iconSvg('calendar')}${ui.fAllMonths ? 'Todos los meses' : esc(monthLabel(ui.month))}</span>
           <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente" ${ui.fAllMonths ? 'disabled' : ''}>›</button>
         </div>
-        <button class="link-btn month-bar-today" data-mtoday${(ui.fAllMonths || ui.fMonth === curMonth()) ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>
+        <button class="link-btn month-bar-today" data-mtoday${(ui.fAllMonths || ui.month === curMonth()) ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>
         <div class="mov-filters">
           <select id="fil-type" aria-label="Tipo">
             <option value="">Ingresos y gastos</option>
@@ -2157,10 +2159,10 @@
       </div>`;
 
     $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
-      ui.fMonth = addMonthsKey(ui.fMonth, Number(b.dataset.mnav));
+      ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
       render();
     }));
-    $('[data-mtoday]', el).addEventListener('click', () => { ui.fMonth = curMonth(); render(); });
+    $('[data-mtoday]', el).addEventListener('click', () => { ui.month = curMonth(); render(); });
     $('#fil-allmonths', el).addEventListener('change', (e) => { ui.fAllMonths = e.target.checked; render(); });
     $('#fil-type', el).addEventListener('change', (e) => { ui.fType = e.target.value; render(); });
     $('#fil-cat', el).addEventListener('change', (e) => { ui.fCat = e.target.value; render(); });
@@ -2411,26 +2413,13 @@
 
     el.innerHTML = `
       <div class="card">
-        <h2 class="card-title"><span>Análisis de categorías</span></h2>
+        <h2 class="card-title"><span>Ingresos por categoría</span></h2>
         <div class="month-bar">
           <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
           <span class="month-bar-label">${iconSvg('calendar')}${esc(monthLabel(mk))}</span>
           <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
         </div>
         <button class="link-btn month-bar-today" data-mtoday${mk === curMonth() ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>
-        ${breakdown.length ? `
-        <div class="table-scroll"><table class="data cat-breakdown-table">
-          <colgroup>
-            <col class="cat-col-name"><col class="cat-col-amount">
-            <col class="cat-col-pct"><col class="cat-col-pct"><col class="cat-col-mom">
-          </colgroup>
-          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">Gastos</th><th class="num">Ingr.</th><th class="num">vs. ant.</th></tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title"><span>Ingresos por categoría · ${esc(monthLabel(mk))}</span></h2>
         ${incomeBreakdown.length ? `
         <div class="table-scroll"><table class="data cat-breakdown-table cat-income-table">
           <colgroup>
@@ -2440,6 +2429,19 @@
           <thead><tr><th>Origen</th><th class="num">Monto</th><th class="num">% ingr.</th><th class="num">vs. ant.</th></tr></thead>
           <tbody>${incomeRowsHtml}</tbody>
         </table></div>` : `<div class="empty">Sin ingresos registrados en ${esc(monthLabel(mk))}.</div>`}
+      </div>
+
+      <div class="card">
+        <h2 class="card-title"><span>Análisis de categorías</span></h2>
+        ${breakdown.length ? `
+        <div class="table-scroll"><table class="data cat-breakdown-table">
+          <colgroup>
+            <col class="cat-col-name"><col class="cat-col-amount">
+            <col class="cat-col-pct"><col class="cat-col-pct"><col class="cat-col-mom">
+          </colgroup>
+          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">Gastos</th><th class="num">Ingr.</th><th class="num">vs. ant.</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
       </div>
 
       <div class="card">
@@ -2930,7 +2932,12 @@
   }
 
   function vCalendario(el) {
-    const mk = ui.calMonth;
+    const mk = ui.month;
+    // Si el mes se cambió desde otra hoja (Movimientos/Categorías comparten
+    // el mismo estado), un día seleccionado de un mes distinto ya no tiene
+    // sentido — sin esto quedaba resaltado un día que no corresponde al mes
+    // que se está mostrando.
+    if (ui.calSel && monthKeyOf(ui.calSel) !== mk) ui.calSel = null;
     const [y, mo] = mk.split('-').map(Number);
     const events = eventsForMonth(mk);
     const byDay = new Map();
@@ -3021,6 +3028,7 @@
 
     el.innerHTML = `
       <div class="card">
+        <h2 class="card-title"><span>Calendario</span></h2>
         <div class="month-bar">
           <button class="icon-btn" data-cnav="-1" aria-label="Mes anterior">‹</button>
           <span class="month-bar-label">${iconSvg('calendar')}${esc(monthLabel(mk))}</span>
@@ -3048,12 +3056,12 @@
       </div>`;
 
     $$('[data-cnav]', el).forEach((b) => b.addEventListener('click', () => {
-      ui.calMonth = addMonthsKey(ui.calMonth, Number(b.dataset.cnav));
+      ui.month = addMonthsKey(ui.month, Number(b.dataset.cnav));
       ui.calSel = null;
       render();
     }));
     $('[data-mtoday]', el).addEventListener('click', () => {
-      ui.calMonth = curMonth();
+      ui.month = curMonth();
       ui.calSel = null;
       render();
     });

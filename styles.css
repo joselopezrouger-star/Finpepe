@@ -305,6 +305,10 @@ a { color: var(--accent-down); }
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 6px 8px;
+  /* Un título con un toggle al lado (ej. "Todos los meses") es más alto
+     que uno de solo texto — sin este mínimo, esa diferencia se notaba al
+     cambiar de sub-pestaña entre Movimientos/Categorías/Calendario. */
+  min-height: 24px;
 }
 .card-title .link-btn { text-transform: none; letter-spacing: 0; }
 
