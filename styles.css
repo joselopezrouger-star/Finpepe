@@ -1641,7 +1641,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .hero-label-text { display: flex; align-items: center; gap: 6px; }
 .hero-label-text svg { width: 14px; height: 14px; }
 
-.shared-ledger { margin: 14px 16px 16px; display: grid; gap: 0; }
+.shared-ledger { margin-top: 4px; display: grid; gap: 0; }
 .shared-ledger-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; padding: 9px 0;
@@ -1681,9 +1681,14 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .shared-mini-avatar.me { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); color: var(--honey-deep); }
 .shared-mini-avatar.partner { background: color-mix(in srgb, var(--warn) 40%, var(--surface)); color: var(--warn); }
 
+/* Ahora vive arriba del todo del detalle de balance, en la misma tarjeta
+   — el borde de abajo lo separa del desglose sin hacer falta otra
+   tarjeta ni otro título aparte. */
 .debt-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
 }
 .debt-row-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .debt-row-text { font-size: 14px; color: var(--ink); }
