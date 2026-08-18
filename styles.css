@@ -1038,7 +1038,13 @@ table.data.cat-breakdown-table tr.cat-sub-row td.num { font-weight: 400; }
    a lo ancho de su propia tarjeta, no una píldora suelta — y vive antes de
    las sub-pestañas, afuera de cualquier tarjeta de contenido, para que no
    parezca "pertenecer" a una vista en particular. */
-.month-bar-card { overflow: hidden; border-radius: var(--radius); }
+.month-bar-card {
+  overflow: hidden;
+  border-radius: var(--radius);
+  /* .card trae padding propio — acá la franja de color tiene que llegar
+     hasta el borde, igual que en el hero de Inicio, así que se anula. */
+  padding: 0;
+}
 .month-bar-card .hero-month-bar { margin-bottom: 0; }
 .shared-month-today { margin: 0; }
 
