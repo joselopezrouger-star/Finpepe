@@ -2081,12 +2081,6 @@
             <input type="checkbox" id="fil-allmonths" ${ui.fAllMonths ? 'checked' : ''}>
           </label>
         </h2>
-        <div class="month-bar${ui.fAllMonths ? ' month-bar-disabled' : ''}">
-          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior" ${ui.fAllMonths ? 'disabled' : ''}>‹</button>
-          <span class="month-bar-label">${iconSvg('calendar')}${ui.fAllMonths ? 'Todos los meses' : esc(monthLabel(ui.month))}</span>
-          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente" ${ui.fAllMonths ? 'disabled' : ''}>›</button>
-        </div>
-        <button class="link-btn month-bar-today" data-mtoday${(ui.fAllMonths || ui.month === curMonth()) ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>
         <div class="mov-filters">
           <select id="fil-type" aria-label="Tipo">
             <option value="">Ingresos y gastos</option>
@@ -2158,11 +2152,6 @@
         : '<div class="empty">No hay movimientos con estos filtros. Cargá el primero con “+ Movimiento”.</div>'}
       </div>`;
 
-    $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
-      ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
-      render();
-    }));
-    $('[data-mtoday]', el).addEventListener('click', () => { ui.month = curMonth(); render(); });
     $('#fil-allmonths', el).addEventListener('change', (e) => { ui.fAllMonths = e.target.checked; render(); });
     $('#fil-type', el).addEventListener('change', (e) => { ui.fType = e.target.value; render(); });
     $('#fil-cat', el).addEventListener('change', (e) => { ui.fCat = e.target.value; render(); });
@@ -2414,12 +2403,6 @@
     el.innerHTML = `
       <div class="card">
         <h2 class="card-title"><span>Ingresos por categoría</span></h2>
-        <div class="month-bar">
-          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
-          <span class="month-bar-label">${iconSvg('calendar')}${esc(monthLabel(mk))}</span>
-          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
-        </div>
-        <button class="link-btn month-bar-today" data-mtoday${mk === curMonth() ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>
         ${incomeBreakdown.length ? `
         <div class="table-scroll"><table class="data cat-breakdown-table cat-income-table">
           <colgroup>
@@ -2501,12 +2484,6 @@
       });
     }
 
-    $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
-      ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
-      render();
-    }));
-    const btnToday = $('[data-mtoday]', el);
-    if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
     $$('tr[data-catid]', el).forEach((row) => row.addEventListener('click', () => {
       const gid = row.dataset.catid;
       const subId = row.dataset.subid;
@@ -3029,12 +3006,6 @@
     el.innerHTML = `
       <div class="card">
         <h2 class="card-title"><span>Calendario</span></h2>
-        <div class="month-bar">
-          <button class="icon-btn" data-cnav="-1" aria-label="Mes anterior">‹</button>
-          <span class="month-bar-label">${iconSvg('calendar')}${esc(monthLabel(mk))}</span>
-          <button class="icon-btn" data-cnav="1" aria-label="Mes siguiente">›</button>
-        </div>
-        <button class="link-btn month-bar-today" data-mtoday${mk === curMonth() ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>
         <div class="cal-grid">
           ${dow.map((d) => `<div class="cal-dow">${d}</div>`).join('')}
           ${cells.map(cellHTML).join('')}
@@ -3055,16 +3026,6 @@
         <div class="agenda">${agendaHTML}</div>
       </div>`;
 
-    $$('[data-cnav]', el).forEach((b) => b.addEventListener('click', () => {
-      ui.month = addMonthsKey(ui.month, Number(b.dataset.cnav));
-      ui.calSel = null;
-      render();
-    }));
-    $('[data-mtoday]', el).addEventListener('click', () => {
-      ui.month = curMonth();
-      ui.calSel = null;
-      render();
-    });
     $$('[data-day]', el).forEach((c) => c.addEventListener('click', () => {
       ui.calSel = (ui.calSel === c.dataset.day) ? null : c.dataset.day;
       render();
@@ -4749,9 +4710,30 @@
       settingsBtn.setAttribute('aria-label', ui.view === 'ajustes' ? 'Volver a Inicio' : 'Ajustes');
     }
     const el = $('#view');
-    el.innerHTML = (grp && grp.views.length > 1)
+    // Movimientos/Categorías/Calendario comparten un solo mes (ui.month):
+    // el selector va antes que las sub-pestañas y afuera de cualquier
+    // tarjeta de contenido en particular, con el mismo look que el de
+    // Inicio — así no parece "pertenecer" a una sola de las tres vistas.
+    const showMonthBar = grp && grp.key === 'movimientos';
+    const monthBarHTML = showMonthBar ? `
+      <div class="card month-bar-card">
+        <div class="hero-month-bar">
+          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
+          <span class="hero-month-bar-label">${iconSvg('calendar')}${esc(monthLabel(ui.month))}</span>
+          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
+        </div>
+      </div>
+      <button class="link-btn hero-mtoday shared-month-today" data-mtoday${ui.month === curMonth() ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>` : '';
+    el.innerHTML = monthBarHTML + ((grp && grp.views.length > 1)
       ? `<div class="subtabs">${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}</div><div class="view-content"></div>`
-      : '<div class="view-content"></div>';
+      : '<div class="view-content"></div>');
+    if (showMonthBar) {
+      $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
+        ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
+        render();
+      }));
+      $('[data-mtoday]', el).addEventListener('click', () => { ui.month = curMonth(); render(); });
+    }
     $$('[data-subview]', el).forEach((b) => b.addEventListener('click', () => {
       b.blur();
       ui.view = b.dataset.subview;
