@@ -4626,39 +4626,34 @@
       </div>`;
     };
 
-    const deudasHTML = !partner ? '' : (balAbs < 0.01
-      ? `<div class="card">
-          <h2 class="card-title">Deudas</h2>
-          <div class="empty">Están a mano — sin deudas pendientes.</div>
-        </div>`
-      : `<div class="card">
-          <h2 class="card-title">Deudas</h2>
-          <div class="debt-row">
-            <div class="debt-row-who">
-              <span class="shared-avatar ${meIsDebtor ? 'me' : 'partner'}">${esc(initials(meIsDebtor ? myName : partnerName))}</span>
-              <div class="debt-row-text"><b>${esc(meIsDebtor ? myName : partnerName)}</b> le debe a <b>${esc(meIsDebtor ? partnerName : myName)}</b></div>
-            </div>
-            <div class="debt-row-amount ${meIsDebtor ? 'neg' : 'pos'}">${fmtDisp(balAbs)}</div>
-          </div>
-          <button class="btn btn-primary btn-sm" id="btn-settle-debt" style="margin-top:10px">Registrar pago</button>
-        </div>`);
+    // Un solo título y una sola tarjeta para "cuánto se debe" (antes eran
+    // dos: "Deudas" arriba y "Balance con X" abajo, con estilos de título
+    // distintos entre sí y con el resto de la hoja). El resumen de deuda
+    // (si hay) va primero, adentro de la misma tarjeta que el detalle.
+    const hasDebt = partner && balAbs >= 0.01;
+    const debtRowHTML = hasDebt ? `
+      <div class="debt-row">
+        <div class="debt-row-who">
+          <span class="shared-avatar ${meIsDebtor ? 'me' : 'partner'}">${esc(initials(meIsDebtor ? myName : partnerName))}</span>
+          <div class="debt-row-text"><b>${esc(meIsDebtor ? myName : partnerName)}</b> le debe a <b>${esc(meIsDebtor ? partnerName : myName)}</b></div>
+        </div>
+        <div class="debt-row-amount ${meIsDebtor ? 'neg' : 'pos'}">${fmtDisp(balAbs)}</div>
+      </div>` : '';
 
     el.innerHTML = `
-      ${deudasHTML}
-
-      <div class="hero">
-        <div class="hero-label">
+      <div class="card">
+        <h2 class="card-title">
           <span class="hero-label-text">${iconSvg('heart')}${partner ? `Balance con ${esc(partnerName)}` : 'Balance'}</span>
-          ${partner ? '<button class="link-btn" id="btn-edit-name" style="margin-left:auto">✎ Tu nombre</button>' : ''}
-        </div>
+          ${partner ? '<button class="link-btn" id="btn-edit-name">✎ Tu nombre</button>' : ''}
+        </h2>
+        ${debtRowHTML}
         ${ledgerHTML}
-        ${!partner ? '<div class="hero-split"><div class="k">Esperando a que tu pareja se una con el código de invitación.</div></div>' : ''}
+        ${!partner ? '<div class="empty">Esperando a que tu pareja se una con el código de invitación.</div>' : ''}
       </div>
 
       <div class="toolbar">
         <button class="btn btn-primary btn-sm" id="btn-add-se">+ Gasto compartido</button>
-        ${partner ? '<button class="btn btn-sm" id="btn-add-settle">Registrar pago</button>' : ''}
-        <div class="spacer"></div>
+        ${hasDebt ? '<button class="btn btn-sm" id="btn-settle-debt">Registrar pago</button>' : ''}
         <button class="link-btn" id="btn-refresh-shared">↻ Actualizar</button>
         ${!partner ? '<button class="link-btn" id="btn-invite">Generar código para tu pareja</button>' : ''}
       </div>
@@ -4671,8 +4666,6 @@
       <button class="link-btn shared-leave" id="btn-leave-house">Salir del hogar</button>`;
 
     $('#btn-add-se', el).addEventListener('click', sharedExpenseForm);
-    const addSettle = $('#btn-add-settle', el);
-    if (addSettle) addSettle.addEventListener('click', settlementForm);
     const settleDebt = $('#btn-settle-debt', el);
     if (settleDebt) settleDebt.addEventListener('click', settlementForm);
     const editName = $('#btn-edit-name', el);
