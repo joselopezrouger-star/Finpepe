@@ -4717,6 +4717,7 @@
       ? `<div class="subtabs">${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}</div><div class="view-content"></div>`
       : '<div class="view-content"></div>';
     $$('[data-subview]', el).forEach((b) => b.addEventListener('click', () => {
+      b.blur();
       ui.view = b.dataset.subview;
       // Se refresca en segundo plano sin borrar lo ya cargado (ver
       // comentario en init()): así no aparece "Cargando…" cada vez.
@@ -4762,6 +4763,11 @@
     sortMethodsOnce();
 
     $$('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
+      // El botón queda enfocado al tocarlo, y en algunos navegadores
+      // mobile eso dispara un scroll automático para "mostrar" el elemento
+      // enfocado — aunque sea uno fijo (position: fixed) que ya está
+      // siempre a la vista. Sacarle el foco apenas se toca evita ese salto.
+      b.blur();
       const grp = GROUPS.find((g) => g.key === b.dataset.group);
       if (!grp.views.includes(ui.view)) ui.view = grp.views[0];
       // "Compartido" vive en la nube y lo puede cambiar la otra persona en
