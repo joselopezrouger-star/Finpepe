@@ -443,6 +443,7 @@
     view: 'resumen',
     month: curMonth(),        // mes del resumen
     fMonth: curMonth(),       // filtros de movimientos
+    fAllMonths: false,        // true = ignora fMonth, trae todos los meses
     fType: '', fCat: '', fMethod: '',
     trendTable: false,
     dailyBalancePrev: false,  // comparar balance por día con el mes anterior
@@ -741,6 +742,18 @@
     }
     fetchingRates = false;
     render();
+  }
+  // Refresca la cotización si nunca se trajo o tiene más de 6 horas. Se
+  // llama al abrir la app y también cada vez que vuelve a primer plano
+  // (ver 'visibilitychange' en init()): en el celular, sobre todo como PWA
+  // instalada, volver de segundo plano casi nunca recarga la página del
+  // todo, así que sin ese segundo chequeo la cotización podía quedar
+  // congelada días enteros aunque la app "estuviera abierta".
+  function maybeRefreshRates() {
+    const s = S().settings;
+    const stale = !s.ratesUpdatedAt ||
+      (Date.now() - new Date(s.ratesUpdatedAt).getTime()) > 6 * 3600 * 1000;
+    if (stale) refreshRates();
   }
 
   function renderRateChip() {
@@ -2029,13 +2042,9 @@
   /* ================= Vista: Movimientos ================= */
   function vMovimientos(el) {
     const txs = S().transactions;
-    const monthsPresent = [...new Set(txs.map((t) => effectiveMonthOf(t)))];
-    if (!monthsPresent.includes(curMonth())) monthsPresent.push(curMonth());
-    monthsPresent.sort().reverse();
-    if (ui.fMonth && !monthsPresent.includes(ui.fMonth)) ui.fMonth = curMonth();
 
     let list = txs.slice();
-    if (ui.fMonth) list = list.filter((t) => effectiveMonthOf(t) === ui.fMonth);
+    if (!ui.fAllMonths) list = list.filter((t) => effectiveMonthOf(t) === ui.fMonth);
     if (ui.fType) list = list.filter((t) => t.type === ui.fType);
     if (ui.fCat) {
       // Si se eligió un grupo (ej. "Casa"), tiene que traer también los
@@ -2063,12 +2072,20 @@
 
     el.innerHTML = `
       <div class="card">
-        <h2 class="card-title">Detalle</h2>
+        <h2 class="card-title">
+          <span>Detalle</span>
+          <label class="subcats-toggle">
+            Todos los meses
+            <input type="checkbox" id="fil-allmonths" ${ui.fAllMonths ? 'checked' : ''}>
+          </label>
+        </h2>
+        <div class="month-bar${ui.fAllMonths ? ' month-bar-disabled' : ''}">
+          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior" ${ui.fAllMonths ? 'disabled' : ''}>‹</button>
+          <span class="month-bar-label">${iconSvg('calendar')}${ui.fAllMonths ? 'Todos los meses' : esc(monthLabel(ui.fMonth))}</span>
+          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente" ${ui.fAllMonths ? 'disabled' : ''}>›</button>
+        </div>
+        <button class="link-btn month-bar-today" data-mtoday${(ui.fAllMonths || ui.fMonth === curMonth()) ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>
         <div class="mov-filters">
-          <select id="fil-month" aria-label="Mes">
-            <option value="">Todos los meses</option>
-            ${monthsPresent.map((m) => `<option value="${m}" ${m === ui.fMonth ? 'selected' : ''}>${esc(monthLabel(m))}</option>`).join('')}
-          </select>
           <select id="fil-type" aria-label="Tipo">
             <option value="">Ingresos y gastos</option>
             <option value="ingreso" ${ui.fType === 'ingreso' ? 'selected' : ''}>Solo ingresos</option>
@@ -2079,7 +2096,7 @@
             <option value="">Todas las categorías</option>
             ${catFilterOptionsHTML(ui.fCat)}
           </select>
-          <select id="fil-method" aria-label="Medio de pago">
+          <select id="fil-method" aria-label="Medio de pago" class="mov-filter-full">
             <option value="">Todos los medios</option>
             ${selOptions(S().methods, ui.fMethod)}
           </select>
@@ -2139,7 +2156,12 @@
         : '<div class="empty">No hay movimientos con estos filtros. Cargá el primero con “+ Movimiento”.</div>'}
       </div>`;
 
-    $('#fil-month', el).addEventListener('change', (e) => { ui.fMonth = e.target.value; render(); });
+    $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
+      ui.fMonth = addMonthsKey(ui.fMonth, Number(b.dataset.mnav));
+      render();
+    }));
+    $('[data-mtoday]', el).addEventListener('click', () => { ui.fMonth = curMonth(); render(); });
+    $('#fil-allmonths', el).addEventListener('change', (e) => { ui.fAllMonths = e.target.checked; render(); });
     $('#fil-type', el).addEventListener('change', (e) => { ui.fType = e.target.value; render(); });
     $('#fil-cat', el).addEventListener('change', (e) => { ui.fCat = e.target.value; render(); });
     $('#fil-method', el).addEventListener('change', (e) => { ui.fMethod = e.target.value; render(); });
@@ -2395,7 +2417,7 @@
           <span class="month-bar-label">${iconSvg('calendar')}${esc(monthLabel(mk))}</span>
           <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
         </div>
-        ${mk !== curMonth() ? '<button class="link-btn month-bar-today" data-mtoday>volver al mes actual</button>' : ''}
+        <button class="link-btn month-bar-today" data-mtoday${mk === curMonth() ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>
         ${breakdown.length ? `
         <div class="table-scroll"><table class="data cat-breakdown-table">
           <colgroup>
@@ -3004,6 +3026,7 @@
           <span class="month-bar-label">${iconSvg('calendar')}${esc(monthLabel(mk))}</span>
           <button class="icon-btn" data-cnav="1" aria-label="Mes siguiente">›</button>
         </div>
+        <button class="link-btn month-bar-today" data-mtoday${mk === curMonth() ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>
         <div class="cal-grid">
           ${dow.map((d) => `<div class="cal-dow">${d}</div>`).join('')}
           ${cells.map(cellHTML).join('')}
@@ -3029,6 +3052,11 @@
       ui.calSel = null;
       render();
     }));
+    $('[data-mtoday]', el).addEventListener('click', () => {
+      ui.calMonth = curMonth();
+      ui.calSel = null;
+      render();
+    });
     $$('[data-day]', el).forEach((c) => c.addEventListener('click', () => {
       ui.calSel = (ui.calSel === c.dataset.day) ? null : c.dataset.day;
       render();
@@ -4717,6 +4745,7 @@
       ? `<div class="subtabs">${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}</div><div class="view-content"></div>`
       : '<div class="view-content"></div>';
     $$('[data-subview]', el).forEach((b) => b.addEventListener('click', () => {
+      b.blur();
       ui.view = b.dataset.subview;
       // Se refresca en segundo plano sin borrar lo ya cargado (ver
       // comentario en init()): así no aparece "Cargando…" cada vez.
@@ -4762,6 +4791,11 @@
     sortMethodsOnce();
 
     $$('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
+      // El botón queda enfocado al tocarlo, y en algunos navegadores
+      // mobile eso dispara un scroll automático para "mostrar" el elemento
+      // enfocado — aunque sea uno fijo (position: fixed) que ya está
+      // siempre a la vista. Sacarle el foco apenas se toca evita ese salto.
+      b.blur();
       const grp = GROUPS.find((g) => g.key === b.dataset.group);
       if (!grp.views.includes(ui.view)) ui.view = grp.views[0];
       // "Compartido" vive en la nube y lo puede cambiar la otra persona en
@@ -4790,12 +4824,15 @@
 
     render();
     initCloud();
-
-    // Actualiza cotización si nunca se trajo o si tiene más de 6 horas
-    const s = S().settings;
-    const stale = !s.ratesUpdatedAt ||
-      (Date.now() - new Date(s.ratesUpdatedAt).getTime()) > 6 * 3600 * 1000;
-    if (stale) refreshRates();
+    maybeRefreshRates();
+    // Volver a la app después de tenerla en segundo plano (cambiar de
+    // pestaña/app y volver) no siempre la recarga del todo, así que sin
+    // esto la cotización podía quedar vieja por días aunque el chequeo de
+    // arriba diga que "hace 6 horas que no se actualiza" — porque ese
+    // chequeo solo corrió una vez, al abrir la app la última vez de cero.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') maybeRefreshRates();
+    });
   }
 
   document.addEventListener('DOMContentLoaded', init);
