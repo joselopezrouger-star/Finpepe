@@ -1598,8 +1598,30 @@
     // uno futuro todavía no tiene datos que analizar.
     let insights = mk !== curMonth() ? [] : (() => {
       const out = [];
+      // El aviso de ritmo de gasto (más abajo) compara contra la fecha REAL
+      // de cada movimiento, no el "mes efectivo" que puede correr una
+      // compra con tarjeta al mes de vencimiento (ver ajuste "contar
+      // tarjetas por"). Si no, con esa opción activada un resumen grande
+      // que vence este mes infla la proyección aunque esas compras se
+      // hayan hecho en calendario el mes pasado — y el aviso queda
+      // contradiciendo lo que se ve en "Balance por día", que sí usa la
+      // fecha real.
+      const inMonthCal = txs.filter((t) => monthKeyOf(t.date) === mk);
+      const inPrevCal = txs.filter((t) => monthKeyOf(t.date) === prevMk);
+      const expCal = sumDisp(inMonthCal.filter((t) => t.type === 'gasto'));
+      const expPrevCal = sumDisp(inPrevCal.filter((t) => t.type === 'gasto'));
+      // Mismo criterio de fecha real (no efectiva) para las dos, así el
+      // aviso de categoría de abajo tampoco lo dispara un resumen de
+      // tarjeta que vence este mes pero es de compras de otro mes.
+      const byCatCal = new Map();
       const byCatPrev = new Map();
-      for (const t of inPrev.filter((x) => x.type === 'gasto')) {
+      for (const t of inMonthCal.filter((x) => x.type === 'gasto')) {
+        const v = txDispAmount(t);
+        if (v == null) continue;
+        const topId = topCategoryOf(t.categoryId);
+        byCatCal.set(topId, (byCatCal.get(topId) || 0) + v);
+      }
+      for (const t of inPrevCal.filter((x) => x.type === 'gasto')) {
         const v = txDispAmount(t);
         if (v == null) continue;
         const topId = topCategoryOf(t.categoryId);
@@ -1622,11 +1644,11 @@
           text: `Superaste el presupuesto de ${w.name}: ${fmtDisp(w.spent)} de ${fmtDisp(w.limit)}.` });
       }
 
-      if (expPrev > 0) {
-        if (exp > expPrev) {
+      if (expPrevCal > 0) {
+        if (expCal > expPrevCal) {
           const daysLeftMk = daysLeftInMonth(mk);
           out.push({ tone: 'warn', severity: 4, icon: '🚨',
-            text: `Ya gastaste más que todo el mes pasado (${fmtDisp(exp)} vs ${fmtDisp(expPrev)}), y todavía quedan ${daysLeftMk} día${daysLeftMk === 1 ? '' : 's'}.` });
+            text: `Ya gastaste más que todo el mes pasado (${fmtDisp(expCal)} vs ${fmtDisp(expPrevCal)}), y todavía quedan ${daysLeftMk} día${daysLeftMk === 1 ? '' : 's'}.` });
         } else {
           const [ky, kmo] = mk.split('-').map(Number);
           const daysInMk = new Date(ky, kmo, 0).getDate();
@@ -1641,10 +1663,10 @@
             // proyección del resto del mes como si eso se fuera a repetir.
             // Solo se estira al ritmo actual la parte variable; lo fijo se
             // suma tal cual, una sola vez.
-            const fixedGasto = sumDisp(inMonth.filter((t) => t.type === 'gasto' && (t.recurringId || t.installment)));
-            const variableGasto = exp - fixedGasto;
+            const fixedGasto = sumDisp(inMonthCal.filter((t) => t.type === 'gasto' && (t.recurringId || t.installment)));
+            const variableGasto = expCal - fixedGasto;
             const projected = fixedGasto + variableGasto / elapsedFrac;
-            if (projected > expPrev * 1.15) {
+            if (projected > expPrevCal * 1.15) {
               out.push({ tone: 'warn', severity: 3, icon: '📈',
                 text: `Al ritmo actual vas a terminar gastando más que el mes pasado (proyectado ${fmtDisp(projected)}).` });
             }
@@ -1653,7 +1675,7 @@
       }
 
       let worstCat = null;
-      for (const [id, val] of byCat.entries()) {
+      for (const [id, val] of byCatCal.entries()) {
         const prevVal = byCatPrev.get(id) || 0;
         const diffAmt = val - prevVal;
         if (prevVal <= 0 || diffAmt <= 0) continue;
