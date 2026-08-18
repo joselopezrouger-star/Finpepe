@@ -143,8 +143,22 @@ const Store = (() => {
   }
 
   // Aplica un estado traído de la nube sin volver a disparar una subida.
+  // La cotización cacheada (cachedRates/ratesUpdatedAt) es un dato "de este
+  // dispositivo" — se re-consulta sola cada tanto sin pasar por save(), a
+  // propósito, para no pisar cambios reales de otro dispositivo al
+  // sincronizar (ver el comentario de saveLocal() arriba). Pero eso mismo
+  // significa que nunca llega a la nube: si acá se dejara pisar por lo que
+  // trae el pull, una cotización recién refrescada en este dispositivo
+  // volvía a quedar "vieja" apenas sincronizaba con otro dispositivo que
+  // hace rato no la actualiza. Se conserva la más nueva de las dos.
   function applyRemote(next) {
+    const localRates = state.settings && state.settings.cachedRates;
+    const localRatesAt = state.settings && state.settings.ratesUpdatedAt;
     state = migrate(next);
+    if (localRatesAt && (!state.settings.ratesUpdatedAt || localRatesAt > state.settings.ratesUpdatedAt)) {
+      state.settings.cachedRates = localRates;
+      state.settings.ratesUpdatedAt = localRatesAt;
+    }
     persist();
   }
 
