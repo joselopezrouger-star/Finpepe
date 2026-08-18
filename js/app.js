@@ -742,6 +742,18 @@
     fetchingRates = false;
     render();
   }
+  // Refresca la cotización si nunca se trajo o tiene más de 6 horas. Se
+  // llama al abrir la app y también cada vez que vuelve a primer plano
+  // (ver 'visibilitychange' en init()): en el celular, sobre todo como PWA
+  // instalada, volver de segundo plano casi nunca recarga la página del
+  // todo, así que sin ese segundo chequeo la cotización podía quedar
+  // congelada días enteros aunque la app "estuviera abierta".
+  function maybeRefreshRates() {
+    const s = S().settings;
+    const stale = !s.ratesUpdatedAt ||
+      (Date.now() - new Date(s.ratesUpdatedAt).getTime()) > 6 * 3600 * 1000;
+    if (stale) refreshRates();
+  }
 
   function renderRateChip() {
     const chip = $('#rate-chip');
@@ -4796,12 +4808,15 @@
 
     render();
     initCloud();
-
-    // Actualiza cotización si nunca se trajo o si tiene más de 6 horas
-    const s = S().settings;
-    const stale = !s.ratesUpdatedAt ||
-      (Date.now() - new Date(s.ratesUpdatedAt).getTime()) > 6 * 3600 * 1000;
-    if (stale) refreshRates();
+    maybeRefreshRates();
+    // Volver a la app después de tenerla en segundo plano (cambiar de
+    // pestaña/app y volver) no siempre la recarga del todo, así que sin
+    // esto la cotización podía quedar vieja por días aunque el chequeo de
+    // arriba diga que "hace 6 horas que no se actualiza" — porque ese
+    // chequeo solo corrió una vez, al abrir la app la última vez de cero.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') maybeRefreshRates();
+    });
   }
 
   document.addEventListener('DOMContentLoaded', init);
