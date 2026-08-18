@@ -1638,6 +1638,9 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 
 /* ---------- Compartido: hoja de balance, avatares y deudas ---------- */
 
+.hero-label-text { display: flex; align-items: center; gap: 6px; }
+.hero-label-text svg { width: 14px; height: 14px; }
+
 .shared-ledger { margin: 14px 16px 16px; display: grid; gap: 0; }
 .shared-ledger-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -1645,11 +1648,15 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   border-bottom: 1px solid var(--border);
   font-size: 14px; color: var(--ink);
 }
+.shared-ledger-row span { display: flex; align-items: center; gap: 8px; }
 .shared-ledger-row b { font-variant-numeric: tabular-nums; font-weight: 650; }
 .shared-ledger-row.total { border-bottom: none; padding-top: 12px; font-weight: 650; }
 .shared-ledger-row.total b { font-size: 18px; }
 .shared-ledger-row.total.neg b { color: var(--crit); }
 .shared-ledger-row.total.pos b { color: var(--income); }
+.ledger-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ledger-dot.me { background: var(--accent); }
+.ledger-dot.partner { background: var(--warn); }
 
 .shared-avatar {
   width: 34px; height: 34px; border-radius: 50%; flex: none;
@@ -1671,13 +1678,30 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   margin-left: -6px;
 }
 .shared-mini-avatar:first-child { margin-left: 0; }
+.shared-mini-avatar.me { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); color: var(--honey-deep); }
+.shared-mini-avatar.partner { background: color-mix(in srgb, var(--warn) 40%, var(--surface)); color: var(--warn); }
 
 .debt-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; flex-wrap: wrap;
 }
+.debt-row-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .debt-row-text { font-size: 14px; color: var(--ink); }
-.debt-row-amount { font-size: 18px; font-weight: 750; color: var(--crit); font-variant-numeric: tabular-nums; }
+.debt-row-amount { font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.debt-row-amount.neg { color: var(--crit); }
+.debt-row-amount.pos { color: var(--income); }
+
+/* "Salir del hogar" ya no compite con las acciones principales del
+   toolbar: queda como un link chico y apagado, solo, al final de la hoja
+   — sigue siendo fácil de encontrar pero no atrae la mirada primero. */
+.shared-leave {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
 
 @media (max-width: 560px) {
   .topbar-inner { padding: 10px 14px 6px; }
