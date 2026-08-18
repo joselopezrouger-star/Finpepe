@@ -2237,6 +2237,7 @@
     // Mismo desglose, pero de ingresos: de dónde viene la plata del mes
     // (sueldo, freelance, etc.), no sólo en qué se gastó.
     const incomeBreakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'ingreso'));
+    const incPrevTotal = sumDisp(inPrevCat.filter((t) => t.type === 'ingreso'));
     const prevIncomeBreakdown = categoryBreakdown(inPrevCat.filter((t) => t.type === 'ingreso'));
     const prevIncomeGroupTotals = new Map(prevIncomeBreakdown.map((g) => [g.id, g.total]));
     const prevIncomeSubTotals = new Map();
@@ -2411,6 +2412,12 @@
           </colgroup>
           <thead><tr><th>Origen</th><th class="num">Monto</th><th class="num">% ingr.</th><th class="num">vs. ant.</th></tr></thead>
           <tbody>${incomeRowsHtml}</tbody>
+          <tfoot><tr class="cat-total-row">
+            <td>Total</td>
+            <td class="num amount-out">${fmtDisp(inc)}</td>
+            <td class="num">100%</td>
+            <td class="num">${momHTML(inc, incPrevTotal, false)}</td>
+          </tr></tfoot>
         </table></div>` : `<div class="empty">Sin ingresos registrados en ${esc(monthLabel(mk))}.</div>`}
       </div>
 

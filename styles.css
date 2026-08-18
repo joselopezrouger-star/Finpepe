@@ -963,6 +963,16 @@ table.data.cat-breakdown-table tr.cat-break-group { background: var(--row-tint);
 table.data.cat-breakdown-table tr.cat-break-group td.num { font-weight: 600; }
 table.data.cat-breakdown-table tr.cat-sub-row td.num { font-weight: 400; }
 
+/* Fila de total: separada con un borde en vez del tinte de color de una
+   categoría puntual, para que se lea como la suma de todas, no como una
+   más de la lista. */
+table.data.cat-breakdown-table tr.cat-total-row td {
+  border-top: 2px solid var(--border-strong);
+  font-weight: 700;
+  padding-top: 8px;
+}
+table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
+
 /* Celda de variación: el % va arriba en una pill (bien visible si
    aumentó) y el monto nominal abajo, chico — apilado en vez de una sola
    línea larga, que era lo que más forzaba el scroll lateral. */
