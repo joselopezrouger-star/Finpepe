@@ -163,6 +163,88 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
+  /* ---------- Barras de una sola serie, con signo ----------
+     Para valores que pueden ser negativos (ej. ahorro nominal por mes: un
+     mes de retiro neto queda por debajo de la línea de cero) — mismo
+     estilo de columna redondeada que trend(), pero con eje que baja de
+     cero sólo si hace falta, igual que dailyBalance().
+     rows: [{label, value}] · opts: {ariaLabel} */
+  function singleBars(el, rows, opts) {
+    el.replaceChildren();
+    if (!rows.length) return;
+    const W = 640, H = 236;
+    const m = { t: 10, r: 8, b: 26, l: 56 };
+    const iw = W - m.l - m.r;
+    const ih = H - m.t - m.b;
+
+    const maxVal = Math.max(0, ...rows.map((r) => r.value));
+    const minVal = Math.min(0, ...rows.map((r) => r.value));
+    let top, bottom, ticks;
+    if (minVal >= 0) {
+      const nt = niceTicks(Math.max(1, maxVal), 4);
+      top = nt.top; bottom = 0; ticks = nt.ticks;
+    } else {
+      top = niceTicks(Math.max(maxVal, -minVal, 1), 3).top;
+      bottom = -top;
+      ticks = [bottom, bottom / 2, 0, top / 2, top];
+    }
+    const range = top - bottom;
+    const y = (v) => m.t + ih - ((v - bottom) / range) * ih;
+    const yZero = y(0);
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('class', 'trend-svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', opts.ariaLabel || 'Valor por mes');
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const add = (parent, tag, attrs, text) => {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      if (text !== undefined) n.textContent = text;
+      parent.appendChild(n);
+      return n;
+    };
+
+    for (const t of ticks) {
+      const yy = y(t);
+      add(svg, 'line', {
+        x1: m.l, x2: W - m.r, y1: yy, y2: yy,
+        stroke: t === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1,
+        'shape-rendering': 'crispEdges',
+      });
+      add(svg, 'text', {
+        x: m.l - 8, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label',
+      }, compact(t));
+    }
+
+    const band = iw / rows.length;
+    const colW = Math.min(28, band * 0.5);
+
+    rows.forEach((r, i) => {
+      const cx = m.l + band * i + band / 2;
+      const x0 = cx - colW / 2;
+      const yy = y(r.value);
+      const color = r.value >= 0 ? COLORS.income : COLORS.expense;
+      const h = Math.abs(yy - yZero);
+      const rad = Math.min(4, h, colW / 2);
+      if (r.value !== 0) {
+        const d = r.value >= 0
+          ? `M${x0},${yZero} L${x0},${yy + rad} Q${x0},${yy} ${x0 + rad},${yy}` +
+            ` L${x0 + colW - rad},${yy} Q${x0 + colW},${yy} ${x0 + colW},${yy + rad} L${x0 + colW},${yZero} Z`
+          : `M${x0},${yZero} L${x0},${yy - rad} Q${x0},${yy} ${x0 + rad},${yy}` +
+            ` L${x0 + colW - rad},${yy} Q${x0 + colW},${yy} ${x0 + colW},${yy - rad} L${x0 + colW},${yZero} Z`;
+        add(svg, 'path', { d, fill: color });
+      }
+      add(svg, 'text', {
+        x: cx, y: H - 8, 'text-anchor': 'middle', class: 'tick-label',
+      }, r.label);
+    });
+
+    el.appendChild(svg);
+  }
+
   /* ---------- Líneas: evolución de una o más series por mes ----------
      months: [label] · series: [{label, color, values: [n, ...]}] (mismo
      largo que months) · opts: {fmt, ariaLabel} */
@@ -487,5 +569,5 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
-  return { COLORS, hBars, trend, lines, dailyBalance, pieCylinder, stacked100 };
+  return { COLORS, hBars, trend, lines, singleBars, dailyBalance, pieCylinder, stacked100, compact };
 })();

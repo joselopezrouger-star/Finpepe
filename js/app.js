@@ -645,12 +645,20 @@
   /* Ahorros acumulados hasta fin de un mes (suma de entries con fecha
      anterior al 1° del mes siguiente, convertidos a moneda de
      visualización). Se usa tanto en Resumen ("aportado este mes" = la
-     diferencia entre dos de estos) como en monthBalance() de abajo. */
-  function savingsAtEndOf(mk) {
+     diferencia entre dos de estos) como en monthBalance() de abajo.
+     opts.excludeOpening deja afuera los aportes marcados como "ya lo tenía
+     ahorrado antes" (ver savingEntryForm) — sirve para calcular cuánto se
+     ahorró REALMENTE ese mes puntual, sin que un aporte histórico cargado
+     de una sola vez (para asentar plata que ya existía) infle el mes en
+     que se cargó como si ahí se hubiera ahorrado todo eso. El total real
+     acumulado (para "Total ahorrado" y el % de cada meta) sigue usando
+     todos los aportes, con o sin ese flag. */
+  function savingsAtEndOf(mk, opts = {}) {
     const cutoff = `${addMonthsKey(mk, 1)}-01`;
     let total = 0;
     for (const s of S().savings) {
-      const v = convOrNull(s.entries.filter((e) => e.date < cutoff).reduce((a, e) => a + e.amount, 0), s.currency);
+      const entries = opts.excludeOpening ? s.entries.filter((e) => !e.opening) : s.entries;
+      const v = convOrNull(entries.filter((e) => e.date < cutoff).reduce((a, e) => a + e.amount, 0), s.currency);
       if (v != null) total += v;
     }
     return total;
@@ -663,7 +671,7 @@
     const inMonth = S().transactions.filter((t) => effectiveMonthOf(t) === mk);
     const inc = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
     const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
-    const savingsMonth = savingsAtEndOf(mk) - savingsAtEndOf(addMonthsKey(mk, -1));
+    const savingsMonth = savingsAtEndOf(mk, { excludeOpening: true }) - savingsAtEndOf(addMonthsKey(mk, -1), { excludeOpening: true });
     return inc - exp - savingsMonth;
   }
 
@@ -1535,10 +1543,10 @@
     // acumulado al final del mes y al final del mes anterior. Usar el
     // total acumulado directo rompería "Balance del mes" (se iría cada vez
     // más negativo con los meses, aunque no cambie el ritmo de ahorro).
-    const totalSavings = savingsAtEndOf(mk);
-    const totalSavingsPrev = savingsAtEndOf(prevMk);
+    const totalSavings = savingsAtEndOf(mk, { excludeOpening: true });
+    const totalSavingsPrev = savingsAtEndOf(prevMk, { excludeOpening: true });
     const savingsMonth = totalSavings - totalSavingsPrev;
-    const savingsMonthPrev = totalSavingsPrev - savingsAtEndOf(addMonthsKey(mk, -2));
+    const savingsMonthPrev = totalSavingsPrev - savingsAtEndOf(addMonthsKey(mk, -2), { excludeOpening: true });
 
     // El dinero que se destina a ahorro ese mes deja de estar disponible,
     // así que resta del balance del mes igual que un gasto (un retiro de
@@ -1659,11 +1667,22 @@
           text: `Superaste el presupuesto de ${w.name}: ${fmtDisp(w.spent)} de ${fmtDisp(w.limit)}.` });
       }
 
-      if (expPrevCal > 0) {
-        if (expCal > expPrevCal) {
+      // Un gasto fijo (recurrente o una cuota, como el alquiler) es el
+      // mismo te portes como te portes con el resto de tus gastos — así que
+      // dejarlo adentro de la comparación "¿gastaste más que el mes
+      // pasado?" la infla o desinfla nada más según en qué día del
+      // calendario cayó, sin decir nada de tu ritmo real. Estos dos avisos
+      // comparan sólo lo variable.
+      const fixedCal = sumDisp(inMonthCal.filter((t) => t.type === 'gasto' && (t.recurringId || t.installment)));
+      const fixedPrevCal = sumDisp(inPrevCal.filter((t) => t.type === 'gasto' && (t.recurringId || t.installment)));
+      const varExpCal = expCal - fixedCal;
+      const varExpPrevCal = expPrevCal - fixedPrevCal;
+
+      if (varExpPrevCal > 0) {
+        if (varExpCal > varExpPrevCal) {
           const daysLeftMk = daysLeftInMonth(mk);
           out.push({ tone: 'warn', severity: 4, icon: '🚨',
-            text: `Ya gastaste más que todo el mes pasado (${fmtDisp(expCal)} vs ${fmtDisp(expPrevCal)}), y todavía quedan ${daysLeftMk} día${daysLeftMk === 1 ? '' : 's'}.` });
+            text: `Sin contar gastos fijos, ya gastaste más que todo el mes pasado (${fmtDisp(varExpCal)} vs ${fmtDisp(varExpPrevCal)}), y todavía quedan ${daysLeftMk} día${daysLeftMk === 1 ? '' : 's'}.` });
         } else {
           const [ky, kmo] = mk.split('-').map(Number);
           const daysInMk = new Date(ky, kmo, 0).getDate();
@@ -1678,9 +1697,9 @@
             // puntual a principio de mes (que después no se repitió) hacía
             // que ese promedio quedara alto para siempre, aunque el gasto
             // ya se hubiera aplanado — contradiciendo lo que se ve en
-            // "Balance por día". Lo ya gastado (fijo + variable) se suma
-            // tal cual, sin volver a proyectarlo; sólo los días que faltan
-            // se proyectan al ritmo variable de la última semana.
+            // "Balance por día". Lo ya gastado (variable) se suma tal cual,
+            // sin volver a proyectarlo; sólo los días que faltan se
+            // proyectan al ritmo variable de la última semana.
             const RECENT_WINDOW = 7;
             const windowStartDay = Math.max(1, daysElapsed - RECENT_WINDOW + 1);
             const recentDaysCount = daysElapsed - windowStartDay + 1;
@@ -1690,10 +1709,10 @@
               return day >= windowStartDay && day <= daysElapsed;
             }));
             const remainingDays = daysInMk - daysElapsed;
-            const projected = expCal + (recentVariableGasto / recentDaysCount) * remainingDays;
-            if (projected > expPrevCal * 1.15) {
+            const projectedVar = varExpCal + (recentVariableGasto / recentDaysCount) * remainingDays;
+            if (projectedVar > varExpPrevCal * 1.15) {
               out.push({ tone: 'warn', severity: 3, icon: '📈',
-                text: `Al ritmo actual vas a terminar gastando más que el mes pasado (proyectado ${fmtDisp(projected)}).` });
+                text: `Al ritmo actual (sin contar gastos fijos) vas a terminar gastando más en gastos variables que el mes pasado (proyectado ${fmtDisp(projectedVar)}).` });
             }
           }
         }
@@ -1764,7 +1783,7 @@
       const list = txs.filter((t) => effectiveMonthOf(t) === m);
       const incM = sumDisp(list.filter((t) => t.type === 'ingreso'));
       const expM = sumDisp(list.filter((t) => t.type === 'gasto'));
-      const savM = savingsAtEndOf(m) - savingsAtEndOf(addMonthsKey(m, -1));
+      const savM = savingsAtEndOf(m, { excludeOpening: true }) - savingsAtEndOf(addMonthsKey(m, -1), { excludeOpening: true });
       const [y, mo] = m.split('-').map(Number);
       return {
         label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
@@ -3105,7 +3124,13 @@
       <div class="field">
         <label for="e-note">Detalle <span class="hint">(opcional)</span></label>
         <input type="text" name="note" id="e-note" maxlength="60">
-      </div>`;
+      </div>
+      ${sign > 0 ? `
+      <label class="field field-check">
+        <input type="checkbox" name="opening" id="e-opening">
+        Ya lo tenía ahorrado antes (no contarlo como aporte de este mes)
+      </label>
+      <div class="hint">Usalo para cargar plata que ya tenías de meses anteriores, sin que ese mes puntual parezca que ahorraste todo eso de una — no afecta el total, sólo cómo se ve tu ritmo de ahorro mes a mes.</div>` : ''}`;
     openDialog(sign > 0 ? `Aporte a “${saving.name}”` : `Retiro de “${saving.name}”`, body, {
       submitLabel: sign > 0 ? 'Registrar aporte' : 'Registrar retiro',
       onSubmit(d) {
@@ -3113,6 +3138,7 @@
         if (!(amount > 0)) return false;
         saving.entries.push({
           id: Store.uid(), date: d.date, amount: amount * sign, note: d.note.trim(),
+          opening: sign > 0 && !!d.opening,
         });
         Store.save();
         render();
@@ -3127,6 +3153,30 @@
       const v = convOrNull(s.entries.reduce((a, e) => a + e.amount, 0), s.currency);
       if (v != null) total += v;
     }
+
+    // Ventana de meses para los 3 gráficos de abajo: desde el primer mes
+    // con algún movimiento cargado hasta el actual, sin pasar de 12 meses
+    // (para que una cuenta vieja no termine con un gráfico ilegible).
+    const savAllMonths = [...new Set(savings.flatMap((s) => s.entries.map((e) => monthKeyOf(e.date))))].sort();
+    let savMonths = [];
+    if (savAllMonths.length) {
+      let m = savAllMonths[0];
+      const cm = curMonth();
+      while (m <= cm) { savMonths.push(m); m = addMonthsKey(m, 1); }
+      if (savMonths.length > 12) savMonths = savMonths.slice(-12);
+    }
+    const savDeltaOf = (m) => savingsAtEndOf(m, { excludeOpening: true }) - savingsAtEndOf(addMonthsKey(m, -1), { excludeOpening: true });
+    const savRateRows = savMonths.map((m) => {
+      const incM = sumDisp(S().transactions.filter((t) => effectiveMonthOf(t) === m && t.type === 'ingreso'));
+      const rate = incM > 0 ? Math.round((savDeltaOf(m) / incM) * 100) : 0;
+      return { label: monthShortLabel(m), rate };
+    });
+    const savNominalRows = savMonths.map((m) => ({ label: monthShortLabel(m), value: savDeltaOf(m) }));
+    // El total acumulado sí incluye los aportes históricos (es el saldo
+    // real de la cuenta a fin de cada mes), a diferencia de la tasa y el
+    // aporte nominal de arriba, que los dejan afuera para no mostrar un
+    // salto en el mes en que se cargó un aporte histórico.
+    const savCumulativeSeries = savMonths.map((m) => savingsAtEndOf(m));
 
     el.innerHTML = `
       <div class="toolbar">
@@ -3166,7 +3216,7 @@
               <tbody>${entries.length ? entries.map((e) => `
                 <tr>
                   <td class="cell-sub">${esc(fmtDateShort(e.date))}</td>
-                  <td>${esc(e.note || (e.amount >= 0 ? 'Aporte' : 'Retiro'))}</td>
+                  <td>${esc(e.note || (e.amount >= 0 ? 'Aporte' : 'Retiro'))}${e.opening ? ' <span class="badge">histórico</span>' : ''}</td>
                   <td class="num ${e.amount >= 0 ? 'amount-in' : ''}">${e.amount >= 0 ? '+' : '−'} ${fmtMoney(Math.abs(e.amount), s.currency)}</td>
                   <td><button class="row-del" data-edel="${esc(s.id)}:${esc(e.id)}" aria-label="Eliminar">✕</button></td>
                 </tr>`).join('') : '<tr><td class="empty">Sin movimientos.</td></tr>'}
@@ -3175,7 +3225,37 @@
           </div>`;
         }).join('')}
       </div>`
-      : '<div class="card"><div class="empty">Creá tu primer fondo de ahorro: un colchón en dólares, un plazo fijo o una meta puntual (viaje, auto, mudanza).</div></div>'}`;
+      : '<div class="card"><div class="empty">Creá tu primer fondo de ahorro: un colchón en dólares, un plazo fijo o una meta puntual (viaje, auto, mudanza).</div></div>'}
+
+      ${savMonths.length ? `
+      <div class="card">
+        <h2 class="card-title"><span>Tasa de ahorro por mes</span></h2>
+        ${savingsRateTrendSvg(savRateRows)}
+      </div>
+
+      <div class="card">
+        <h2 class="card-title"><span>Ahorro nominal por mes</span></h2>
+        <div class="hint" style="margin-bottom:10px">Cuánto aportaste (o retiraste, si queda por debajo de la línea) cada mes.</div>
+        <div id="chart-sav-nominal"></div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title"><span>Ahorro total acumulado</span></h2>
+        <div class="hint" style="margin-bottom:10px">El saldo real de todas tus cuentas de ahorro a fin de cada mes.</div>
+        <div id="chart-sav-cumulative"></div>
+      </div>` : ''}`;
+
+    if (savMonths.length) {
+      Charts.singleBars($('#chart-sav-nominal', el), savNominalRows, {
+        ariaLabel: 'Ahorro nominal por mes',
+      });
+      Charts.lines($('#chart-sav-cumulative', el), savMonths.map((m) => monthShortLabel(m)), [
+        { label: 'Ahorro acumulado', color: Charts.COLORS.income, values: savCumulativeSeries },
+      ], {
+        fmtAxis: (v) => Charts.compact(v),
+        ariaLabel: 'Ahorro total acumulado por mes',
+      });
+    }
 
     $('#btn-add-saving', el).addEventListener('click', () => savingForm(null));
     const byId = (id) => savings.find((s) => s.id === id);
