@@ -683,6 +683,20 @@ dialog[open].dialog-tx.dialog-tx-wiz {
 .tx-row-chev { color: var(--muted); font-size: 16px; display: inline-block; transition: transform 0.15s; }
 .tx-row-chev.open { transform: rotate(90deg); }
 
+/* Diálogo de detalle de un movimiento (solo lectura): mismo estilo de fila
+   que .tx-row pero sin el cursor de "clickeable". */
+.tx-detail-amount { text-align: center; padding: 4px 0 14px; }
+.tx-detail-amount .v { font: 700 26px var(--font-heading); font-variant-numeric: tabular-nums; }
+.tx-detail-amount .v.pos { color: var(--income); }
+.tx-detail-amount .v.neg { color: var(--crit); }
+.tx-detail-amount .usd { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.tx-detail-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.tx-detail-row:last-child { border-bottom: none; }
+
 /* La fecha usa un <input type="date"> real y visible (aunque transparente)
    que cubre toda la fila, en vez de uno oculto que dispare showPicker()
    por JS: en iOS Safari eso no abre el selector nativo de forma confiable.
