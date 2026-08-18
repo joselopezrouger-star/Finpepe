@@ -1994,6 +1994,7 @@
 
     el.innerHTML = `
       <div class="card">
+        <h2 class="card-title">Detalle</h2>
         <div class="mov-filters">
           <select id="fil-month" aria-label="Mes">
             <option value="">Todos los meses</option>
@@ -2184,13 +2185,17 @@
     const selId = ui.catAnalysisId;
     const selGroup = windowBreakdown.find((g) => g.id === selId) || null;
 
-    const monthLabels = months.map((m) => {
+    // Meses con algún movimiento (ingreso o gasto), para los gráficos de
+    // evolución de abajo — un mes sin nada todavía no tiene "peso" que
+    // mostrar, así que no tiene sentido dejarlo como un hueco en el eje.
+    const activeMonths = months.filter((m) => txs.some((t) => effectiveMonthOf(t) === m));
+    const monthLabels = activeMonths.map((m) => {
       const [y, mo] = m.split('-').map(Number);
       return monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', '');
     });
     const pctExpSeries = [];
     const pctIncSeries = [];
-    months.forEach((m) => {
+    activeMonths.forEach((m) => {
       const listM = txs.filter((t) => effectiveMonthOf(t) === m);
       const gastoM = listM.filter((t) => t.type === 'gasto');
       const expM = sumDisp(gastoM);
@@ -2223,7 +2228,7 @@
     const stackCats = stackTop.map((g) => ({ id: g.id, name: g.name, color: catColorOf.get(g.id) }));
     if (stackRest.length) stackCats.push({ id: '__otros', name: 'Otros', color: OTROS_COLOR });
     const stackIds = new Set(stackTop.map((g) => g.id));
-    const stackRows = months.map((m) => {
+    const stackRows = activeMonths.map((m) => {
       const gastoM = txs.filter((t) => t.type === 'gasto' && effectiveMonthOf(t) === m);
       const totalM = sumDisp(gastoM);
       const byCat = new Map();
@@ -2806,14 +2811,6 @@
     }
     const maxDaySpend = Math.max(0, ...daySpend.values());
 
-    // Total del mes a pagar (gastos fijos + tarjetas) en moneda visible
-    let mesPagos = 0;
-    for (const ev of events) {
-      if (ev.kind === 'ingreso') continue;
-      const v = eventAmountDisp(ev);
-      if (v != null) mesPagos += v;
-    }
-
     // Grilla: semanas empiezan el lunes
     const first = new Date(y, mo - 1, 1);
     const daysInMonth = new Date(y, mo, 0).getDate();
@@ -2883,19 +2880,6 @@
     }
 
     el.innerHTML = `
-      <div class="grid-2">
-        <div class="card tile">
-          <div class="tile-label">Pagos previstos · ${esc(monthLabel(mk))}</div>
-          <div class="tile-value">${fmtDisp(mesPagos)}</div>
-          <div class="tile-delta">Gastos fijos y vencimientos de tarjeta</div>
-        </div>
-        <div class="card tile">
-          <div class="tile-label">Eventos este mes</div>
-          <div class="tile-value">${events.length}</div>
-          <div class="tile-delta">Anticipate: nunca se te pasa un pago</div>
-        </div>
-      </div>
-
       <div class="card">
         <div class="cal-head">
           <button class="icon-btn" data-cnav="-1" aria-label="Mes anterior">‹</button>
@@ -4572,7 +4556,7 @@
   // una vista, que se elige con una sub-pestaña dentro de la sección.
   const GROUPS = [
     { key: 'inicio', views: ['resumen'] },
-    { key: 'movimientos', views: ['movimientos', 'calendario', 'categorias'] },
+    { key: 'movimientos', views: ['movimientos', 'categorias', 'calendario'] },
     { key: 'cuentas', views: ['tarjetas', 'ahorros'] },
     { key: 'mas', views: ['plan', 'compartido'] },
   ];
