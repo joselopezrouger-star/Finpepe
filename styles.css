@@ -921,39 +921,61 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .cell-sub { color: var(--muted); font-size: 12px; }
 tr.cat-sub-row td:first-child { padding-left: 26px; }
 
-/* Análisis de categorías: filas como tarjetas apiladas en vez de <table> —
-   con el nombre + 4 datos numéricos no entraban en un celular sin
-   scrollear al costado; así todo se envuelve verticalmente en el ancho
-   disponible. Cada fila se puede tocar para ver el detalle. */
-.cat-break-list { display: grid; }
-.cat-break-row {
-  padding: 10px 6px; border-bottom: 1px solid var(--border);
-  cursor: pointer; border-radius: var(--radius-s);
+/* Análisis de categorías: la tabla original, pero achicada — con el
+   nombre + 4 columnas numéricas (monto, % gastos, % ingresos, variación)
+   la tipografía y el padding normales de table.data no entraban en un
+   celular sin scrollear al costado. table-layout: fixed reparte el ancho
+   entre columnas a propósito (en vez de que el contenido más largo se lo
+   coma todo) y el nombre envuelve en vez de desbordar. */
+table.data.cat-breakdown-table {
+  table-layout: fixed;
+  font-size: 11px;
 }
-.cat-break-row:last-child { border-bottom: 0; }
-.cat-break-row:hover { background: var(--surface-2); }
-.cat-break-row.cat-break-sub { padding-left: 22px; }
-.cat-break-row.cat-break-sub .cat-break-name { color: var(--muted); font-weight: 500; font-size: 12.5px; }
-.cat-break-main { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.cat-break-name { font-weight: 600; font-size: 13.5px; color: var(--ink); }
-.cat-break-amount { font: 700 13.5px var(--font-heading); font-variant-numeric: tabular-nums; flex: none; }
-.cat-break-stats {
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 8px; margin-top: 4px; flex-wrap: wrap;
+table.data.cat-breakdown-table col.cat-col-name { width: 34%; }
+table.data.cat-breakdown-table col.cat-col-amount { width: 18%; }
+table.data.cat-breakdown-table col.cat-col-pct { width: 12%; }
+table.data.cat-breakdown-table col.cat-col-mom { width: 24%; }
+table.data.cat-breakdown-table th, table.data.cat-breakdown-table td {
+  padding: 5px 3px;
 }
-.cat-break-pct { font-size: 11.5px; color: var(--muted); }
+table.data.cat-breakdown-table th:first-child, table.data.cat-breakdown-table td:first-child {
+  padding-left: 0;
+}
+table.data.cat-breakdown-table th {
+  font-size: 8.5px; letter-spacing: 0; white-space: normal; line-height: 1.25;
+  text-transform: none;
+}
+table.data.cat-breakdown-table td:first-child {
+  white-space: normal; overflow-wrap: break-word; line-height: 1.25;
+}
+table.data.cat-breakdown-table tr[data-catid] { cursor: pointer; }
+table.data.cat-breakdown-table tr[data-catid]:hover { background: var(--surface-2); }
+table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 12px; }
+table.data.cat-breakdown-table .amount-out { font-size: 11px; }
 
-/* Columna "vs. mes pasado": lo que subió (gastaste más) tiene que saltar a
-   la vista — fondo tinto, no solo texto de color — lo que bajó queda más
-   discreto, y "= mes pasado" / "—" ni siquiera llevan fondo. */
-.cat-mom {
-  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
-  font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 999px;
+/* Celda de variación: el % va arriba en una pill (bien visible si
+   aumentó) y el monto nominal abajo, chico — apilado en vez de una sola
+   línea larga, que era lo que más forzaba el scroll lateral. */
+.cat-mom-cell { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.cat-mom-pct {
+  display: inline-block; white-space: nowrap; line-height: 1.3;
+  font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 999px;
 }
-.cat-mom.up { background: var(--danger-bg); color: var(--danger-ink); }
-.cat-mom.down { background: var(--accent-wash); color: var(--accent-down); }
-.cat-mom.new { background: var(--surface-2); color: var(--ink-2); font-weight: 600; }
-.cat-mom.flat { color: var(--muted); font-weight: 500; padding: 3px 0; }
+.cat-mom-pct.up { background: var(--danger-bg); color: var(--danger-ink); }
+.cat-mom-pct.down { background: var(--accent-wash); color: var(--accent-down); }
+.cat-mom-pct.new { background: var(--surface-2); color: var(--ink-2); }
+.cat-mom-pct.flat { color: var(--muted); font-weight: 500; padding: 1px 0; }
+.cat-mom-amt { font-size: 9px; color: var(--muted); white-space: nowrap; }
+
+/* Diálogo de detalle de categoría: mes elegido + mes anterior, uno debajo
+   del otro, para poder comparar qué compone un total que aparece en rojo
+   sin ir y volver entre meses. */
+.cat-detail-section-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font: 700 13.5px var(--font-heading); color: var(--ink); margin-bottom: 8px;
+}
+.cat-detail-section-total { font-variant-numeric: tabular-nums; }
+.cat-detail-divider { border-top: 1px solid var(--border); margin: 16px 0; }
 
 /* Compras en cuotas: Gantt en grilla CSS (una fila por compra, una columna
    por mes) — la barra de cada compra va del mes de su primera cuota al de
