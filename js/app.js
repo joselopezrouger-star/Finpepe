@@ -1667,20 +1667,30 @@
         } else {
           const [ky, kmo] = mk.split('-').map(Number);
           const daysInMk = new Date(ky, kmo, 0).getDate();
-          const elapsedFrac = new Date().getDate() / daysInMk;
+          const daysElapsed = new Date().getDate();
+          const elapsedFrac = daysElapsed / daysInMk;
           // Con muy pocos días recorridos cualquier proyección es puro
           // ruido (un solo gasto grande el día 1 "proyectaría" un mes
           // carísimo) — se espera a tener al menos ~15% del mes andado.
           if (elapsedFrac > 0.15) {
-            // Un gasto fijo (recurrente o una cuota) ya pasó completo ese
-            // mes — no tiene sentido "proyectarlo" de nuevo multiplicándolo
-            // por lo que falta: pagar el alquiler el día 3 infla la
-            // proyección del resto del mes como si eso se fuera a repetir.
-            // Solo se estira al ritmo actual la parte variable; lo fijo se
-            // suma tal cual, una sola vez.
-            const fixedGasto = sumDisp(inMonthCal.filter((t) => t.type === 'gasto' && (t.recurringId || t.installment)));
-            const variableGasto = expCal - fixedGasto;
-            const projected = fixedGasto + variableGasto / elapsedFrac;
+            // "Al RITMO ACTUAL" tiene que reflejar el ritmo de los últimos
+            // días, no el promedio de TODO el mes: un gasto grande y
+            // puntual a principio de mes (que después no se repitió) hacía
+            // que ese promedio quedara alto para siempre, aunque el gasto
+            // ya se hubiera aplanado — contradiciendo lo que se ve en
+            // "Balance por día". Lo ya gastado (fijo + variable) se suma
+            // tal cual, sin volver a proyectarlo; sólo los días que faltan
+            // se proyectan al ritmo variable de la última semana.
+            const RECENT_WINDOW = 7;
+            const windowStartDay = Math.max(1, daysElapsed - RECENT_WINDOW + 1);
+            const recentDaysCount = daysElapsed - windowStartDay + 1;
+            const recentVariableGasto = sumDisp(inMonthCal.filter((t) => {
+              if (t.type !== 'gasto' || t.recurringId || t.installment) return false;
+              const day = Number(t.date.slice(8, 10));
+              return day >= windowStartDay && day <= daysElapsed;
+            }));
+            const remainingDays = daysInMk - daysElapsed;
+            const projected = expCal + (recentVariableGasto / recentDaysCount) * remainingDays;
             if (projected > expPrevCal * 1.15) {
               out.push({ tone: 'warn', severity: 3, icon: '📈',
                 text: `Al ritmo actual vas a terminar gastando más que el mes pasado (proyectado ${fmtDisp(projected)}).` });
