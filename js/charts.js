@@ -388,8 +388,11 @@ const Charts = (() => {
      points: [{day, value}] uno por cada día DEL MES ENTERO (1 al último),
      con value en null para los días que todavía no llegaron (no se
      proyecta una línea plana a futuro, pero el eje sigue mostrando el mes
-     completo) · opts: {ariaLabel}. El eje Y baja de cero sólo si el balance
-     acumulado realmente llega a ser negativo algún día. */
+     completo) · opts: {ariaLabel, prevPoints}. El eje Y baja de cero sólo si
+     el balance acumulado realmente llega a ser negativo algún día.
+     opts.prevPoints (mismo formato, mes anterior) se dibuja como línea
+     punteada detrás de la línea del mes actual, alineada por número de día,
+     para comparar de un vistazo si un tramo en rojo ya venía del mes pasado. */
   function dailyBalance(el, points, opts) {
     el.replaceChildren();
     if (!points.length) return;
@@ -398,6 +401,7 @@ const Charts = (() => {
       el.innerHTML = '<div class="empty">Todavía no hay movimientos este mes.</div>';
       return;
     }
+    const prevPoints = (opts.prevPoints || []).filter((p) => p.value != null);
     const W = 640, H = 200;
     const m = { t: 10, r: 8, b: 22, l: 58 };
     const iw = W - m.l - m.r;
@@ -405,9 +409,12 @@ const Charts = (() => {
 
     // El eje sólo baja de cero si el balance realmente llega a ser negativo
     // algún día (no tiene sentido reservar la mitad del gráfico para
-    // negativos si el mes nunca se fue en rojo).
-    const maxVal = Math.max(0, ...known.map((p) => p.value));
-    const minVal = Math.min(0, ...known.map((p) => p.value));
+    // negativos si el mes nunca se fue en rojo). Si hay mes anterior de
+    // comparación, sus valores también entran en la escala para que ambas
+    // líneas queden a la misma altura relativa.
+    const allVals = known.map((p) => p.value).concat(prevPoints.map((p) => p.value));
+    const maxVal = Math.max(0, ...allVals);
+    const minVal = Math.min(0, ...allVals);
     let top, bottom, ticks;
     if (minVal >= 0) {
       const nt = niceTicks(Math.max(1, maxVal), 4);
@@ -419,7 +426,8 @@ const Charts = (() => {
     }
     const range = top - bottom;
     const y = (v) => m.t + ih - ((v - bottom) / range) * ih;
-    const band = iw / points.length;
+    const dayCount = Math.max(points.length, opts.prevPoints ? opts.prevPoints.length : 0);
+    const band = iw / dayCount;
     const x = (i) => m.l + band * i + band / 2;
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -456,6 +464,16 @@ const Charts = (() => {
         add(svg, 'text', { x: x(i), y: H - 6, 'text-anchor': 'middle', class: 'tick-label' }, String(p.day));
       }
     });
+
+    // Mes anterior primero (detrás), punteado, para que la línea del mes
+    // actual quede siempre arriba y sea la que más salta a la vista.
+    if (prevPoints.length) {
+      const dPrev = prevPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.day - 1)},${y(p.value)}`).join(' ');
+      add(svg, 'path', {
+        d: dPrev, fill: 'none', stroke: 'var(--muted)', 'stroke-width': 2,
+        'stroke-dasharray': '5,4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+      });
+    }
 
     const d = known.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.day - 1)},${y(p.value)}`).join(' ');
     add(svg, 'path', {

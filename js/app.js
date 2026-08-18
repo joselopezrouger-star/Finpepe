@@ -9,6 +9,13 @@
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Un color hex a rgba() con alfa bajo, para teñir de fondo sin tapar el
+  // texto (usado para pintar cada fila de categoría con su propio color).
+  const hexToRgba = (hex, a) => {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+    return `rgba(${r},${g},${b},${a})`;
+  };
   // Vibración cortita al tocar el teclado numérico (feedback táctil). No
   // todos los navegadores exponen navigator.vibrate (iOS Safari no), así
   // que es un no-op silencioso ahí.
@@ -438,6 +445,7 @@
     fMonth: curMonth(),       // filtros de movimientos
     fType: '', fCat: '', fMethod: '',
     trendTable: false,
+    dailyBalancePrev: false,  // comparar balance por día con el mes anterior
     openSavings: {},          // id -> bool (historial expandido)
     calMonth: curMonth(),     // mes del calendario
     calSel: null,             // 'YYYY-MM-DD' día seleccionado en el calendario
@@ -1761,6 +1769,28 @@
       dailyBalance.push({ day: d, value: dailyRunning });
     }
 
+    // Mismo cálculo para el mes anterior, alineado día a día, para cuando
+    // el usuario activa "comparar con mes anterior" (ver si un rojo de hoy
+    // ya venía del mes pasado o es nuevo).
+    const prevMkDaily = addMonthsKey(mk, -1);
+    const [prevDY, prevDM] = prevMkDaily.split('-').map(Number);
+    const daysInPrevMkDaily = new Date(prevDY, prevDM, 0).getDate();
+    const lastDayToShowPrev = prevMkDaily > curMonth() ? 0 : (prevMkDaily === curMonth() ? new Date().getDate() : daysInPrevMkDaily);
+    const prevCalMonthTxs = txs.filter((t) => monthKeyOf(t.date) === prevMkDaily);
+    const prevDailyDelta = new Array(daysInPrevMkDaily + 1).fill(0);
+    for (const t of prevCalMonthTxs) {
+      const v = txDispAmount(t);
+      if (v == null) continue;
+      prevDailyDelta[parseDate(t.date).getDate()] += t.type === 'ingreso' ? v : -v;
+    }
+    let prevDailyRunning = 0;
+    const dailyBalancePrev = [];
+    for (let d = 1; d <= daysInPrevMkDaily; d++) {
+      if (d > lastDayToShowPrev) { dailyBalancePrev.push({ day: d, value: null }); continue; }
+      prevDailyRunning += prevDailyDelta[d];
+      dailyBalancePrev.push({ day: d, value: prevDailyRunning });
+    }
+
     // Muestra el nombre del hogar (no "Compartido con {pareja}"): el nombre
     // de la pareja ya aparece en el balance de al lado ("ana te debe..."),
     // repetirlo en el título quedaba redundante.
@@ -1873,7 +1903,18 @@
       </div>
 
       <div class="card">
-        <h2 class="card-title">Balance por día</h2>
+        <h2 class="card-title">
+          <span>Balance por día</span>
+          <label class="subcats-toggle">
+            Comparar con mes anterior
+            <input type="checkbox" id="chk-daily-prev" ${ui.dailyBalancePrev ? 'checked' : ''}>
+          </label>
+        </h2>
+        ${ui.dailyBalancePrev ? `
+        <div class="chart-legend">
+          <span><span class="key" style="background:var(--accent)"></span>${esc(monthShortLabel(mk))}</span>
+          <span><span class="key key-dashed"></span>${esc(monthShortLabel(prevMkDaily))}</span>
+        </div>` : ''}
         <div id="chart-daily-balance"></div>
       </div>
 
@@ -1927,7 +1968,9 @@
     } else {
       Charts.trend(trendEl, trendRows, {});
     }
-    Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {});
+    Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {
+      prevPoints: ui.dailyBalancePrev ? dailyBalancePrev : null,
+    });
 
     $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
       ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
@@ -1937,6 +1980,10 @@
     if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
     $('[data-trendtable]', el).addEventListener('click', () => {
       ui.trendTable = !ui.trendTable;
+      render();
+    });
+    $('#chk-daily-prev', el).addEventListener('change', (e) => {
+      ui.dailyBalancePrev = e.target.checked;
       render();
     });
     $('#btn-cta-tx', el).addEventListener('click', () => txForm(null));
@@ -2275,7 +2322,8 @@
           <td class="num cell-sub">${pct(s.value, inc)}</td>
           <td class="num cell-sub">${momHTML(s.value, prevSubTotals.get(s.id) || 0)}</td>
         </tr>`).join('') : '';
-      return `<tr data-catid="${esc(g.id)}">
+      const groupColor = catColorOf.get(g.id) || CAT_PALETTE[0];
+      return `<tr class="cat-break-group" data-catid="${esc(g.id)}" style="--row-tint:${hexToRgba(groupColor, 0.12)}">
         <td>${esc(g.name)}</td>
         <td class="num amount-out">${fmtDisp(g.total)}</td>
         <td class="num">${pct(g.total, exp)}</td>
