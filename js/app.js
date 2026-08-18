@@ -2237,6 +2237,7 @@
     // Mismo desglose, pero de ingresos: de dónde viene la plata del mes
     // (sueldo, freelance, etc.), no sólo en qué se gastó.
     const incomeBreakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'ingreso'));
+    const incPrevTotal = sumDisp(inPrevCat.filter((t) => t.type === 'ingreso'));
     const prevIncomeBreakdown = categoryBreakdown(inPrevCat.filter((t) => t.type === 'ingreso'));
     const prevIncomeGroupTotals = new Map(prevIncomeBreakdown.map((g) => [g.id, g.total]));
     const prevIncomeSubTotals = new Map();
@@ -2411,6 +2412,12 @@
           </colgroup>
           <thead><tr><th>Origen</th><th class="num">Monto</th><th class="num">% ingr.</th><th class="num">vs. ant.</th></tr></thead>
           <tbody>${incomeRowsHtml}</tbody>
+          <tfoot><tr class="cat-total-row">
+            <td>Total</td>
+            <td class="num amount-out">${fmtDisp(inc)}</td>
+            <td class="num">100%</td>
+            <td class="num">${momHTML(inc, incPrevTotal, false)}</td>
+          </tr></tfoot>
         </table></div>` : `<div class="empty">Sin ingresos registrados en ${esc(monthLabel(mk))}.</div>`}
       </div>
 
@@ -4723,7 +4730,7 @@
           <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
         </div>
       </div>
-      <button class="link-btn hero-mtoday shared-month-today" data-mtoday${ui.month === curMonth() ? ' style="visibility:hidden"' : ''}>volver al mes actual</button>` : '';
+      ${ui.month !== curMonth() ? '<button class="link-btn hero-mtoday shared-month-today" data-mtoday>volver al mes actual</button>' : ''}` : '';
     el.innerHTML = monthBarHTML + ((grp && grp.views.length > 1)
       ? `<div class="subtabs">${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}</div><div class="view-content"></div>`
       : '<div class="view-content"></div>');
@@ -4732,7 +4739,8 @@
         ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
         render();
       }));
-      $('[data-mtoday]', el).addEventListener('click', () => { ui.month = curMonth(); render(); });
+      const btnToday = $('[data-mtoday]', el);
+      if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
     }
     $$('[data-subview]', el).forEach((b) => b.addEventListener('click', () => {
       b.blur();
