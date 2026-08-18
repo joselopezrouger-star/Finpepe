@@ -476,7 +476,12 @@ a { color: var(--accent-down); }
   margin-bottom: 12px;
 }
 .mov-filters select { width: 100%; }
+.mov-filters .mov-filter-full { grid-column: 1 / -1; }
 .mov-add { width: 100%; margin-bottom: 12px; }
+/* El selector de mes se apaga (sin desaparecer, para no mover el resto de
+   la tarjeta) cuando "Todos los meses" está activo — ya no pinta nada. */
+.month-bar-disabled { opacity: 0.5; }
+.month-bar-disabled .icon-btn:disabled { cursor: default; }
 
 /* ---------- Botones ---------- */
 .btn {
