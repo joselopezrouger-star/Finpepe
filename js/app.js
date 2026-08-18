@@ -4582,11 +4582,18 @@
     const creatorIsDebtor = partner
       ? (shared.household.created_by === sharedMe().id ? meIsDebtor : !meIsDebtor)
       : false;
+    // Apagada por defecto: es un chiste privado entre los dos integrantes de
+    // ESTE hogar, no algo que tenga sentido para cualquiera que use la app
+    // con su propia pareja — cada quien la prende a mano si la quiere ver
+    // (ver settings.sharedImageEnabled).
     const imageHTML = (partner && balAbs >= 0.01)
-      ? `<div class="shared-image">
-          <img src="assets/${creatorIsDebtor ? 'compartido-debes.jpg' : 'compartido-te-deben.jpg'}"
-               alt="${creatorIsDebtor ? 'Le debés plata' : 'Te deben plata'}">
-        </div>`
+      ? (S().settings.sharedImageEnabled
+          ? `<div class="shared-image">
+              <img src="assets/${creatorIsDebtor ? 'compartido-debes.jpg' : 'compartido-te-deben.jpg'}"
+                   alt="${creatorIsDebtor ? 'Le debés plata' : 'Te deben plata'}">
+              <button class="link-btn shared-image-toggle" id="btn-toggle-shared-image">ocultar imagen</button>
+            </div>`
+          : `<button class="link-btn shared-image-toggle" id="btn-toggle-shared-image">mostrar imagen</button>`)
       : '';
 
     // Hoja de balance con números concretos en vez de una visualización
@@ -4692,6 +4699,12 @@
     if (settleDebt) settleDebt.addEventListener('click', settlementForm);
     const editName = $('#btn-edit-name', el);
     if (editName) editName.addEventListener('click', editNameForm);
+    const toggleImg = $('#btn-toggle-shared-image', el);
+    if (toggleImg) toggleImg.addEventListener('click', () => {
+      S().settings.sharedImageEnabled = !S().settings.sharedImageEnabled;
+      Store.save();
+      render();
+    });
     $('#btn-refresh-shared', el).addEventListener('click', () => {
       shared.loaded = false;
       render();
