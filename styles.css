@@ -953,6 +953,13 @@ table.data.cat-breakdown-table tr[data-catid]:hover { background: var(--surface-
 table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 12px; }
 table.data.cat-breakdown-table .amount-out { font-size: 11px; }
 
+/* Fila de categoría (nivel superior): un fondo tenue con su propio color
+   (el mismo que usa en la torta/barras apiladas) para diferenciarla de
+   sus subcategorías de un vistazo, y números un poco más marcados. */
+table.data.cat-breakdown-table tr.cat-break-group { background: var(--row-tint); }
+table.data.cat-breakdown-table tr.cat-break-group td.num { font-weight: 600; }
+table.data.cat-breakdown-table tr.cat-sub-row td.num { font-weight: 400; }
+
 /* Celda de variación: el % va arriba en una pill (bien visible si
    aumentó) y el monto nominal abajo, chico — apilado en vez de una sola
    línea larga, que era lo que más forzaba el scroll lateral. */
@@ -1099,12 +1106,22 @@ table.data.cat-breakdown-table .amount-out { font-size: 11px; }
   margin-right: 5px;
   vertical-align: -1px;
 }
+.chart-legend .key-dashed {
+  width: 14px; height: 0;
+  background: none;
+  border-top: 2px dashed var(--muted);
+  vertical-align: 2px;
+}
 .chart-legend-col { flex-direction: column; align-items: flex-start; gap: 7px; }
 
 /* ---------- Torta cilindro (Categorías) ---------- */
-.pie-cylinder-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-.pie-cylinder-wrap #chart-cat-pie { flex: 1 1 220px; max-width: 300px; min-width: 180px; }
-.pie-cylinder-wrap .chart-legend-col { flex: 1 1 160px; margin-bottom: 0; }
+/* Sin wrap: la leyenda va siempre al lado del gráfico, nunca debajo, así
+   que el chart cede ancho (flex-shrink) antes que dejar que la leyenda
+   caiga a una fila nueva incluso en un celular angosto. */
+.pie-cylinder-wrap { display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; }
+.pie-cylinder-wrap #chart-cat-pie { flex: 1 1 140px; min-width: 0; max-width: 220px; }
+.pie-cylinder-wrap .chart-legend-col { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.pie-cylinder-wrap .chart-legend-col span { overflow-wrap: break-word; }
 
 .trend-svg { width: 100%; height: auto; display: block; }
 .tick-label { font: 11px var(--font); fill: var(--muted); }
