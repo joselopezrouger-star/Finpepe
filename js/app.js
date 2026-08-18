@@ -903,6 +903,10 @@
       acc: editing ? tx.amount : null,
       op: null,
       cur: '',
+      // true justo después de presionar "=": el próximo dígito tipeado tiene
+      // que arrancar un número nuevo (como una calculadora física), en vez
+      // de agregarse al final del resultado que ya se mostró.
+      justEq: false,
       expand: null, // null | 'category' | 'method' | 'methodTo' — qué lista está desplegada
       catGroupExpand: null, // id del grupo de categoría "abierto" en la grilla, o null (nivel superior)
       note: editing ? (tx.note || '') : '',
@@ -958,6 +962,11 @@
     }
     function pressDigit(d) {
       haptic();
+      // Si se venía de tocar "=", este dígito arranca un número nuevo (como
+      // en una calculadora física) — sin esto, se pegaba al final del
+      // resultado anterior (ej. "50" + "3" => "503" en vez de "3"), dando
+      // montos gigantes por error.
+      if (draft.justEq) { draft.acc = null; draft.cur = ''; draft.justEq = false; }
       if (d === '.' && draft.cur.includes('.')) return;
       if (draft.cur.length > 12) return;
       draft.cur = (draft.cur === '0' && d !== '.') ? d : draft.cur + d;
@@ -965,6 +974,7 @@
     }
     function pressOp(op) {
       haptic();
+      draft.justEq = false;
       const curVal = draft.cur === '' ? null : parseFloat(draft.cur);
       if (draft.op && curVal != null) draft.acc = applyOp(draft.acc, draft.op, curVal);
       else if (curVal != null) draft.acc = curVal;
@@ -979,10 +989,16 @@
       else if (curVal != null) draft.acc = curVal;
       draft.op = null;
       draft.cur = draft.acc != null ? numFmt(draft.acc) : '';
+      // Se vuelca todo a "cur" (lo que se muestra); si "acc" quedaba con el
+      // mismo valor, displayExpr() lo mostraba DE NUEVO al lado (ej. "50.000
+      // 50.000"), como si el resultado se hubiera duplicado.
+      draft.acc = null;
+      draft.justEq = true;
       paint();
     }
     function pressBack() {
       haptic();
+      draft.justEq = false;
       if (draft.cur) draft.cur = draft.cur.slice(0, -1);
       else if (draft.op) draft.op = null;
       else if (draft.acc != null) { draft.cur = numFmt(draft.acc); draft.acc = null; }
@@ -1523,6 +1539,55 @@
     }
     Store.save();
     render();
+  }
+
+  /* Diálogo de solo lectura con el resumen de un movimiento (fecha,
+     categoría, cuenta, cotización usada en ese momento, etc.) — tocar una
+     fila en Movimientos abría directo el formulario de edición con la
+     calculadora, sin mostrar antes un detalle legible. El TC se deriva del
+     usdSnapshot guardado (equivalente en USD con la cotización DEL DÍA del
+     movimiento), no de la cotización actual. */
+  function txDetailDialog(tx) {
+    const isTransfer = tx.type === 'transferencia';
+    const isIncome = tx.type === 'ingreso';
+    const sign = isTransfer ? '' : (isIncome ? '+ ' : '− ');
+    const amtClass = isTransfer ? '' : (isIncome ? 'pos' : 'neg');
+    const usdLine = (tx.currency === 'ARS' && tx.usdSnapshot != null)
+      ? `<div class="usd">≈ ${esc(fmtMoney(tx.usdSnapshot, 'USD'))}</div>` : '';
+    const tcLine = (tx.currency === 'ARS' && tx.usdSnapshot > 0)
+      ? `<div class="tx-detail-row"><span class="tx-row-label">TC del momento</span><span class="tx-row-value">${esc(fmtMoney(tx.amount / tx.usdSnapshot, 'ARS'))} / USD</span></div>` : '';
+    const whoRows = isTransfer
+      ? `<div class="tx-detail-row"><span class="tx-row-label">Desde</span><span class="tx-row-value">${esc(methodName(tx.methodId))}</span></div>
+         <div class="tx-detail-row"><span class="tx-row-label">Hacia</span><span class="tx-row-value">${esc(methodName(tx.toMethodId))}</span></div>`
+      : `<div class="tx-detail-row"><span class="tx-row-label">Categoría</span><span class="tx-row-value">${esc(catName(tx.categoryId))}</span></div>
+         <div class="tx-detail-row"><span class="tx-row-label">Cuenta</span><span class="tx-row-value">${esc(methodName(tx.methodId))}</span></div>`;
+    const instRow = tx.installment
+      ? `<div class="tx-detail-row"><span class="tx-row-label">Cuotas</span><span class="tx-row-value">${tx.installment.k} de ${tx.installment.n}</span></div>` : '';
+    const origin = tx.recurringId ? 'Gasto fijo' : (tx.leftoverGen ? 'Sobrante del mes anterior' : '');
+    const originRow = origin
+      ? `<div class="tx-detail-row"><span class="tx-row-label">Origen</span><span class="tx-row-value">${esc(origin)}</span></div>` : '';
+    const noteRow = tx.note
+      ? `<div class="tx-detail-row"><span class="tx-row-label">Nota</span><span class="tx-row-value">${esc(tx.note)}</span></div>` : '';
+
+    const bodyHTML = `
+      <div class="tx-detail-amount">
+        <div class="v ${amtClass}">${sign}${fmtMoney(tx.amount, tx.currency)}</div>
+        ${usdLine}
+      </div>
+      <div class="tx-detail-row"><span class="tx-row-label">Fecha</span><span class="tx-row-value">${esc(fmtDateFull(tx.date))}</span></div>
+      ${whoRows}
+      ${tcLine}
+      ${instRow}
+      ${originRow}
+      ${noteRow}`;
+
+    const titles = { gasto: 'Detalle del gasto', ingreso: 'Detalle del ingreso', transferencia: 'Detalle de la transferencia' };
+    const dlg = openDialog(titles[tx.type] || 'Detalle', bodyHTML, {
+      submitLabel: 'Editar',
+      footExtra: '<button type="button" class="btn btn-danger" data-del style="margin-right:auto">Eliminar</button>',
+      onSubmit: (data, d) => { d.close(); txForm(tx); return false; },
+    });
+    $('[data-del]', dlg).addEventListener('click', () => { dlg.close(); deleteTx(tx); });
   }
 
   /* ================= Vista: Resumen ================= */
@@ -2191,7 +2256,7 @@
       row.addEventListener('click', (e) => {
         if (e.target.closest('[data-del]')) return;
         const tx = S().transactions.find((t) => t.id === row.dataset.tx);
-        if (tx) txForm(tx);
+        if (tx) txDetailDialog(tx);
       });
     });
     $$('[data-del]', el).forEach((b) => b.addEventListener('click', (e) => {
@@ -3708,8 +3773,6 @@
 
     el.innerHTML = `
       <div class="settings-grid">
-        <div class="card" id="account-card">${accountCardHTML()}</div>
-
         <div class="card">
           <h2 class="card-title">Apariencia</h2>
           <div class="inline-form">
@@ -3807,6 +3870,8 @@
             <button class="btn btn-sm btn-danger" id="btn-wipe">Borrar todos los datos</button>
           </div>
         </div>
+
+        <div class="card" id="account-card">${accountCardHTML()}</div>
       </div>`;
 
     wireAccountCard(el);
