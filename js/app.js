@@ -3705,10 +3705,6 @@
     const updated = s.ratesUpdatedAt
       ? new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(s.ratesUpdatedAt))
       : 'nunca';
-    const counts = {
-      tx: S().transactions.length,
-      sav: S().savings.length,
-    };
 
     el.innerHTML = `
       <div class="settings-grid">
@@ -3743,10 +3739,7 @@
             <button class="btn btn-sm" id="btn-manual-save">Aplicar</button>
             ${s.manualRate ? '<button class="btn btn-sm" id="btn-manual-clear">Volver a automática</button>' : ''}
           </div>
-          <div class="hint" style="margin-top:10px">
-            Las conversiones ARS ⇄ USD de toda la app usan esta cotización (valor venta).
-            Cada movimiento guarda su moneda original, así que podés cambiar de fuente cuando quieras.
-          </div>
+          <div class="hint" style="margin-top:10px">Se usa para convertir ARS ⇄ USD en toda la app.</div>
         </div>
 
         <div class="card">
@@ -3758,12 +3751,7 @@
               <option value="vencimiento" ${s.cardMonthBasis === 'vencimiento' ? 'selected' : ''}>el vencimiento del resumen</option>
             </select>
           </div>
-          <div class="hint" style="margin-top:10px">
-            ${s.cardMonthBasis === 'vencimiento'
-              ? 'Un gasto con tarjeta pega en el balance del mes en que vence ese resumen (cuando efectivamente lo pagás), no en el mes en que compraste.'
-              : 'Un gasto con tarjeta pega en el balance del mes en que lo compraste, aunque el resumen recién venza el mes siguiente.'}
-            Solo afecta a los medios de pago tipo "Crédito"; el resto siempre cuenta por su fecha.
-          </div>
+          <div class="hint" style="margin-top:8px">Solo afecta a tarjetas de crédito; el resto siempre cuenta por su fecha real.</div>
         </div>
 
         <div class="card">
@@ -3774,15 +3762,7 @@
               <input type="checkbox" id="set-leftover" ${s.autoLeftoverIncome ? 'checked' : ''}>
             </label>
           </h2>
-          <div class="hint">
-            Si al terminar un mes te queda plata sin gastar ni ahorrar y la usás recién el mes
-            siguiente (por ejemplo, para comprar más ahorro), esa plata no es un ingreso nuevo de
-            ese mes — pero si no se registra como tal, el Balance del mes queda mentiroso.
-            Con esto activado, apenas empieza un mes se carga solo un Ingreso ("Sobrante mes
-            anterior", categoría Otros ingresos) por el Balance del mes que acaba de terminar,
-            si dio positivo. Se genera una sola vez por mes y después se puede editar o borrar
-            como cualquier movimiento.
-          </div>
+          <div class="hint">Acredita como Ingreso, al empezar cada mes, lo que sobró del mes anterior (si dio positivo) — para no perderle el rastro cuando lo usás más adelante. Se puede editar o borrar como cualquier movimiento.</div>
         </div>
 
         <div class="card">
@@ -3816,10 +3796,7 @@
 
         <div class="card">
           <h2 class="card-title">Datos y copias de seguridad</h2>
-          <div class="hint" style="margin-bottom:10px">
-            Todo se guarda en este navegador (${counts.tx} movimientos, ${counts.sav} ahorros).
-            Si borrás los datos del navegador o cambiás de dispositivo, se pierde: exportá un respaldo cada tanto.
-          </div>
+          <div class="hint" style="margin-bottom:10px">Todo se guarda en este navegador — exportá un respaldo cada tanto por si lo borrás o cambiás de dispositivo.</div>
           <div class="inline-form">
             <button class="btn btn-sm" id="btn-export-json">Descargar respaldo (JSON)</button>
             <button class="btn btn-sm" id="btn-import-json">Restaurar respaldo…</button>
@@ -3948,7 +3925,7 @@
     if (Cloud.user()) {
       return `<h2 class="card-title">Sincronización en la nube</h2>
         <div class="auth-status"><span class="dot"></span> Conectado como <b>${esc(usernameOf(Cloud.user().email))}</b></div>
-        <div class="hint" style="margin-bottom:10px">Tus datos se guardan en tu proyecto de Supabase y se sincronizan en todos tus dispositivos donde inicies sesión.</div>
+        <div class="hint" style="margin-bottom:10px">Tus datos se sincronizan en todos tus dispositivos donde inicies sesión.</div>
         ${Cloud.hasGoogle()
           ? '<div class="hint" style="margin-bottom:10px">✓ Google vinculado: también podés entrar con esa cuenta.</div>'
           : `<div class="inline-form" style="margin-bottom:10px">
