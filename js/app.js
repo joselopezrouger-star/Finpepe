@@ -4572,30 +4572,6 @@
     const meIsDebtor = bal < -0.01;
     const totals = partner ? sharedTotals() : { mine: 0, theirs: 0 };
 
-    // Imagen según quién debe (chiste privado entre los dos), dentro de la
-    // tarjeta Deudas. A diferencia del resto de la tarjeta (que habla en
-    // segunda persona, relativo a quien mira), la imagen tiene que ser la
-    // MISMA para los dos integrantes del hogar — si no, cada uno vería la
-    // versión "vos debés/te deben" desde su propia perspectiva y verían
-    // fotos distintas mirando la misma pantalla. Por eso se ancla a quién
-    // creó el hogar (un dato fijo, igual para ambos) en vez de a "me".
-    const creatorIsDebtor = partner
-      ? (shared.household.created_by === sharedMe().id ? meIsDebtor : !meIsDebtor)
-      : false;
-    // Apagada por defecto: es un chiste privado entre los dos integrantes de
-    // ESTE hogar, no algo que tenga sentido para cualquiera que use la app
-    // con su propia pareja — cada quien la prende a mano si la quiere ver
-    // (ver settings.sharedImageEnabled).
-    const imageHTML = (partner && balAbs >= 0.01)
-      ? (S().settings.sharedImageEnabled
-          ? `<div class="shared-image">
-              <img src="assets/${creatorIsDebtor ? 'compartido-debes.jpg' : 'compartido-te-deben.jpg'}"
-                   alt="${creatorIsDebtor ? 'Le debés plata' : 'Te deben plata'}">
-              <button class="link-btn shared-image-toggle" id="btn-toggle-shared-image">ocultar imagen</button>
-            </div>`
-          : `<button class="link-btn shared-image-toggle" id="btn-toggle-shared-image">mostrar imagen</button>`)
-      : '';
-
     // Hoja de balance con números concretos en vez de una visualización
     // aproximada: cuánto puso cada uno, el total en común y el neto.
     const ledgerHTML = partner ? `
@@ -4657,7 +4633,6 @@
         </div>`
       : `<div class="card">
           <h2 class="card-title">Deudas</h2>
-          ${imageHTML}
           <div class="debt-row">
             <div class="debt-row-text"><b>${esc(meIsDebtor ? myName : partnerName)}</b> le debe a <b>${esc(meIsDebtor ? partnerName : myName)}</b></div>
             <div class="debt-row-amount">${fmtDisp(balAbs)}</div>
@@ -4699,12 +4674,6 @@
     if (settleDebt) settleDebt.addEventListener('click', settlementForm);
     const editName = $('#btn-edit-name', el);
     if (editName) editName.addEventListener('click', editNameForm);
-    const toggleImg = $('#btn-toggle-shared-image', el);
-    if (toggleImg) toggleImg.addEventListener('click', () => {
-      S().settings.sharedImageEnabled = !S().settings.sharedImageEnabled;
-      Store.save();
-      render();
-    });
     $('#btn-refresh-shared', el).addEventListener('click', () => {
       shared.loaded = false;
       render();

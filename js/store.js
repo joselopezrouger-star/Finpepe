@@ -66,7 +66,6 @@ const Store = (() => {
       autoLeftoverIncome: false, // true = acredita el Balance del mes anterior (si dio positivo) como Ingreso al empezar cada mes
       leftoverLastGen: null,     // 'YYYY-MM' del último mes ya acreditado — ver generateLeftoverIncome() en app.js
       methodsSortedOnce: false, // true = ya se hizo el ordenamiento automático de tarjetas primero (una sola vez), ver sortMethodsOnce() en app.js
-      sharedImageEnabled: false, // true = mostrar la imagen (chiste privado) en Deudas de Gastos compartidos — apagado por defecto para cualquiera que no la haya prendido a mano, ver vCompartido() en app.js
     },
     categories: seedCategories(),
     methods: seedMethods(),
