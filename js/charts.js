@@ -29,7 +29,10 @@ const Charts = (() => {
 
   function niceTicks(max, count) {
     if (!(max > 0)) max = 1;
-    const step = niceStep(max / count);
+    // Los montos siempre se muestran redondeados al peso entero (ver
+    // compact() más abajo): un paso menor a 1 generaría marcas distintas
+    // que se ven repetidas en el eje (ej. 0.5 y 1 redondean los dos a "1").
+    const step = Math.max(1, niceStep(max / count));
     const top = Math.ceil(max / step) * step;
     const ticks = [];
     for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
