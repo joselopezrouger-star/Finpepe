@@ -696,11 +696,18 @@
     return { close, due };
   }
 
-  /* Mes en el que un gasto "pega" en los totales mensuales (Balance del mes,
-     filtro de Movimientos, presupuestos). Por defecto es el mes de la fecha
-     de compra; si en Ajustes se eligió "vencimiento", un gasto con tarjeta
-     de crédito cuenta en el mes en que vence ese resumen en vez del mes en
-     que se hizo la compra (decisión del usuario, ver settings.cardMonthBasis). */
+  /* Mes en el que un gasto "pega" para "Balance del mes" (y el sobrante
+     automático del mes anterior, que es el mismo cálculo — ver
+     monthBalance()). Por defecto es el mes de la fecha de compra; si en
+     Ajustes se eligió "vencimiento", un gasto con tarjeta de crédito cuenta
+     en el mes en que vence ese resumen en vez del mes en que se hizo la
+     compra (decisión del usuario, ver settings.cardMonthBasis).
+     A propósito NO se usa en ningún otro lado (gastos por categoría,
+     Movimientos, presupuestos, tendencias, cuotas): esas vistas siempre
+     usan la fecha real de carga (monthKeyOf(t.date)), igual que "Balance
+     por día" — así "Balance del mes" puede diferir un poco de la suma de
+     "Gastos por categoría" ese mes, a propósito, sin que el resto de la
+     app se corra de mes por un ajuste que solo afecta a ese número. */
   function effectiveMonthOf(t) {
     if (t.type === 'gasto' && S().settings.cardMonthBasis === 'vencimiento') {
       const m = methodById(t.methodId);
@@ -1689,9 +1696,17 @@
   function vResumen(el) {
     const mk = ui.month;
     const txs = S().transactions;
+    // "Balance del mes" (y todo lo que se deriva de él: los tres tiles de
+    // arriba, sus variaciones MoM, el anillo y el aviso de rojo) es lo
+    // ÚNICO que respeta el ajuste "contar tarjetas por vencimiento" — ver
+    // effectiveMonthOf(). Todo lo demás en esta vista (gastos por
+    // categoría, tendencia de 6 meses) usa la fecha real de carga
+    // (inMonthCal/inPrevCal más abajo), igual que "Balance por día".
     const inMonth = txs.filter((t) => effectiveMonthOf(t) === mk);
     const prevMk = addMonthsKey(mk, -1);
     const inPrev = txs.filter((t) => effectiveMonthOf(t) === prevMk);
+    const inMonthCal = txs.filter((t) => monthKeyOf(t.date) === mk);
+    const inPrevCal = txs.filter((t) => monthKeyOf(t.date) === prevMk);
 
     const inc = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
     const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
@@ -1755,9 +1770,10 @@
     })();
 
     // Gastos por categoría (top 3 + Otros, para que la tarjeta principal
-    // entre compacta al lado del anillo)
+    // entre compacta al lado del anillo) — por fecha real de carga, no por
+    // el mes de vencimiento (ver comentario al principio de la función).
     const byCat = new Map();
-    for (const t of inMonth.filter((x) => x.type === 'gasto')) {
+    for (const t of inMonthCal.filter((x) => x.type === 'gasto')) {
       const v = txDispAmount(t);
       if (v == null) continue;
       const topId = topCategoryOf(t.categoryId);
@@ -1782,15 +1798,13 @@
     let insights = mk !== curMonth() ? [] : (() => {
       const out = [];
       // El aviso de ritmo de gasto (más abajo) compara contra la fecha REAL
-      // de cada movimiento, no el "mes efectivo" que puede correr una
-      // compra con tarjeta al mes de vencimiento (ver ajuste "contar
-      // tarjetas por"). Si no, con esa opción activada un resumen grande
-      // que vence este mes infla la proyección aunque esas compras se
-      // hayan hecho en calendario el mes pasado — y el aviso queda
-      // contradiciendo lo que se ve en "Balance por día", que sí usa la
-      // fecha real.
-      const inMonthCal = txs.filter((t) => monthKeyOf(t.date) === mk);
-      const inPrevCal = txs.filter((t) => monthKeyOf(t.date) === prevMk);
+      // de cada movimiento (inMonthCal/inPrevCal, definidas arriba), no el
+      // "mes efectivo" que puede correr una compra con tarjeta al mes de
+      // vencimiento (ver ajuste "contar tarjetas por"). Si no, con esa
+      // opción activada un resumen grande que vence este mes infla la
+      // proyección aunque esas compras se hayan hecho en calendario el mes
+      // pasado — y el aviso queda contradiciendo lo que se ve en "Balance
+      // por día", que también usa la fecha real.
       const expCal = sumDisp(inMonthCal.filter((t) => t.type === 'gasto'));
       const expPrevCal = sumDisp(inPrevCal.filter((t) => t.type === 'gasto'));
       // Mismo criterio de fecha real (no efectiva) para las dos, así el
@@ -1816,8 +1830,10 @@
           text: `Este mes vas en rojo: el balance es de ${fmtDisp(balance)}.` });
       }
 
+      // Fecha real, no efectiva: tiene que coincidir con lo que se ve en
+      // Planificar > Presupuestos, que usa el mismo criterio.
       const budgetHits = S().budgets.map((b) => {
-        const spent = sumDisp(inMonth.filter((t) => t.type === 'gasto' && txMatchesBudgetCategory(t, b.categoryId)));
+        const spent = sumDisp(inMonthCal.filter((t) => t.type === 'gasto' && txMatchesBudgetCategory(t, b.categoryId)));
         const limit = convOrNull(b.amount, b.currency);
         return { name: catName(b.categoryId), spent, limit, over: (limit > 0) ? spent - limit : 0 };
       }).filter((x) => x.over > 0).sort((a, b) => b.over - a.over);
@@ -1923,11 +1939,12 @@
 
     // Tendencia: últimos 6 meses hasta el mes elegido, salvo los que no
     // tengan ningún movimiento (no tiene sentido mostrar un mes vacío en
-    // el eje si nunca se cargó nada ese mes).
+    // el eje si nunca se cargó nada ese mes). Por fecha real de carga, no
+    // de vencimiento (ver comentario al principio de la función).
     const months = [];
     for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
     const trendRows = months.map((m) => {
-      const list = txs.filter((t) => effectiveMonthOf(t) === m);
+      const list = txs.filter((t) => monthKeyOf(t.date) === m);
       const [y, mo] = m.split('-').map(Number);
       return {
         label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
@@ -1940,7 +1957,7 @@
     // se omiten los meses sin ningún movimiento (no tiene sentido mostrar
     // un 0% en el eje para un mes que ni siquiera había arrancado la app).
     const savingsRateRows = months.map((m) => {
-      const list = txs.filter((t) => effectiveMonthOf(t) === m);
+      const list = txs.filter((t) => monthKeyOf(t.date) === m);
       const incM = sumDisp(list.filter((t) => t.type === 'ingreso'));
       const expM = sumDisp(list.filter((t) => t.type === 'gasto'));
       const savM = savingsAtEndOf(m, { excludeOpening: true }) - savingsAtEndOf(addMonthsKey(m, -1), { excludeOpening: true });
@@ -2235,7 +2252,10 @@
     const txs = S().transactions;
 
     let list = txs.slice();
-    if (!ui.fAllMonths) list = list.filter((t) => effectiveMonthOf(t) === ui.month);
+    // Por fecha real de carga, no de vencimiento: un gasto con tarjeta
+    // aparece en el mes en que se hizo, aunque el balance lo cuente para
+    // el mes en que vence el resumen (ver settings.cardMonthBasis).
+    if (!ui.fAllMonths) list = list.filter((t) => monthKeyOf(t.date) === ui.month);
     if (ui.fType) list = list.filter((t) => t.type === ui.fType);
     if (ui.fCat) {
       // Si se eligió un grupo (ej. "Casa"), tiene que traer también los
@@ -2407,7 +2427,10 @@
   function vCategorias(el) {
     const mk = ui.month;
     const txs = S().transactions;
-    const inMonth = txs.filter((t) => effectiveMonthOf(t) === mk);
+    // Toda esta vista es por fecha real de carga, no de vencimiento: solo
+    // "Balance del mes" (en Inicio) respeta ese ajuste — ver el comentario
+    // al principio de vResumen().
+    const inMonth = txs.filter((t) => monthKeyOf(t.date) === mk);
     const inc = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
     const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
     const breakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'gasto'));
@@ -2417,7 +2440,7 @@
     // partir del mismo categoryBreakdown() del mes pasado, así queda
     // consistente con cómo se agrupan las subcategorías en todos lados.
     const prevMkCat = addMonthsKey(mk, -1);
-    const inPrevCat = txs.filter((t) => effectiveMonthOf(t) === prevMkCat);
+    const inPrevCat = txs.filter((t) => monthKeyOf(t.date) === prevMkCat);
     const prevBreakdown = categoryBreakdown(inPrevCat.filter((t) => t.type === 'gasto'));
     const prevGroupTotals = new Map(prevBreakdown.map((g) => [g.id, g.total]));
     const prevSubTotals = new Map();
@@ -2461,7 +2484,7 @@
     // si tuvo peso en algún mes reciente).
     const months = [];
     for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
-    const windowBreakdown = categoryBreakdown(txs.filter((t) => t.type === 'gasto' && months.includes(effectiveMonthOf(t))));
+    const windowBreakdown = categoryBreakdown(txs.filter((t) => t.type === 'gasto' && months.includes(monthKeyOf(t.date))));
 
     if (!windowBreakdown.some((g) => g.id === ui.catAnalysisId)) {
       ui.catAnalysisId = windowBreakdown[0] ? windowBreakdown[0].id : null;
@@ -2472,7 +2495,7 @@
     // Meses con algún movimiento (ingreso o gasto), para los gráficos de
     // evolución de abajo — un mes sin nada todavía no tiene "peso" que
     // mostrar, así que no tiene sentido dejarlo como un hueco en el eje.
-    const activeMonths = months.filter((m) => txs.some((t) => effectiveMonthOf(t) === m));
+    const activeMonths = months.filter((m) => txs.some((t) => monthKeyOf(t.date) === m));
     const monthLabels = activeMonths.map((m) => {
       const [y, mo] = m.split('-').map(Number);
       return monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', '');
@@ -2480,7 +2503,7 @@
     const pctExpSeries = [];
     const pctIncSeries = [];
     activeMonths.forEach((m) => {
-      const listM = txs.filter((t) => effectiveMonthOf(t) === m);
+      const listM = txs.filter((t) => monthKeyOf(t.date) === m);
       const gastoM = listM.filter((t) => t.type === 'gasto');
       const expM = sumDisp(gastoM);
       const incM = sumDisp(listM.filter((t) => t.type === 'ingreso'));
@@ -2525,7 +2548,7 @@
     if (stackRest.length) stackCats.push({ id: '__otros', name: 'Otros', color: OTROS_COLOR });
     const stackIds = new Set(stackTop.map((g) => g.id));
     const stackRows = activeMonths.map((m) => {
-      const gastoM = txs.filter((t) => t.type === 'gasto' && effectiveMonthOf(t) === m);
+      const gastoM = txs.filter((t) => t.type === 'gasto' && monthKeyOf(t.date) === m);
       const totalM = sumDisp(gastoM);
       const byCat = new Map();
       for (const t of gastoM) {
@@ -3681,7 +3704,7 @@
     let maxMk = today;
     for (const r of rows) {
       for (const t of r.pending) {
-        const mo = effectiveMonthOf(t);
+        const mo = monthKeyOf(t.date);
         if (mo > maxMk) maxMk = mo;
       }
     }
@@ -3698,7 +3721,7 @@
     const totals = new Map(months.map((m) => [m, 0]));
     for (const r of rows) {
       for (const t of r.all) {
-        const mo = effectiveMonthOf(t);
+        const mo = monthKeyOf(t.date);
         if (!totals.has(mo)) continue;
         const v = txDispAmount(t);
         if (v != null) totals.set(mo, totals.get(mo) + v);
@@ -3717,8 +3740,8 @@
     const today = curMonth();
     let minMk = today, maxMk = today;
     for (const r of rows) {
-      const start = effectiveMonthOf(r.all[0]);
-      const end = effectiveMonthOf(r.all[r.all.length - 1]);
+      const start = monthKeyOf(r.all[0].date);
+      const end = monthKeyOf(r.all[r.all.length - 1].date);
       if (start < minMk) minMk = start;
       if (end > maxMk) maxMk = end;
     }
@@ -3729,8 +3752,8 @@
     const barRows = rows.map((r, i) => ({
       label: r.note || catName(r.categoryId),
       color: CAT_PALETTE[i % CAT_PALETTE.length],
-      startIdx: months.indexOf(effectiveMonthOf(r.all[0])),
-      endIdx: months.indexOf(effectiveMonthOf(r.all[r.all.length - 1])),
+      startIdx: months.indexOf(monthKeyOf(r.all[0].date)),
+      endIdx: months.indexOf(monthKeyOf(r.all[r.all.length - 1].date)),
     }));
 
     const nRows = barRows.length;
@@ -3788,8 +3811,10 @@
 
   function vPlan(el) {
     const mk = curMonth();
+    // Presupuestos por fecha real de carga, no de vencimiento — mismo
+    // criterio que el aviso de presupuesto superado en Inicio.
     const monthTx = S().transactions.filter(
-      (t) => t.type === 'gasto' && effectiveMonthOf(t) === mk);
+      (t) => t.type === 'gasto' && monthKeyOf(t.date) === mk);
     const instRows = activeInstallmentGroups();
     const monthTotals = installmentMonthTotals(instRows);
 
