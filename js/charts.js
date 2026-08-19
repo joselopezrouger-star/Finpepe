@@ -245,9 +245,29 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
+  // Curva suave (Catmull-Rom → Bézier cúbica) a través de una lista de
+  // puntos, en vez del trazo recto punto-a-punto de siempre — opcional
+  // (opts.smooth), así los gráficos que ya la usan sin pedirla no cambian.
+  function smoothPathD(pts) {
+    if (pts.length < 2) return '';
+    if (pts.length === 2) return `M${pts[0].x},${pts[0].y} L${pts[1].x},${pts[1].y}`;
+    let d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || p2;
+      const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+      const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+      d += ` C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+    }
+    return d;
+  }
+
   /* ---------- Líneas: evolución de una o más series por mes ----------
      months: [label] · series: [{label, color, values: [n, ...]}] (mismo
-     largo que months) · opts: {fmt, ariaLabel} */
+     largo que months) · opts: {fmt, ariaLabel, smooth, pointLabels,
+     markerRadius} */
   function lines(el, months, series, opts) {
     el.replaceChildren();
     if (!months.length) return;
@@ -307,13 +327,23 @@ const Charts = (() => {
       add(svg, 'text', { x: x(i), y: H - 8, 'text-anchor': 'middle', class: 'tick-label' }, lbl);
     });
 
-    series.forEach((s) => {
-      const d = s.values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(v)}`).join(' ');
+    const markerR = opts.markerRadius || 3;
+    series.forEach((s, si) => {
+      const pts = s.values.map((v, i) => ({ x: x(i), y: y(v) }));
+      const d = opts.smooth ? smoothPathD(pts) : pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
       add(svg, 'path', {
         d, fill: 'none', stroke: s.color, 'stroke-width': 2,
         'stroke-linecap': 'round', 'stroke-linejoin': 'round',
       });
-      s.values.forEach((v, i) => add(svg, 'circle', { cx: x(i), cy: y(v), r: 3, fill: s.color }));
+      pts.forEach((p, i) => {
+        add(svg, 'circle', { cx: p.x, cy: p.y, r: markerR, fill: s.color });
+        if (opts.pointLabels) {
+          add(svg, 'text', {
+            x: p.x, y: p.y + (si === 0 ? -8 : 14), 'text-anchor': 'middle',
+            class: 'point-label', fill: s.color,
+          }, opts.fmtAxis ? opts.fmtAxis(s.values[i]) : Math.round(s.values[i]));
+        }
+      });
     });
 
     el.appendChild(svg);
