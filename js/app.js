@@ -137,6 +137,25 @@
     return usdSnapshotFor(amount, currency);
   }
 
+  /* Mismo mecanismo que usdSnapshotFor/usdSnapshotForDate, pero para el
+     sentido inverso: el equivalente en ARS de un movimiento cargado en
+     dólares, con la cotización DEL DÍA — para poder mostrar el tipo de
+     cambio de ese momento en el detalle de un gasto en USD. */
+  function arsSnapshotFor(amount, currency) {
+    if (currency !== 'USD') return null;
+    const r = rate();
+    return r ? Math.round(FX.convert(amount, 'USD', 'ARS', r.value) * 100) / 100 : null;
+  }
+  async function arsSnapshotForDate(amount, currency, dateStr) {
+    if (currency !== 'USD') return null;
+    const s = S().settings;
+    if (typeof s.manualRate === 'number' && s.manualRate > 0) return arsSnapshotFor(amount, currency);
+    if (dateStr > todayStr()) return arsSnapshotFor(amount, currency);
+    const hist = await FX.fetchHistoricalRate(s.fxSource, dateStr);
+    if (hist && hist.venta > 0) return Math.round(FX.convert(amount, 'USD', 'ARS', hist.venta) * 100) / 100;
+    return arsSnapshotFor(amount, currency);
+  }
+
   // Número protagonista (ej. Patrimonio neto): sin decimales, como el resto
   // de los montos de la app.
   function heroMoneyHTML(n, cur) {
@@ -703,7 +722,7 @@
         S().transactions.push({
           id: Store.uid(), date: dateToStr(d), type: 'ingreso', amount: amt,
           currency: disp(), categoryId: catId, note: 'Sobrante mes anterior',
-          leftoverGen: true, usdSnapshot: usdSnapshotFor(amt, disp()),
+          leftoverGen: true, usdSnapshot: usdSnapshotFor(amt, disp()), arsSnapshot: arsSnapshotFor(amt, disp()),
         });
         changed = true;
       }
@@ -725,7 +744,8 @@
         S().transactions.push({
           id: Store.uid(), date: dateToStr(d), type: r.type, amount: r.amount,
           currency: r.currency, categoryId: r.categoryId, methodId: r.methodId,
-          note: r.name, recurringId: r.id, usdSnapshot: usdSnapshotFor(r.amount, r.currency),
+          note: r.name, recurringId: r.id,
+          usdSnapshot: usdSnapshotFor(r.amount, r.currency), arsSnapshot: arsSnapshotFor(r.amount, r.currency),
         });
         r.lastGen = m;
         changed = true;
@@ -1473,23 +1493,36 @@
       const saveBtn = $('[data-save]', dlg);
       if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando…'; }
       const note = draft.note || '';
+      const wantShare = canShare() && draft.shareIt;
+      const sharePctVal = Math.min(100, Math.max(0, parseFloat(draft.sharePct || '50')));
       const base = draft.type === 'transferencia'
         ? { date: draft.date, type: draft.type, amount, currency: draft.currency,
             methodId: draft.methodId, toMethodId: draft.toMethodId, note: note.trim() }
         : { date: draft.date, type: draft.type, amount, currency: draft.currency,
             categoryId: draft.categoryId, methodId: draft.methodId, note: note.trim() };
+      // Se guarda localmente si el gasto se marcó como compartido con la
+      // pareja — el registro "de verdad" vive en Cloud.addSharedExpense() de
+      // abajo (sin referencia al id de este movimiento), así que sin esto no
+      // había forma de saber después, mirando el detalle de un movimiento
+      // viejo, si en su momento se había compartido o no.
+      if (wantShare) { base.shared = true; base.sharePct = sharePctVal; }
 
       if (editing) {
-        // El equivalente en USD queda como estaba si el monto/moneda no
+        // El equivalente en USD/ARS queda como estaba si el monto/moneda no
         // cambiaron (para no perder el valor histórico por editar la nota o
         // la categoría); si cambian, se recalcula a la cotización DE LA
         // FECHA del movimiento (no la de hoy).
-        const keepSnapshot = tx.currency === draft.currency && tx.amount === amount && tx.usdSnapshot != null;
-        base.usdSnapshot = keepSnapshot ? tx.usdSnapshot : await usdSnapshotForDate(amount, draft.currency, draft.date);
+        const sameAmount = tx.currency === draft.currency && tx.amount === amount;
+        base.usdSnapshot = (sameAmount && tx.usdSnapshot != null) ? tx.usdSnapshot : await usdSnapshotForDate(amount, draft.currency, draft.date);
+        base.arsSnapshot = (sameAmount && tx.arsSnapshot != null) ? tx.arsSnapshot : await arsSnapshotForDate(amount, draft.currency, draft.date);
         Object.assign(tx, base);
       } else {
         if (n === 1) {
-          S().transactions.push({ id: Store.uid(), ...base, usdSnapshot: await usdSnapshotForDate(amount, draft.currency, draft.date) });
+          S().transactions.push({
+            id: Store.uid(), ...base,
+            usdSnapshot: await usdSnapshotForDate(amount, draft.currency, draft.date),
+            arsSnapshot: await arsSnapshotForDate(amount, draft.currency, draft.date),
+          });
         } else {
           const groupId = Store.uid();
           const per = (draft.instMode === 'per') ? entered : Math.round((amount / n) * 100) / 100;
@@ -1500,19 +1533,20 @@
             const dkStr = dateToStr(dk);
             S().transactions.push({
               id: Store.uid(), ...base, amount: cuota, date: dkStr,
-              groupId, installment: { k, n }, usdSnapshot: await usdSnapshotForDate(cuota, draft.currency, dkStr),
+              groupId, installment: { k, n },
+              usdSnapshot: await usdSnapshotForDate(cuota, draft.currency, dkStr),
+              arsSnapshot: await arsSnapshotForDate(cuota, draft.currency, dkStr),
             });
           }
         }
       }
       Store.save();
 
-      if (canShare() && draft.shareIt) {
-        const pct = Math.min(100, Math.max(0, parseFloat(draft.sharePct || '50')));
+      if (wantShare) {
         try {
           await Cloud.addSharedExpense({
             household_id: shared.household.id, paid_by: sharedMe().id,
-            payer_share: pct / 100, amount, currency: draft.currency,
+            payer_share: sharePctVal / 100, amount, currency: draft.currency,
             date: draft.date, note: note.trim() || null,
           });
           shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
@@ -1542,20 +1576,27 @@
   }
 
   /* Diálogo de solo lectura con el resumen de un movimiento (fecha,
-     categoría, cuenta, cotización usada en ese momento, etc.) — tocar una
-     fila en Movimientos abría directo el formulario de edición con la
-     calculadora, sin mostrar antes un detalle legible. El TC se deriva del
-     usdSnapshot guardado (equivalente en USD con la cotización DEL DÍA del
-     movimiento), no de la cotización actual. */
+     categoría, cuenta, cotización usada en ese momento, si se compartió con
+     la pareja, etc.) — tocar una fila en Movimientos abría directo el
+     formulario de edición con la calculadora, sin mostrar antes un detalle
+     legible. El TC se deriva del snapshot cruzado guardado al cargar el
+     movimiento (con la cotización DEL DÍA), no de la cotización actual:
+     usdSnapshot para uno cargado en ARS, arsSnapshot para uno en USD. */
   function txDetailDialog(tx) {
     const isTransfer = tx.type === 'transferencia';
     const isIncome = tx.type === 'ingreso';
     const sign = isTransfer ? '' : (isIncome ? '+ ' : '− ');
     const amtClass = isTransfer ? '' : (isIncome ? 'pos' : 'neg');
-    const usdLine = (tx.currency === 'ARS' && tx.usdSnapshot != null)
-      ? `<div class="usd">≈ ${esc(fmtMoney(tx.usdSnapshot, 'USD'))}</div>` : '';
-    const tcLine = (tx.currency === 'ARS' && tx.usdSnapshot > 0)
-      ? `<div class="tx-detail-row"><span class="tx-row-label">TC del momento</span><span class="tx-row-value">${esc(fmtMoney(tx.amount / tx.usdSnapshot, 'ARS'))} / USD</span></div>` : '';
+    const isUSD = tx.currency === 'USD';
+    const crossAmount = isUSD ? tx.arsSnapshot : (tx.currency === 'ARS' ? tx.usdSnapshot : null);
+    const crossCur = isUSD ? 'ARS' : 'USD';
+    const crossLine = crossAmount != null
+      ? `<div class="usd">≈ ${esc(fmtMoney(crossAmount, crossCur))}</div>` : '';
+    let tcValue = null;
+    if (tx.currency === 'ARS' && tx.usdSnapshot > 0) tcValue = tx.amount / tx.usdSnapshot;
+    else if (isUSD && tx.arsSnapshot > 0) tcValue = tx.arsSnapshot / tx.amount;
+    const tcLine = tcValue != null
+      ? `<div class="tx-detail-row"><span class="tx-row-label">TC del momento</span><span class="tx-row-value">${esc(fmtMoney(tcValue, 'ARS'))} / USD</span></div>` : '';
     const whoRows = isTransfer
       ? `<div class="tx-detail-row"><span class="tx-row-label">Desde</span><span class="tx-row-value">${esc(methodName(tx.methodId))}</span></div>
          <div class="tx-detail-row"><span class="tx-row-label">Hacia</span><span class="tx-row-value">${esc(methodName(tx.toMethodId))}</span></div>`
@@ -1566,19 +1607,22 @@
     const origin = tx.recurringId ? 'Gasto fijo' : (tx.leftoverGen ? 'Sobrante del mes anterior' : '');
     const originRow = origin
       ? `<div class="tx-detail-row"><span class="tx-row-label">Origen</span><span class="tx-row-value">${esc(origin)}</span></div>` : '';
+    const sharedRow = tx.shared
+      ? `<div class="tx-detail-row"><span class="tx-row-label">Compartido</span><span class="tx-row-value">Sí${tx.sharePct != null ? ` · te quedás ${tx.sharePct}%` : ''}</span></div>` : '';
     const noteRow = tx.note
       ? `<div class="tx-detail-row"><span class="tx-row-label">Nota</span><span class="tx-row-value">${esc(tx.note)}</span></div>` : '';
 
     const bodyHTML = `
       <div class="tx-detail-amount">
         <div class="v ${amtClass}">${sign}${fmtMoney(tx.amount, tx.currency)}</div>
-        ${usdLine}
+        ${crossLine}
       </div>
       <div class="tx-detail-row"><span class="tx-row-label">Fecha</span><span class="tx-row-value">${esc(fmtDateFull(tx.date))}</span></div>
       ${whoRows}
       ${tcLine}
       ${instRow}
       ${originRow}
+      ${sharedRow}
       ${noteRow}`;
 
     const titles = { gasto: 'Detalle del gasto', ingreso: 'Detalle del ingreso', transferencia: 'Detalle de la transferencia' };
