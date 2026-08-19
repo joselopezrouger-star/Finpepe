@@ -764,12 +764,15 @@ dialog[open].dialog-tx.dialog-tx-wiz {
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--accent);
 }
 .tx-amount-display.is-income { color: var(--good); }
 .tx-amount-display.is-expense { color: var(--ink); }
 .tx-amount-back {
-  border: 0; background: none; color: var(--muted);
-  font-size: 20px; cursor: pointer; padding: 4px 6px; flex: none;
+  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--ink-2);
+  font: 600 13px var(--font); border-radius: 999px;
+  cursor: pointer; padding: 8px 14px; flex: none; white-space: nowrap;
 }
 
 .tx-check-row {
@@ -827,10 +830,21 @@ dialog[open].dialog-tx.dialog-tx-wiz {
   cursor: pointer;
 }
 .tx-keypad button:active { background: var(--surface-2); }
-.tx-keypad button[data-op], .tx-keypad button[data-eq] {
+.tx-keypad button.tx-key-op {
+  background: var(--accent-wash);
   color: var(--accent);
+  font-size: 21px;
 }
-.tx-keypad button[data-eq] { background: var(--accent); color: var(--on-accent); }
+.tx-keypad button.tx-key-ac {
+  background: var(--danger-bg);
+  color: var(--danger-ink);
+  font-size: 15px;
+}
+.tx-keypad button.tx-key-eq {
+  grid-column: span 2;
+  background: var(--accent);
+  color: var(--on-accent);
+}
 
 /* Lista de categoría/cuenta desplegada ahí mismo, sin cambiar de hoja. */
 .tx-pick-inline {

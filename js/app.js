@@ -1082,6 +1082,17 @@
       else if (draft.acc != null) { draft.cur = numFmt(draft.acc); draft.acc = null; }
       paint();
     }
+    // "AC": a diferencia de "⌫" (que borra de a un paso), reinicia toda la
+    // cuenta en curso — para cuando te confundiste sumando varios montos y
+    // preferís arrancar de cero en vez de borrar carácter por carácter.
+    function pressClear() {
+      haptic();
+      draft.acc = null;
+      draft.op = null;
+      draft.cur = '';
+      draft.justEq = false;
+      paint();
+    }
 
     function currentInstMethod() { return methodById(draft.methodId); }
     function showInstallments() {
@@ -1204,7 +1215,7 @@
           </div>
           <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : draft.type === 'gasto' ? 'is-expense' : ''}">
             <span>${esc(displayExpr())}</span>
-            <button type="button" class="tx-amount-back" data-back aria-label="Borrar">⌫</button>
+            <button type="button" class="tx-amount-back" data-back>⌫ Borrar</button>
           </div>
         </div>
 
@@ -1266,10 +1277,11 @@
     function keypadHTML() {
       return `
       <div class="tx-keypad">
-        <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-op="÷">÷</button>
-        <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-op="×">×</button>
-        <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-op="-">−</button>
-        <button type="button" data-k=".">.</button><button type="button" data-k="0">0</button><button type="button" data-eq>=</button><button type="button" data-op="+">+</button>
+        <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" class="tx-key-op" data-op="÷">÷</button>
+        <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" class="tx-key-op" data-op="×">×</button>
+        <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" class="tx-key-op" data-op="-">−</button>
+        <button type="button" data-k="0">0</button><button type="button" data-k="00">00</button><button type="button" data-k="000">000</button><button type="button" class="tx-key-op" data-op="+">+</button>
+        <button type="button" data-k=".">,</button><button type="button" class="tx-key-ac" data-ac>AC</button><button type="button" class="tx-key-eq" data-eq>=</button>
       </div>`;
     }
 
@@ -1278,6 +1290,8 @@
       $$('.tx-keypad [data-op]', dlg).forEach((b) => b.addEventListener('click', () => pressOp(b.dataset.op)));
       const eqBtn = $('[data-eq]', dlg);
       if (eqBtn) eqBtn.addEventListener('click', pressEquals);
+      const acBtn = $('[data-ac]', dlg);
+      if (acBtn) acBtn.addEventListener('click', pressClear);
     }
 
     function paint() {
@@ -1341,7 +1355,7 @@
             </div>
             <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : draft.type === 'gasto' ? 'is-expense' : ''}">
               <span>${esc(displayExpr())}</span>
-              <button type="button" class="tx-amount-back" data-back aria-label="Borrar">⌫</button>
+              <button type="button" class="tx-amount-back" data-back>⌫ Borrar</button>
             </div>
           </div>`;
       }
@@ -1377,10 +1391,10 @@
     }
     function wizardFootHTML(key) {
       if (key === 'date') {
-        return '<div class="dialog-foot"><button type="button" class="btn btn-primary" data-wnext>Siguiente</button></div>';
+        return '<div class="dialog-foot"><button type="button" class="btn btn-primary" data-wnext>Siguiente →</button></div>';
       }
       if (key === 'amount') {
-        return `<div class="dialog-foot"><button type="button" class="btn btn-primary" data-wnext ${finalAmount() > 0 ? '' : 'disabled'}>Siguiente</button></div>`;
+        return `<div class="dialog-foot"><button type="button" class="btn btn-primary" data-wnext ${finalAmount() > 0 ? '' : 'disabled'}>Siguiente →</button></div>`;
       }
       if (key === 'extra') {
         return '<div class="dialog-foot"><button type="button" class="btn btn-primary" data-save>Guardar</button></div>';
