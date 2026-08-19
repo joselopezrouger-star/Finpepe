@@ -103,6 +103,18 @@ body {
 
 a { color: var(--accent-down); }
 
+/* Sin esto, un doble toque rápido sobre un botón (típicamente en el nav
+   de abajo: "Inicio", "Movimientos"…) lo puede interpretar el navegador
+   como "seleccionar esta palabra" en vez de dos toques — y al seleccionar
+   texto, el navegador scrollea/ajusta la página para mostrar la selección,
+   lo que se sentía como que la app "scrollea sola para abajo" al tocar dos
+   veces. Ningún botón de la app necesita texto seleccionable. */
+button {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* ---------- Encabezado ---------- */
 .topbar {
   background: var(--surface);
@@ -544,6 +556,18 @@ select:focus, input:focus, .btn:focus-visible, .icon-btn:focus-visible {
   color: var(--ink);
   box-shadow: 0 12px 40px rgba(11, 11, 11, 0.14);
   margin: auto;
+  /* Sin esto, cuando el contenido no entraba (ej. el detalle de un
+     resumen con muchos movimientos) el <dialog> entero scrolleaba como un
+     solo bloque — encabezado con la ✕ incluido — así que para cerrarlo
+     había que scrollear todo hacia arriba de nuevo. Ahora solo scrollea
+     el cuerpo (ver .dialog-body más abajo); encabezado y pie quedan fijos.
+     display:flex acá (no solo en .dialog form) es necesario para que
+     .dialog-body pueda resolver flex:1 contra una altura definida: un
+     porcentaje/flex-basis contra un padre con solo max-height (sin height
+     explícito) no se resuelve en block layout, pero sí en flex layout. */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 /* Red de seguridad: si por lo que sea el navegador no promueve el <dialog>
    a overlay flotante (algunas versiones de iOS Safari lo hacen mal dentro
@@ -561,7 +585,7 @@ dialog[open].dialog {
   display: none !important;
 }
 .dialog::backdrop { background: rgba(11, 11, 11, 0.32); }
-.dialog form { display: flex; flex-direction: column; }
+.dialog form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .dialog-head {
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
@@ -570,8 +594,12 @@ dialog[open].dialog {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex: none;
 }
-.dialog-body { padding: 16px 18px; display: grid; gap: 12px; }
+/* flex:1 + min-height:0 + overflow-y:auto es lo que hace que SOLO esta
+   zona scrollee cuando el contenido no entra, dejando el encabezado (con
+   la ✕) y el pie del diálogo siempre fijos y accesibles. */
+.dialog-body { padding: 16px 18px; display: grid; gap: 12px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .dialog-foot {
   padding: 12px 18px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
@@ -579,6 +607,7 @@ dialog[open].dialog {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  flex: none;
 }
 
 /* ---------- Carga de movimientos (calculadora) ---------- */
@@ -944,15 +973,20 @@ table.data.cat-breakdown-table {
   font-size: 12px;
   font-family: var(--font-heading);
 }
-table.data.cat-breakdown-table col.cat-col-name { width: 34%; }
-table.data.cat-breakdown-table col.cat-col-amount { width: 18%; }
+/* La columna de nombre reservaba mucho más ancho del que la mayoría de
+   los nombres de categoría/subcategoría realmente ocupa (son cortos), así
+   que quedaba un hueco grande entre el nombre y el monto — se achica y el
+   ancho sobrante se reparte entre las columnas numéricas. */
+table.data.cat-breakdown-table col.cat-col-name { width: 30%; }
+table.data.cat-breakdown-table col.cat-col-amount { width: 21%; }
 table.data.cat-breakdown-table col.cat-col-pct { width: 12%; }
-table.data.cat-breakdown-table col.cat-col-mom { width: 24%; }
+table.data.cat-breakdown-table col.cat-col-mom { width: 25%; }
 /* Tabla de ingresos: una sola columna de % (no dos), así que se reparte
    distinto para no dejar aire de más. */
-table.data.cat-breakdown-table.cat-income-table col.cat-col-name { width: 36%; }
-table.data.cat-breakdown-table.cat-income-table col.cat-col-amount { width: 20%; }
-table.data.cat-breakdown-table.cat-income-table col.cat-col-pct { width: 20%; }
+table.data.cat-breakdown-table.cat-income-table col.cat-col-name { width: 32%; }
+table.data.cat-breakdown-table.cat-income-table col.cat-col-amount { width: 22%; }
+table.data.cat-breakdown-table.cat-income-table col.cat-col-pct { width: 21%; }
+table.data.cat-breakdown-table.cat-income-table col.cat-col-mom { width: 25%; }
 table.data.cat-breakdown-table th, table.data.cat-breakdown-table td {
   padding: 7px 4px;
 }
