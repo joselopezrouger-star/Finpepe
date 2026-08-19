@@ -3468,13 +3468,17 @@
   function budgetForm(budget) {
     const editing = !!budget;
     const b = budget || { categoryId: '', amount: '', currency: 'ARS' };
-    const usados = new Set(S().budgets.map((x) => x.categoryId));
-    const cats = catGroups('gasto').filter((c) => editing || !usados.has(c.id));
+    // Al editar, la categoría actual del presupuesto tiene que seguir en la
+    // lista (si no, no habría forma de "no cambiarla") aunque ya esté
+    // usada — lo que no puede pasar es elegir una categoría que YA tiene
+    // presupuesto en OTRA fila.
+    const usados = new Set(S().budgets.filter((x) => x !== budget).map((x) => x.categoryId));
+    const cats = catGroups('gasto').filter((c) => !usados.has(c.id));
     if (!cats.length) { alert('Todas las categorías de gasto ya tienen presupuesto.'); return; }
     const body = `
       <div class="field">
         <label for="b-cat">Categoría</label>
-        <select name="categoryId" id="b-cat" ${editing ? 'disabled' : ''} required>
+        <select name="categoryId" id="b-cat" required>
           ${selOptions(cats, b.categoryId)}
         </select>
       </div>
@@ -3495,7 +3499,7 @@
       onSubmit(d) {
         const amount = parseFloat(d.amount);
         if (!(amount > 0)) return false;
-        if (editing) Object.assign(budget, { amount, currency: d.currency });
+        if (editing) Object.assign(budget, { categoryId: d.categoryId, amount, currency: d.currency });
         else S().budgets.push({ id: Store.uid(), categoryId: d.categoryId, amount, currency: d.currency });
         Store.save();
         render();
@@ -3603,6 +3607,34 @@
     return rows.sort((a, b) => a.next.date.localeCompare(b.next.date));
   }
 
+  // Cuánto se paga en total de cuotas cada mes, desde el actual en
+  // adelante (a diferencia del Gantt, que también mira para atrás si una
+  // compra vieja todavía no terminó) — responde directo "cuánto tengo
+  // comprometido este mes y los que vienen", sin tener que sumarlo a ojo
+  // mirando las barras.
+  function installmentMonthTotals(rows) {
+    const today = curMonth();
+    let maxMk = today;
+    for (const r of rows) {
+      for (const t of r.pending) {
+        const mo = effectiveMonthOf(t);
+        if (mo > maxMk) maxMk = mo;
+      }
+    }
+    const months = [];
+    for (let mk = today, guard = 0; mk <= maxMk && guard < 60; mk = addMonthsKey(mk, 1), guard++) months.push(mk);
+    const totals = new Map(months.map((m) => [m, 0]));
+    for (const r of rows) {
+      for (const t of r.pending) {
+        const mo = effectiveMonthOf(t);
+        if (!totals.has(mo)) continue;
+        const v = txDispAmount(t);
+        if (v != null) totals.set(mo, totals.get(mo) + v);
+      }
+    }
+    return months.map((m) => ({ mk: m, label: monthShortLabel(m), total: totals.get(m) }));
+  }
+
   // Gantt de verdad: una fila por compra, una barra que va del mes de la
   // primera cuota al mes de la última (mostrando cuánto dura en el tiempo),
   // y una columna resaltada marcando en qué mes estás parado hoy. La
@@ -3655,11 +3687,39 @@
     return `<div class="gantt-wrap"><div class="gantt" style="grid-template-columns:${cols};grid-template-rows:${gridRows}">${cells.join('')}</div></div>`;
   }
 
+  // El detalle de cada compra en cuotas (antes vivía siempre desplegado
+  // debajo del Gantt) ahora es un pop-up: el Gantt ya responde "cuándo",
+  // y este detalle es para cuando hace falta el "cuánto/con qué medio" de
+  // una compra puntual — no hace falta tenerlo abierto de entrada.
+  function installmentListDialog(rows) {
+    const bodyHTML = `
+      <div class="inst-row-list">
+        ${rows.map((r) => `
+          <div class="inst-row rowlink" data-instgroup="${esc(r.groupId)}">
+            <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(r.categoryId))}</div>
+            <div class="inst-row-main">
+              <div class="inst-row-title">${esc(r.note || catName(r.categoryId))}</div>
+              <div class="inst-row-sub">${esc(methodName(r.methodId))} · cuota ${r.nextK}/${r.n} · próx. ${esc(fmtDateShort(r.next.date))}</div>
+            </div>
+            <div class="inst-row-amounts">
+              <div class="inst-row-amount">${fmtMoney(r.next.amount, r.currency)} <span class="inst-row-amount-label">cuota</span></div>
+              <div class="inst-row-total">${fmtMoney(r.totalPending, r.currency)} <span class="inst-row-amount-label">restan</span></div>
+            </div>
+          </div>`).join('')}
+      </div>`;
+    const dlg = openDialog('Compras en cuotas', bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
+    $$('[data-instgroup]', dlg).forEach((row) => row.addEventListener('click', () => {
+      const g = rows.find((r) => r.groupId === row.dataset.instgroup);
+      if (g) { dlg.close(); txForm(g.next); }
+    }));
+  }
+
   function vPlan(el) {
     const mk = curMonth();
     const monthTx = S().transactions.filter(
       (t) => t.type === 'gasto' && effectiveMonthOf(t) === mk);
     const instRows = activeInstallmentGroups();
+    const monthTotals = installmentMonthTotals(instRows);
 
     const budgetRows = S().budgets.map((b) => {
       const spent = sumDisp(monthTx.filter((t) => topCategoryOf(t.categoryId) === b.categoryId));
@@ -3672,22 +3732,17 @@
       <div class="card">
         <h2 class="card-title">Compras en cuotas</h2>
         ${instRows.length ? `
-        <div class="hint" style="margin-bottom:10px">Cuándo empieza y termina cada compra, con hoy marcado.</div>
-        ${installmentGanttHTML(instRows)}
-        <div class="inst-row-list" style="margin-top:16px">
-          ${instRows.map((r) => `
-            <div class="inst-row rowlink" data-instgroup="${esc(r.groupId)}">
-              <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(r.categoryId))}</div>
-              <div class="inst-row-main">
-                <div class="inst-row-title">${esc(r.note || catName(r.categoryId))}</div>
-                <div class="inst-row-sub">${esc(methodName(r.methodId))} · cuota ${r.nextK}/${r.n} · próx. ${esc(fmtDateShort(r.next.date))}</div>
-              </div>
-              <div class="inst-row-amounts">
-                <div class="inst-row-amount">${fmtMoney(r.next.amount, r.currency)} <span class="inst-row-amount-label">cuota</span></div>
-                <div class="inst-row-total">${fmtMoney(r.totalPending, r.currency)} <span class="inst-row-amount-label">restan</span></div>
-              </div>
+        ${monthTotals.length ? `
+        <div class="inst-month-totals">
+          ${monthTotals.map((m, i) => `
+            <div class="inst-month-chip ${i === 0 ? 'is-today' : ''}">
+              <span class="inst-month-chip-label">${esc(m.label)}</span>
+              <span class="inst-month-chip-amount">${fmtDisp(m.total)}</span>
             </div>`).join('')}
-        </div>`
+        </div>` : ''}
+        <div class="hint" style="margin:10px 0">Cuándo empieza y termina cada compra, con hoy marcado.</div>
+        ${installmentGanttHTML(instRows)}
+        <button class="link-btn" id="btn-inst-detail" style="margin-top:14px">Ver el detalle de cada compra ›</button>`
         : '<div class="empty">Cuando cargues una compra en cuotas desde "+ Movimiento", la vas a ver acá con cuántas cuotas faltan.</div>'}
       </div>
 
@@ -3697,24 +3752,23 @@
           <button class="link-btn" id="btn-add-budget">+ Presupuesto</button>
         </h2>
         ${budgetRows.length ? `
-        <div class="table-scroll"><table class="data">
-          <thead><tr>
-            <th>Categoría</th><th class="num">Presupuesto</th><th class="num">Gastado</th>
-            <th style="width:30%">Avance</th><th class="num">%</th><th></th>
-          </tr></thead>
-          <tbody>${budgetRows.map(({ b, spent, limit, pct }) => {
+        <div class="budget-row-list">
+          ${budgetRows.map(({ b, spent, limit, pct }) => {
             const cls = pct == null ? 'meter-ok' : pct >= 100 ? 'meter-crit' : pct >= 80 ? 'meter-warn' : 'meter-ok';
             const over = pct != null && pct >= 100;
-            return `<tr class="rowlink" data-bid="${esc(b.id)}">
-              <td><b>${esc(catName(b.categoryId))}</b></td>
-              <td class="num">${fmtMoney(b.amount, b.currency)}</td>
-              <td class="num">${fmtDisp(spent)}</td>
-              <td><div class="meter ${cls}"><span style="width:${Math.min(100, pct || 0)}%"></span></div></td>
-              <td class="num" ${over ? 'style="color:var(--crit);font-weight:600"' : ''}>${pct == null ? '—' : Math.round(pct) + '%'}${over ? ' ⚠' : ''}</td>
-              <td><button class="row-del" data-bdel="${esc(b.id)}" aria-label="Eliminar">✕</button></td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table></div>`
+            return `<div class="budget-row rowlink" data-bid="${esc(b.id)}">
+              <div class="budget-row-main">
+                <div class="budget-row-top">
+                  <span class="budget-row-name">${esc(catName(b.categoryId))}</span>
+                  <span class="budget-row-pct ${over ? 'over' : ''}">${pct == null ? '—' : Math.round(pct) + '%'}${over ? ' ⚠' : ''}</span>
+                </div>
+                <div class="meter ${cls}"><span style="width:${Math.min(100, pct || 0)}%"></span></div>
+                <div class="budget-row-amounts">${fmtDisp(spent)} <span class="inst-row-amount-label">de</span> ${fmtMoney(b.amount, b.currency)}</div>
+              </div>
+              <button class="row-del" data-bdel="${esc(b.id)}" aria-label="Eliminar">✕</button>
+            </div>`;
+          }).join('')}
+        </div>`
         : '<div class="empty">Definí cuánto querés gastar por mes en cada categoría y controlá el avance acá.</div>'}
       </div>
 
@@ -3744,13 +3798,11 @@
         : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos cada mes.</div>'}
       </div>`;
 
-    $$('[data-instgroup]', el).forEach((row) => row.addEventListener('click', () => {
-      const g = instRows.find((r) => r.groupId === row.dataset.instgroup);
-      if (g) txForm(g.next);
-    }));
+    const instDetailBtn = $('#btn-inst-detail', el);
+    if (instDetailBtn) instDetailBtn.addEventListener('click', () => installmentListDialog(instRows));
     $('#btn-add-budget', el).addEventListener('click', () => budgetForm(null));
     $('#btn-add-rec', el).addEventListener('click', () => recurringForm(null));
-    $$('tr[data-bid]', el).forEach((row) => row.addEventListener('click', (e) => {
+    $$('.budget-row[data-bid]', el).forEach((row) => row.addEventListener('click', (e) => {
       if (e.target.closest('[data-bdel]')) return;
       budgetForm(S().budgets.find((b) => b.id === row.dataset.bid));
     }));
