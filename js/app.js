@@ -92,6 +92,40 @@
   const fmtMoney = (n, cur) => (cur === 'USD' ? nfUSD : nfARS).format(n);
   const nfHero = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
 
+  /* Puntos de miles en vivo para inputs de monto sueltos (presupuesto,
+     movimiento fijo) — la calculadora de "+ Movimiento" ya los mostraba a
+     medida que se tipeaba, pero estos son <input> nativos aparte, sin ese
+     formateo. Punto para miles, coma para decimales (igual que la
+     calculadora). formatAmountDisplay() arma el valor inicial al abrir el
+     formulario; wireAmountInput() reformatea en cada tecla; parseAmountInput()
+     deshace el formato para guardar el número real. */
+  function formatAmountDisplay(n) {
+    if (n === '' || n == null || !isFinite(n)) return '';
+    const s = (Math.round(Number(n) * 100) / 100).toString();
+    const neg = s.startsWith('-');
+    const [intRaw, decPart] = (neg ? s.slice(1) : s).split('.');
+    const grouped = intRaw.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return (neg ? '-' : '') + grouped + (decPart ? ',' + decPart : '');
+  }
+  function parseAmountInput(raw) {
+    if (!raw) return NaN;
+    return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
+  }
+  function wireAmountInput(input) {
+    if (!input) return;
+    input.addEventListener('input', () => {
+      const fromEnd = input.value.length - input.selectionStart;
+      const neg = input.value.trim().startsWith('-');
+      const dot = input.value.indexOf(',');
+      const intRaw = (dot === -1 ? input.value : input.value.slice(0, dot)).replace(/\D/g, '');
+      const decPart = dot === -1 ? null : input.value.slice(dot + 1).replace(/\D/g, '').slice(0, 2);
+      const grouped = intRaw.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      input.value = (neg ? '-' : '') + grouped + (decPart !== null ? ',' + decPart : '');
+      const pos = Math.max(0, input.value.length - fromEnd);
+      input.setSelectionRange(pos, pos);
+    });
+  }
+
   const disp = () => S().settings.displayCurrency;
   const rate = () => FX.currentRate(S());
   const toDisp = (amount, cur) => FX.convert(amount, cur, disp(), rate() ? rate().value : null);
@@ -202,6 +236,17 @@
     const c = catById(id);
     if (!c || !c.parentId) return id;
     return topCategoryOf(c.parentId);
+  }
+
+  /* Un presupuesto puede ser de un grupo entero (ej. "Casa", suma todas sus
+     subcategorías) o de una subcategoría puntual (ej. solo "Supermercado")
+     — según de qué nivel sea la categoría del presupuesto, el gasto se
+     compara distinto: contra el grupo de más arriba del movimiento, o
+     contra su categoría exacta. */
+  function txMatchesBudgetCategory(t, categoryId) {
+    const cat = catById(categoryId);
+    if (!cat) return false;
+    return cat.parentId ? t.categoryId === categoryId : topCategoryOf(t.categoryId) === categoryId;
   }
 
   const KIND_LABEL = {
@@ -1772,7 +1817,7 @@
       }
 
       const budgetHits = S().budgets.map((b) => {
-        const spent = sumDisp(inMonth.filter((t) => t.type === 'gasto' && topCategoryOf(t.categoryId) === b.categoryId));
+        const spent = sumDisp(inMonth.filter((t) => t.type === 'gasto' && txMatchesBudgetCategory(t, b.categoryId)));
         const limit = convOrNull(b.amount, b.currency);
         return { name: catName(b.categoryId), spent, limit, over: (limit > 0) ? spent - limit : 0 };
       }).filter((x) => x.over > 0).sort((a, b) => b.over - a.over);
@@ -3464,6 +3509,23 @@
     }));
   }
 
+  /* Categoría de un presupuesto: grupo entero O una subcategoría puntual
+     (ver txMatchesBudgetCategory) — el grupo queda como opción "(todas)"
+     al lado de sus subcategorías, en vez de forzar a elegir una sola cosa.
+     selId siempre se deja disponible aunque ya esté "usada" (es la propia
+     fila que se está editando). */
+  function budgetCategoryOptionsHTML(selId, usados) {
+    const usable = (id) => id === selId || !usados.has(id);
+    const groups = catGroups('gasto');
+    if (!useSubcats()) return selOptions(groups.filter(usable), selId);
+    return groups.map((g) => {
+      const children = catChildren(g.id).filter((c) => usable(c.id));
+      if (!children.length) return usable(g.id) ? `<option value="${esc(g.id)}" ${g.id === selId ? 'selected' : ''}>${esc(g.name)}</option>` : '';
+      const groupOpt = usable(g.id) ? `<option value="${esc(g.id)}" ${g.id === selId ? 'selected' : ''}>${esc(g.name)} (todas)</option>` : '';
+      return `<optgroup label="${esc(g.name)}">${groupOpt}${selOptions(children, selId)}</optgroup>`;
+    }).join('');
+  }
+
   /* ================= Vista: Planificar ================= */
   function budgetForm(budget) {
     const editing = !!budget;
@@ -3473,19 +3535,19 @@
     // usada — lo que no puede pasar es elegir una categoría que YA tiene
     // presupuesto en OTRA fila.
     const usados = new Set(S().budgets.filter((x) => x !== budget).map((x) => x.categoryId));
-    const cats = catGroups('gasto').filter((c) => !usados.has(c.id));
-    if (!cats.length) { alert('Todas las categorías de gasto ya tienen presupuesto.'); return; }
+    const catOptionsHTML = budgetCategoryOptionsHTML(b.categoryId, usados);
+    if (!catOptionsHTML) { alert('Todas las categorías de gasto ya tienen presupuesto.'); return; }
     const body = `
       <div class="field">
         <label for="b-cat">Categoría</label>
         <select name="categoryId" id="b-cat" required>
-          ${selOptions(cats, b.categoryId)}
+          ${catOptionsHTML}
         </select>
       </div>
       <div class="field-row">
         <div class="field">
           <label for="b-amount">Presupuesto mensual</label>
-          <input type="number" name="amount" id="b-amount" min="1" step="0.01" required value="${esc(b.amount || '')}">
+          <input type="text" inputmode="decimal" name="amount" id="b-amount" required value="${esc(formatAmountDisplay(b.amount))}">
         </div>
         <div class="field">
           <label for="b-cur">Moneda</label>
@@ -3495,9 +3557,9 @@
           </select>
         </div>
       </div>`;
-    openDialog(editing ? 'Editar presupuesto' : 'Nuevo presupuesto', body, {
+    const dlg = openDialog(editing ? 'Editar presupuesto' : 'Nuevo presupuesto', body, {
       onSubmit(d) {
-        const amount = parseFloat(d.amount);
+        const amount = parseAmountInput(d.amount);
         if (!(amount > 0)) return false;
         if (editing) Object.assign(budget, { categoryId: d.categoryId, amount, currency: d.currency });
         else S().budgets.push({ id: Store.uid(), categoryId: d.categoryId, amount, currency: d.currency });
@@ -3505,6 +3567,7 @@
         render();
       },
     });
+    wireAmountInput($('#b-amount', dlg));
   }
 
   function recurringForm(rec) {
@@ -3535,7 +3598,7 @@
       <div class="field-row">
         <div class="field">
           <label for="r-amount">Monto</label>
-          <input type="number" name="amount" id="r-amount" min="0.01" step="0.01" required value="${esc(r.amount || '')}">
+          <input type="text" inputmode="decimal" name="amount" id="r-amount" required value="${esc(formatAmountDisplay(r.amount))}">
         </div>
         <div class="field">
           <label for="r-cur">Moneda</label>
@@ -3556,7 +3619,7 @@
       <span class="hint">Se genera un movimiento automáticamente cada mes, a partir de este mes.</span>`;
     const dlg = openDialog(editing ? 'Editar movimiento fijo' : 'Nuevo movimiento fijo', body, {
       onSubmit(d) {
-        const amount = parseFloat(d.amount);
+        const amount = parseAmountInput(d.amount);
         if (!(amount > 0)) return false;
         const data = {
           name: d.name.trim(), type: d.type, amount, currency: d.currency,
@@ -3577,6 +3640,7 @@
       const sel = $('#r-cat', dlg);
       sel.innerHTML = catSelectOptionsHTML($('#r-type', dlg).value, sel.value);
     });
+    wireAmountInput($('#r-amount', dlg));
   }
 
   // Agrupa las cuotas activas (compras en cuotas) por groupId: junta todas
@@ -3623,9 +3687,17 @@
     }
     const months = [];
     for (let mk = today, guard = 0; mk <= maxMk && guard < 60; mk = addMonthsKey(mk, 1), guard++) months.push(mk);
+    // Ojo: acá se suma sobre TODAS las cuotas de la compra (r.all), no solo
+    // las pendientes (r.pending, fecha > hoy) — el mes actual puede tener
+    // una cuota que ya pasó (ej. hoy es el 19 y la cuota fue el 5), y esa
+    // sigue siendo parte de "cuánto tengo de cuotas este mes". Usar solo
+    // r.pending hacía que esa cuota ya transcurrida desapareciera del total
+    // del mes en curso, aunque su compra siguiera activa (con cuotas
+    // pendientes en meses futuros). Los meses anteriores al actual igual
+    // quedan afuera solos, porque totals solo tiene claves desde "hoy".
     const totals = new Map(months.map((m) => [m, 0]));
     for (const r of rows) {
-      for (const t of r.pending) {
+      for (const t of r.all) {
         const mo = effectiveMonthOf(t);
         if (!totals.has(mo)) continue;
         const v = txDispAmount(t);
@@ -3722,7 +3794,7 @@
     const monthTotals = installmentMonthTotals(instRows);
 
     const budgetRows = S().budgets.map((b) => {
-      const spent = sumDisp(monthTx.filter((t) => topCategoryOf(t.categoryId) === b.categoryId));
+      const spent = sumDisp(monthTx.filter((t) => txMatchesBudgetCategory(t, b.categoryId)));
       const limit = convOrNull(b.amount, b.currency);
       const pct = limit > 0 ? (spent / limit) * 100 : null;
       return { b, spent, limit, pct };
@@ -3934,6 +4006,53 @@
     }
   }
 
+  /* Antes esta configuración vivía siempre desplegada en Ajustes; ahora es
+     un pop-up aparte (botón "Configurar categorías"), para que Ajustes no
+     tenga tanto texto/listas a la vista de entrada. */
+  function categoriesSettingsDialog() {
+    const bodyHTML = `
+      <label class="subcats-toggle">
+        Subcategorías
+        <input type="checkbox" id="set-subcats" ${useSubcats() ? 'checked' : ''}>
+      </label>
+      <div class="cat-type-grid">
+        ${['gasto', 'ingreso'].map((type) => `
+          <div>
+            <div class="hint" style="margin-bottom:6px">${type === 'gasto' ? 'De gastos' : 'De ingresos'}</div>
+            <div class="cat-group-list">
+              ${catGroups(type).map((g) => {
+                const children = catChildren(g.id);
+                return `<div class="cat-group-row">
+                  <div class="cat-group-main">
+                    <div><b>${esc(g.name)}</b>${children.length ? ` <span class="cell-sub">(${children.length})</span>` : ''}</div>
+                    ${children.length ? `<div class="cell-sub">${esc(children.map((c) => c.name).join(', '))}</div>` : ''}
+                  </div>
+                  <button class="btn btn-sm" data-editgroup="${esc(g.id)}" aria-label="Editar ${esc(g.name)}">✎</button>
+                </div>`;
+              }).join('') || '<div class="empty">Sin categorías todavía.</div>'}
+            </div>
+            <button class="link-btn" data-addgroup="${type}" style="margin-top:8px">+ Agregar categoría</button>
+          </div>`).join('')}
+      </div>`;
+    const dlg = openDialog('Categorías y subcategorías', bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
+    $('#set-subcats', dlg).addEventListener('change', (e) => {
+      S().settings.useSubcategories = e.target.checked;
+      Store.save();
+      render();
+    });
+    // Agregar/editar un grupo abre su propio diálogo (reutiliza el mismo
+    // <dialog> de la app), así que este se cierra primero — mismo criterio
+    // que "ver detalle → editar" en otros lugares de la app.
+    $$('[data-addgroup]', dlg).forEach((b) => b.addEventListener('click', () => {
+      dlg.close();
+      categoryGroupForm(null, b.dataset.addgroup);
+    }));
+    $$('[data-editgroup]', dlg).forEach((b) => b.addEventListener('click', () => {
+      dlg.close();
+      categoryGroupForm(catById(b.dataset.editgroup), null);
+    }));
+  }
+
   function vAjustes(el) {
     const s = S().settings;
     const updated = s.ratesUpdatedAt
@@ -3949,6 +4068,12 @@
               ${currentTheme() === 'dark' ? '☀ Cambiar a modo claro' : '◐ Cambiar a modo oscuro'}
             </button>
           </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Categorías</h2>
+          <div class="hint" style="margin-bottom:10px">Organizá tus categorías y subcategorías de gastos e ingresos.</div>
+          <button class="btn btn-sm" id="btn-open-categories">Configurar categorías</button>
         </div>
 
         <div class="card">
@@ -3995,35 +4120,6 @@
             </label>
           </h2>
           <div class="hint">Acredita como Ingreso, al empezar cada mes, lo que sobró del mes anterior (si dio positivo) — para no perderle el rastro cuando lo usás más adelante. Se puede editar o borrar como cualquier movimiento.</div>
-        </div>
-
-        <div class="card">
-          <h2 class="card-title">
-            <span>Categorías</span>
-            <label class="subcats-toggle">
-              Subcategorías
-              <input type="checkbox" id="set-subcats" ${useSubcats() ? 'checked' : ''}>
-            </label>
-          </h2>
-          <div class="cat-type-grid">
-            ${['gasto', 'ingreso'].map((type) => `
-              <div>
-                <div class="hint" style="margin-bottom:6px">${type === 'gasto' ? 'De gastos' : 'De ingresos'}</div>
-                <div class="cat-group-list">
-                  ${catGroups(type).map((g) => {
-                    const children = catChildren(g.id);
-                    return `<div class="cat-group-row">
-                      <div class="cat-group-main">
-                        <div><b>${esc(g.name)}</b>${children.length ? ` <span class="cell-sub">(${children.length})</span>` : ''}</div>
-                        ${children.length ? `<div class="cell-sub">${esc(children.map((c) => c.name).join(', '))}</div>` : ''}
-                      </div>
-                      <button class="btn btn-sm" data-editgroup="${esc(g.id)}" aria-label="Editar ${esc(g.name)}">✎</button>
-                    </div>`;
-                  }).join('') || '<div class="empty">Sin categorías todavía.</div>'}
-                </div>
-                <button class="link-btn" data-addgroup="${type}" style="margin-top:8px">+ Agregar categoría</button>
-              </div>`).join('')}
-          </div>
         </div>
 
         <div class="card">
@@ -4082,15 +4178,7 @@
       generateLeftoverIncome();
       render();
     });
-    $('#set-subcats', el).addEventListener('change', (e) => {
-      S().settings.useSubcategories = e.target.checked;
-      Store.save();
-      render();
-    });
-    $$('[data-addgroup]', el).forEach((b) => b.addEventListener('click', () => categoryGroupForm(null, b.dataset.addgroup)));
-    $$('[data-editgroup]', el).forEach((b) => b.addEventListener('click', () => {
-      categoryGroupForm(catById(b.dataset.editgroup), null);
-    }));
+    $('#btn-open-categories', el).addEventListener('click', () => categoriesSettingsDialog());
 
     $('#btn-export-json', el).addEventListener('click', () => {
       downloadFile(`finpepe-respaldo-${todayStr()}.json`, Store.exportJSON(), 'application/json');
