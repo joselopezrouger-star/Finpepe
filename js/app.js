@@ -207,6 +207,12 @@
   const KIND_LABEL = {
     efectivo: 'Efectivo', debito: 'Débito', caja_ahorro: 'Caja de ahorro', credito: 'Crédito', billetera: 'Billetera virtual',
   };
+  // Un color por tipo de medio, para diferenciar las tarjetas de un vistazo
+  // en "Tarjetas y medios" (fondo tenue + borde), tomados de la misma
+  // paleta que las categorías.
+  const KIND_COLOR = {
+    efectivo: '#f5d142', debito: '#5b8def', caja_ahorro: '#08d59d', credito: '#c77dff', billetera: '#4dd0e1',
+  };
 
   /* ================= Iconos (SVG propios, sin depender de una librería externa) ================= */
   const ICON_PATHS = {
@@ -2386,14 +2392,17 @@
     // badWhenUp invierte qué dirección es la "mala" (roja): en gastos,
     // gastar más es malo; en ingresos, ganar más es bueno, así que se pasa
     // badWhenUp=false para esa tabla.
+    // Siempre dos líneas (pill + monto), aunque la segunda quede vacía: así
+    // todas las filas de la tabla miden lo mismo — antes una fila "—" o "="
+    // tenía un solo renglón y quedaba más baja que sus vecinas con variación.
     const momHTML = (cur, prevVal, badWhenUp = true) => {
       if (!(prevVal > 0)) {
-        if (!(cur > 0)) return '<span class="cat-mom-cell"><span class="cat-mom-pct flat">—</span></span>';
+        if (!(cur > 0)) return '<span class="cat-mom-cell"><span class="cat-mom-pct flat">—</span><span class="cat-mom-amt">&nbsp;</span></span>';
         return `<span class="cat-mom-cell"><span class="cat-mom-pct new">nuevo</span><span class="cat-mom-amt">${fmtDisp(cur)}</span></span>`;
       }
       const diff = cur - prevVal;
       const pctVar = Math.round((diff / prevVal) * 100);
-      if (pctVar === 0) return '<span class="cat-mom-cell"><span class="cat-mom-pct flat">=</span></span>';
+      if (pctVar === 0) return '<span class="cat-mom-cell"><span class="cat-mom-pct flat">=</span><span class="cat-mom-amt">&nbsp;</span></span>';
       const up = diff > 0;
       const bad = badWhenUp ? up : !up;
       return `<span class="cat-mom-cell">
@@ -2448,10 +2457,18 @@
     // meses: alcanza con las del mes elegido.
     const incomeColorOf = new Map(incomeBreakdown.map((g, i) => [g.id, CAT_PALETTE[i % CAT_PALETTE.length]]));
 
-    // Torta cilindro: categorías del mes elegido (misma tabla de arriba).
-    const pieItems = breakdown.map((g) => ({
+    // Torta cilindro: las 4 categorías con más peso del mes elegido (misma
+    // tabla de arriba, que ya viene ordenada de mayor a menor) + "Otros"
+    // con el resto — así no se amontonan demasiadas porciones finas.
+    const PIE_MAX = 4;
+    const pieTop = breakdown.slice(0, PIE_MAX);
+    const pieRest = breakdown.slice(PIE_MAX);
+    const pieItems = pieTop.map((g) => ({
       label: g.name, value: g.total, color: catColorOf.get(g.id) || CAT_PALETTE[0],
     }));
+    if (pieRest.length) {
+      pieItems.push({ label: 'Otros', value: pieRest.reduce((a, g) => a + g.total, 0), color: OTROS_COLOR });
+    }
 
     // Barras apiladas al 100%: hasta 6 categorías con más peso en la
     // ventana de 6 meses + "Otros" con el resto, para que no se amontonen
@@ -2560,7 +2577,18 @@
       </div>
 
       <div class="card">
-        <h2 class="card-title"><span>Análisis de categorías</span></h2>
+        <h2 class="card-title"><span>Distribución de gastos · ${esc(monthLabel(mk))}</span></h2>
+        ${pieItems.length ? `
+        <div class="pie-cylinder-wrap">
+          <div id="chart-cat-pie"></div>
+          <div class="chart-legend chart-legend-col">
+            ${pieItems.map((it) => `<span><span class="key" style="background:${it.color}"></span>${esc(it.label)} · ${pct(it.value, exp)}</span>`).join('')}
+          </div>
+        </div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
+      </div>
+
+      <div class="card">
+        <h2 class="card-title"><span>Gastos por categoría</span></h2>
         ${breakdown.length ? `
         <div class="table-scroll"><table class="data cat-breakdown-table">
           <colgroup>
@@ -2573,7 +2601,7 @@
       </div>
 
       <div class="card">
-        <h2 class="card-title"><span>Evolución del peso por categoría · últimos 6 meses</span></h2>
+        <h2 class="card-title"><span>Evolución del peso por categoría</span></h2>
         ${windowBreakdown.length ? `
         <div class="field">
           <select id="cat-analysis-sel" aria-label="Categoría a graficar">
@@ -2585,17 +2613,6 @@
           <span><span class="key" style="background:${Charts.COLORS.income}"></span>% de tus ingresos</span>
         </div>
         <div id="chart-cat-evo"></div>` : '<div class="empty">Todavía no hay suficientes movimientos para ver una evolución.</div>'}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title"><span>Distribución de gastos · ${esc(monthLabel(mk))}</span></h2>
-        ${pieItems.length ? `
-        <div class="pie-cylinder-wrap">
-          <div id="chart-cat-pie"></div>
-          <div class="chart-legend chart-legend-col">
-            ${pieItems.map((it) => `<span><span class="key" style="background:${it.color}"></span>${esc(it.label)} · ${pct(it.value, exp)}</span>`).join('')}
-          </div>
-        </div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
       </div>
 
       <div class="card">
@@ -2616,6 +2633,7 @@
       ], {
         fmtAxis: (v) => Math.round(v) + '%',
         ariaLabel: `Evolución del peso de ${selGroup ? selGroup.name : ''} sobre ingresos y gastos`,
+        smooth: true, pointLabels: true, markerRadius: 4,
       });
     }
     if (pieItems.length) {
@@ -2876,7 +2894,8 @@
               (t) => t.methodId === m.id && t.type === 'gasto' && monthKeyOf(t.date) === curMonth()));
             details = `<dl><dt>Gastado este mes</dt><dd><button type="button" class="dd-link" data-detail="month:${esc(m.id)}">${fmtDisp(monthTotal)}</button></dd></dl>`;
           }
-          return `<div class="entity">
+          const kindColor = KIND_COLOR[m.kind] || CAT_PALETTE[0];
+          return `<div class="entity entity-method" style="--kind-color:${kindColor}">
             <div class="entity-head">
               <span class="entity-name">${esc(m.name)}</span>
               <span class="entity-kind">${KIND_LABEL[m.kind] || m.kind}</span>
@@ -3053,6 +3072,46 @@
     return ev.kind === 'card' ? ev.amountDisp : convOrNull(ev.amount, ev.currency);
   }
 
+  /* Pop-up con el detalle de ingresos/gastos REALES de un día del
+     Calendario — distinto de la "Agenda", que muestra compromisos
+     previstos (fijos, tarjeta), no lo que efectivamente se cargó. Tocar
+     una fila abre su detalle completo, igual que en Movimientos. */
+  function dayDetailDialog(dateStr) {
+    const dayTxs = S().transactions.filter((t) => t.date === dateStr && t.type !== 'transferencia');
+    const gastoTotal = sumDisp(dayTxs.filter((t) => t.type === 'gasto'));
+    const incomeTotal = sumDisp(dayTxs.filter((t) => t.type === 'ingreso'));
+    const sorted = dayTxs.slice().sort((a, b) => b.id.localeCompare(a.id));
+    const rowsHTML = sorted.length ? sorted.map((t) => {
+      const isIncome = t.type === 'ingreso';
+      const sign = isIncome ? '+ ' : '− ';
+      const title = t.note || catName(t.categoryId);
+      const subParts = [];
+      if (t.note) subParts.push(catName(t.categoryId));
+      subParts.push(methodName(t.methodId));
+      const inst = t.installment ? ` · cuota ${t.installment.k}/${t.installment.n}` : '';
+      const rec = t.recurringId ? ' · fijo' : (t.leftoverGen ? ' · sobrante' : '');
+      return `<div class="tx-card-row" data-tx="${esc(t.id)}">
+        <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(categoryIconName(t.categoryId))}</div>
+        <div class="tx-card-main">
+          <div class="tx-card-title">${esc(title)}</div>
+          <div class="tx-card-sub">${esc(subParts.join(' · '))}${inst}${rec}</div>
+        </div>
+        <div class="tx-card-amount">
+          <div class="v ${isIncome ? 'pos' : 'neg'}">${sign}${fmtMoney(t.amount, t.currency)}</div>
+        </div>
+      </div>`;
+    }).join('') : '<div class="empty">No cargaste gastos ni ingresos este día.</div>';
+
+    const bodyHTML = `
+      <div class="dialog-total">Gastos: ${fmtDisp(gastoTotal)} · Ingresos: ${fmtDisp(incomeTotal)}</div>
+      <div class="tx-card-list">${rowsHTML}</div>`;
+    const dlg = openDialog(fmtDateFull(dateStr), bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
+    $$('.tx-card-row', dlg).forEach((row) => row.addEventListener('click', () => {
+      const tx = S().transactions.find((t) => t.id === row.dataset.tx);
+      if (tx) { dlg.close(); txDetailDialog(tx); }
+    }));
+  }
+
   function vCalendario(el) {
     const mk = ui.month;
     // Si el mes se cambió desde otra hoja (Movimientos/Categorías comparten
@@ -3080,6 +3139,14 @@
     }
     const maxDaySpend = Math.max(0, ...daySpend.values());
 
+    // Días con algún ingreso o gasto REAL cargado (no un evento previsto de
+    // la agenda, que es otra cosa) — determina qué días abren el pop-up de
+    // detalle al tocarlos.
+    const daysWithTx = new Set();
+    for (const t of S().transactions) {
+      if ((t.type === 'gasto' || t.type === 'ingreso') && monthKeyOf(t.date) === mk) daysWithTx.add(t.date);
+    }
+
     // Grilla: semanas empiezan el lunes
     const first = new Date(y, mo - 1, 1);
     const daysInMonth = new Date(y, mo, 0).getDate();
@@ -3098,8 +3165,12 @@
       const evs = byDay.get(ds) || [];
       const kinds = [...new Set(evs.map((e) => e.kind))].slice(0, 3);
       const dots = kinds.map((k) => `<i class="dot-${k}"></i>`).join('');
+      // Clickeable si hay eventos previstos (agenda) O movimientos reales
+      // cargados ese día — antes solo lo primero, así que un día con
+      // gastos/ingresos pero sin gasto fijo/tarjeta no abría nada al tocarlo.
+      const clickable = evs.length > 0 || daysWithTx.has(ds);
       const cls = ['cal-cell'];
-      if (evs.length) cls.push('has');
+      if (clickable) cls.push('has');
       if (ds === today) cls.push('today');
       if (ds === ui.calSel) cls.push('sel');
       // Gradiente de fondo según lo gastado ese día (relativo al día de más
@@ -3109,7 +3180,7 @@
       const heatStyle = (spend > 0 && maxDaySpend > 0 && ds !== ui.calSel)
         ? ` style="background:color-mix(in srgb, var(--expense-series) ${10 + Math.round((spend / maxDaySpend) * 60)}%, transparent)"`
         : '';
-      return `<div class="${cls.join(' ')}"${heatStyle} ${evs.length ? `data-day="${ds}"` : ''}>
+      return `<div class="${cls.join(' ')}"${heatStyle} ${clickable ? `data-day="${ds}"` : ''}>
         <span class="cal-num">${d}</span>
         <span class="cal-dots">${dots}</span>
       </div>`;
@@ -3172,8 +3243,10 @@
       </div>`;
 
     $$('[data-day]', el).forEach((c) => c.addEventListener('click', () => {
-      ui.calSel = (ui.calSel === c.dataset.day) ? null : c.dataset.day;
+      const ds = c.dataset.day;
+      ui.calSel = (ui.calSel === ds) ? null : ds;
       render();
+      dayDetailDialog(ds);
     }));
     const calAll = $('[data-calall]', el);
     if (calAll) calAll.addEventListener('click', () => { ui.calSel = null; render(); });
@@ -4682,16 +4755,16 @@
     const totals = partner ? sharedTotals() : { mine: 0, theirs: 0 };
 
     // Hoja de balance con números concretos en vez de una visualización
-    // aproximada: cuánto puso cada uno, el total en común y el neto.
+    // aproximada: cuánto puso cada uno y el total en común. El neto (quién
+    // le debe a quién) NO se repite acá — ya lo muestra debt-row más abajo;
+    // solo se agrega una fila de cierre cuando están a mano, porque ese
+    // estado no tiene ningún otro lugar donde aparecer.
     const ledgerHTML = partner ? `
       <div class="shared-ledger">
         <div class="shared-ledger-row"><span><i class="ledger-dot me"></i>Pagado por ${esc(myName)}</span><b>${fmtDisp(totals.mine)}</b></div>
         <div class="shared-ledger-row"><span><i class="ledger-dot partner"></i>Pagado por ${esc(partnerName)}</span><b>${fmtDisp(totals.theirs)}</b></div>
         <div class="shared-ledger-row"><span>Total gastado en común</span><b>${fmtDisp(totals.mine + totals.theirs)}</b></div>
-        <div class="shared-ledger-row total ${balAbs < 0.01 ? '' : (meIsDebtor ? 'neg' : 'pos')}">
-          <span>${balAbs < 0.01 ? 'Balance' : (meIsDebtor ? `Le debés a ${esc(partnerName)}` : `${esc(partnerName)} te debe`)}</span>
-          <b>${balAbs < 0.01 ? 'Están a mano' : fmtDisp(balAbs)}</b>
-        </div>
+        ${balAbs < 0.01 ? '<div class="shared-ledger-row total"><span>Balance</span><b>Están a mano</b></div>' : ''}
       </div>` : '';
 
     // Combina gastos y pagos en una sola lista cronológica.

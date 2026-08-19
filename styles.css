@@ -941,7 +941,8 @@ tr.cat-sub-row td:first-child { padding-left: 26px; }
    coma todo) y el nombre envuelve en vez de desbordar. */
 table.data.cat-breakdown-table {
   table-layout: fixed;
-  font-size: 11px;
+  font-size: 12px;
+  font-family: var(--font-heading);
 }
 table.data.cat-breakdown-table col.cat-col-name { width: 34%; }
 table.data.cat-breakdown-table col.cat-col-amount { width: 18%; }
@@ -953,22 +954,23 @@ table.data.cat-breakdown-table.cat-income-table col.cat-col-name { width: 36%; }
 table.data.cat-breakdown-table.cat-income-table col.cat-col-amount { width: 20%; }
 table.data.cat-breakdown-table.cat-income-table col.cat-col-pct { width: 20%; }
 table.data.cat-breakdown-table th, table.data.cat-breakdown-table td {
-  padding: 5px 3px;
+  padding: 7px 4px;
 }
 table.data.cat-breakdown-table th:first-child, table.data.cat-breakdown-table td:first-child {
   padding-left: 0;
 }
 table.data.cat-breakdown-table th {
-  font-size: 8.5px; letter-spacing: 0; white-space: normal; line-height: 1.25;
-  text-transform: none;
+  font-size: 9.5px; letter-spacing: 0.01em; white-space: normal; line-height: 1.25;
+  text-transform: none; font-weight: 700; color: var(--muted); font-family: var(--font);
 }
 table.data.cat-breakdown-table td:first-child {
-  white-space: normal; overflow-wrap: break-word; line-height: 1.25;
+  white-space: normal; overflow-wrap: break-word; line-height: 1.3;
 }
 table.data.cat-breakdown-table tr[data-catid] { cursor: pointer; }
 table.data.cat-breakdown-table tr[data-catid]:hover { background: var(--surface-2); }
 table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 12px; }
-table.data.cat-breakdown-table .amount-out { font-size: 11px; }
+table.data.cat-breakdown-table .amount-out { font-size: 12px; }
+table.data.cat-breakdown-table .cell-sub { font-size: 11px; }
 
 /* Fila de categoría (nivel superior): un fondo tenue con su propio color
    (el mismo que usa en la torta/barras apiladas) para diferenciarla de
@@ -1149,6 +1151,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 
 .trend-svg { width: 100%; height: auto; display: block; }
 .tick-label { font: 11px var(--font); fill: var(--muted); }
+.point-label { font: 700 10px var(--font-heading); }
 
 .hbar-row {
   display: flex;
@@ -1242,12 +1245,26 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .entity-reorder .icon-btn:disabled { opacity: 0.35; cursor: default; }
 .entity-reorder .icon-btn:disabled:hover { border-color: var(--border); color: var(--ink-2); }
 
-/* Montos de "Tarjetas y medios" que se pueden apretar para ver el detalle. */
+/* Montos de "Tarjetas y medios" que se pueden apretar para ver el detalle:
+   más grandes y con la fuente de títulos, para que el número — lo que
+   realmente importa de la tarjeta — se lea de un vistazo. */
 .dd-link {
-  border: 0; background: none; padding: 0; margin: 0; font: inherit;
-  color: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px;
+  border: 0; background: none; padding: 0; margin: 0;
+  font: 700 15px var(--font-heading); font-variant-numeric: tabular-nums;
+  color: var(--ink); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
 }
-.dd-link:hover { color: var(--accent); }
+.dd-link:hover { color: var(--kind-color, var(--accent)); }
+
+/* Tarjetas de "Tarjetas y medios": un tinte de fondo + borde a la izquierda
+   según el tipo de medio (efectivo, débito, crédito…), para diferenciarlas
+   de un vistazo — y el bloque de totales separado con un divisor liviano
+   en vez de quedar pegado al nombre. */
+.entity-method {
+  border-left: 3px solid var(--kind-color, var(--border));
+  background: color-mix(in srgb, var(--kind-color, transparent) 5%, var(--surface));
+}
+.entity-method .entity-kind { color: var(--kind-color); font-weight: 700; }
+.entity-method dl { margin-top: 2px; padding-top: 10px; border-top: 1px dashed var(--border); }
 
 .dialog-total { font: 700 13.5px var(--font-heading); color: var(--ink); margin-bottom: 2px; }
 
