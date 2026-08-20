@@ -205,36 +205,6 @@
     return arsSnapshotFor(amount, currency);
   }
 
-  /* Vuelve a calcular usdSnapshot/arsSnapshot de TODOS los movimientos, con
-     la cotización real de la fecha de cada uno (no la de hoy) — para
-     corregir movimientos que quedaron con la cotización "actual" por no
-     haber podido pedir la histórica en su momento (sin conexión, fuente
-     caída), o que son de antes de que existiera este mecanismo. Sin esto,
-     esos movimientos comparan siempre con el mismo factor de conversión y
-     la variación % da igual en ARS que en USD (ver comentario de
-     txDispAmount más arriba). */
-  async function recalcHistoricalSnapshots(el) {
-    const btn = $('#btn-recalc-snapshots', el);
-    const status = $('#recalc-status', el);
-    if (!btn || btn.disabled) return;
-    btn.disabled = true;
-    const txs = S().transactions;
-    let done = 0;
-    for (const t of txs) {
-      if (status) status.textContent = `Recalculando ${done + 1}/${txs.length}…`;
-      if (t.currency === 'ARS') t.usdSnapshot = await usdSnapshotForDate(t.amount, 'ARS', t.date);
-      else if (t.currency === 'USD') t.arsSnapshot = await arsSnapshotForDate(t.amount, 'USD', t.date);
-      done++;
-    }
-    Store.save();
-    // El aviso final va por alert() y no por el <span> de estado: render()
-    // reconstruye toda la vista de Ajustes apenas termina (para que el
-    // resto de la app refleje las cotizaciones nuevas), y eso borraría el
-    // mensaje del <span> antes de que se llegue a ver.
-    render();
-    alert(`Listo: ${done} movimiento${done === 1 ? '' : 's'} actualizado${done === 1 ? '' : 's'}.`);
-  }
-
   // Número protagonista (ej. Patrimonio neto): sin decimales, como el resto
   // de los montos de la app.
   function heroMoneyHTML(n, cur) {
@@ -4019,7 +3989,8 @@
     const header = [
       'id', 'fecha', 'tipo', 'monto', 'moneda', 'monto_ars', 'monto_usd',
       'categoria', 'subcategoria', 'medio_pago', 'tipo_medio', 'cuenta_destino',
-      'nota', 'cuota', 'id_compra_cuotas', 'origen', 'compartido', 'porcentaje_compartido',
+      'nota', 'cuota', 'id_compra_cuotas', 'origen',
+      'compartido', 'porcentaje_tuyo', 'tu_parte_ars', 'tu_parte_usd',
     ].join(sep);
     const lines = [header];
     const txs = S().transactions.slice().sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
@@ -4030,6 +4001,11 @@
       const subNombre = (cat && cat.parentId) ? cat.name : '';
       const method = methodById(t.methodId);
       const origen = t.recurringId ? 'Fijo' : (t.leftoverGen ? 'Sobrante mes anterior' : 'Manual');
+      // sharePct es el % que te queda a vos del total (ver tx-detail-row
+      // "Compartido" en el detalle del movimiento) — sin esta columna, el
+      // CSV mostraba el monto TOTAL de la compra y no quedaba claro cuánto
+      // de eso era realmente tuyo.
+      const share = t.shared && t.sharePct != null ? t.sharePct / 100 : 1;
       lines.push([
         t.id, t.date, t.type, numCol(t.amount), t.currency,
         numCol(amountInCurrency(t, 'ARS')), numCol(amountInCurrency(t, 'USD')),
@@ -4042,6 +4018,8 @@
         origen,
         t.shared ? 'Sí' : 'No',
         (t.shared && t.sharePct != null) ? String(t.sharePct).replace('.', ',') : '',
+        numCol(amountInCurrency(t, 'ARS') * share),
+        numCol(amountInCurrency(t, 'USD') * share),
       ].join(sep));
     }
     downloadFile('finpepe-movimientos.csv', '﻿' + lines.join('\r\n'), 'text/csv');
@@ -4232,11 +4210,6 @@
             ${s.manualRate ? '<button class="btn btn-sm" id="btn-manual-clear">Volver a automática</button>' : ''}
           </div>
           <div class="hint" style="margin-top:10px">Se usa para convertir ARS ⇄ USD en toda la app.</div>
-          <div class="inline-form" style="margin-top:10px">
-            <button class="btn btn-sm" id="btn-recalc-snapshots">Recalcular cotizaciones históricas</button>
-            <span class="hint" id="recalc-status"></span>
-          </div>
-          <div class="hint" style="margin-top:8px">Vuelve a buscar, movimiento por movimiento, la cotización real del día en que lo cargaste (en vez de la de hoy) — útil si algunos quedaron con la cotización "actual" por no tener conexión en su momento, o si son de antes de esta función. Puede tardar un rato si tenés muchos movimientos.</div>
         </div>
 
         <div class="card">
@@ -4287,7 +4260,6 @@
       render();
     });
     $('#btn-fx-refresh', el).addEventListener('click', refreshRates);
-    $('#btn-recalc-snapshots', el).addEventListener('click', () => recalcHistoricalSnapshots(el));
     $('#btn-manual-save', el).addEventListener('click', () => {
       const v = parseFloat($('#set-manual', el).value);
       S().settings.manualRate = v > 0 ? v : null;
