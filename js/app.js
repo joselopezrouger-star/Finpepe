@@ -9,6 +9,9 @@
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Comillado CSV (RFC 4180): usado tanto al exportar como al armar la
+  // plantilla de importación.
+  const csvQuote = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
   // Un color hex a rgba() con alfa bajo, para teñir de fondo sin tapar el
   // texto (usado para pintar cada fila de categoría con su propio color).
   const hexToRgba = (hex, a) => {
@@ -3994,7 +3997,7 @@
   // una planilla si las cuentas de la app cierran bien.
   function exportCSV() {
     const sep = ';';
-    const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const q = csvQuote;
     const numCol = (n) => (n == null ? '' : String(Math.round(n * 100) / 100).replace('.', ','));
     const header = [
       'id', 'fecha', 'tipo', 'monto', 'moneda', 'monto_ars', 'monto_usd',
@@ -4042,6 +4045,301 @@
     a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  /* ================= Importar movimientos desde CSV ================= */
+
+  const IMPORT_COLS = ['fecha', 'tipo', 'monto', 'moneda', 'categoria', 'subcategoria', 'medio_pago', 'nota'];
+
+  // Plantilla con las categorías/medios reales del usuario como ejemplo (si
+  // ya tiene algo cargado) — así ve de entrada el formato esperado en vez
+  // de nombres inventados que después tendría que reemplazar igual.
+  function csvImportTemplate() {
+    const sep = ';';
+    const header = IMPORT_COLS.join(sep);
+    const incomeCat = catGroups('ingreso')[0];
+    const expenseCat = catGroups('gasto')[0];
+    const method = S().methods[0];
+    const mName = method ? method.name : 'Efectivo';
+    const incName = incomeCat ? incomeCat.name : 'Sueldo';
+    const expName = expenseCat ? expenseCat.name : 'Comida';
+    const rows = [header];
+    rows.push(['2026-08-01', 'ingreso', '150000', 'ARS', csvQuote(incName), '', csvQuote(mName), csvQuote('Ejemplo — reemplazá o borrá esta fila')].join(sep));
+    rows.push(['2026-08-05', 'gasto', '8500', 'ARS', csvQuote(expName), '', csvQuote(mName), csvQuote('Ejemplo — reemplazá o borrá esta fila')].join(sep));
+    return '﻿' + rows.join('\r\n');
+  }
+
+  // Parser CSV genérico (no solo la plantilla propia): soporta comillas,
+  // saltos de línea adentro de un campo y separador ";" o "," según cuál
+  // aparezca más en el encabezado (Excel en configuración regional
+  // argentina exporta con ";" — igual que exportCSV() — pero otras
+  // configuraciones usan ",").
+  function parseCSVRows(text) {
+    const raw = text.replace(/^﻿/, '');
+    const firstLine = raw.split(/\r\n|\n|\r/, 1)[0] || '';
+    const semi = (firstLine.match(/;/g) || []).length;
+    const comma = (firstLine.match(/,/g) || []).length;
+    const delim = semi >= comma ? ';' : ',';
+    const rows = [];
+    let row = [], field = '', inQuotes = false;
+    for (let i = 0; i < raw.length; i++) {
+      const c = raw[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (raw[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
+        } else field += c;
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === delim) {
+        row.push(field); field = '';
+      } else if (c === '\n' || c === '\r') {
+        if (c === '\r' && raw[i + 1] === '\n') i++;
+        row.push(field); field = '';
+        if (row.some((f) => f.trim() !== '')) rows.push(row);
+        row = [];
+      } else {
+        field += c;
+      }
+    }
+    row.push(field);
+    if (row.some((f) => f.trim() !== '')) rows.push(row);
+    return rows;
+  }
+
+  // Acepta "," o "." como separador decimal (si hay coma, los puntos se
+  // toman como separador de miles — la convención que usa el resto de la
+  // app) para no depender de qué formato de número haya quedado al guardar
+  // el CSV desde Excel.
+  function parseAmountLoose(str) {
+    let s = String(str ?? '').trim();
+    if (!s) return NaN;
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    return parseFloat(s);
+  }
+
+  // Acepta AAAA-MM-DD (lo que usa la app) y DD/MM/AAAA o DD-MM-AAAA (lo que
+  // Excel suele mostrar/guardar según la configuración regional). Valida
+  // que la fecha exista de verdad (ej. "2026-08-99" o "31/02/2026" no
+  // pasan) dejando que Date() la normalice y comparando que no haya
+  // "desbordado" a otro día/mes.
+  function parseDateLoose(str) {
+    const s = String(str ?? '').trim();
+    const build = (y, mo, d) => {
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+      const dt = new Date(y, mo - 1, d);
+      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+      return `${y}-${pad(mo)}-${pad(d)}`;
+    };
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) return build(+m[1], +m[2], +m[3]);
+    m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+    if (m) return build(+m[3], +m[2], +m[1]);
+    return null;
+  }
+
+  // Lee y valida cada fila del CSV subido, sin tocar el estado todavía —
+  // separado de runImport() para poder mostrar una vista previa (qué se va
+  // a crear, qué filas tienen error) antes de que el usuario confirme.
+  function analyzeImportRows(text) {
+    const rows = parseCSVRows(text);
+    if (!rows.length) return { items: [], headerError: 'El archivo está vacío.' };
+    const header = rows[0].map((h) => h.trim().toLowerCase());
+    const idx = {};
+    for (const col of IMPORT_COLS) idx[col] = header.indexOf(col);
+    if (idx.fecha < 0 || idx.tipo < 0 || idx.monto < 0 || idx.categoria < 0 || idx.medio_pago < 0) {
+      return { items: [], headerError: 'Faltan columnas obligatorias (fecha, tipo, monto, categoria, medio_pago) — usá la plantilla como base.' };
+    }
+    const items = [];
+    for (let r = 1; r < rows.length; r++) {
+      const cols = rows[r];
+      const get = (col) => (idx[col] >= 0 ? (cols[idx[col]] || '').trim() : '');
+      const errors = [];
+
+      const date = parseDateLoose(get('fecha'));
+      if (!date) errors.push('fecha inválida (usá AAAA-MM-DD o DD/MM/AAAA)');
+
+      const typeRaw = get('tipo').toLowerCase();
+      const type = typeRaw === 'ingreso' ? 'ingreso' : typeRaw === 'gasto' ? 'gasto' : null;
+      if (!type) errors.push('tipo debe ser "ingreso" o "gasto"');
+
+      const amount = parseAmountLoose(get('monto'));
+      if (!(amount > 0)) errors.push('monto inválido');
+
+      const currency = get('moneda').toUpperCase() || 'ARS';
+      if (currency !== 'ARS' && currency !== 'USD') errors.push('moneda debe ser ARS o USD');
+
+      const catNameIn = get('categoria');
+      if (!catNameIn) errors.push('falta la categoría');
+
+      const subNameIn = get('subcategoria');
+
+      const methodNameIn = get('medio_pago');
+      let methodId = null;
+      if (!methodNameIn) {
+        errors.push('falta el medio de pago');
+      } else {
+        const mm = S().methods.find((m) => m.name.toLowerCase() === methodNameIn.toLowerCase());
+        if (!mm) errors.push(`el medio de pago "${methodNameIn}" no existe`);
+        else methodId = mm.id;
+      }
+
+      let catMatch = null, willCreateCat = false, willCreateSub = false;
+      if (catNameIn && type) {
+        catMatch = S().categories.find((c) => c.type === type && !c.parentId && c.name.toLowerCase() === catNameIn.toLowerCase());
+        willCreateCat = !catMatch;
+        if (subNameIn) {
+          willCreateSub = catMatch
+            ? !S().categories.some((c) => c.parentId === catMatch.id && c.name.toLowerCase() === subNameIn.toLowerCase())
+            : true;
+        }
+      }
+
+      items.push({
+        lineNo: r + 1, ok: errors.length === 0, errors,
+        date, type, amount, currency, catNameIn, subNameIn,
+        willCreateCat, willCreateSub, methodId, methodNameIn,
+        note: get('nota'),
+      });
+    }
+    return { items };
+  }
+
+  // Crea las categorías/subcategorías nuevas que hagan falta (una sola vez
+  // aunque varias filas las repitan) y después va empujando cada
+  // movimiento con su cotización histórica real, igual que si se hubiera
+  // cargado a mano uno por uno.
+  async function runImportRows(items, dlg) {
+    const btn = $('#btn-confirm-import', dlg);
+    const status = $('#import-status', dlg);
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+
+    const catCache = new Map();
+    for (const c of S().categories) {
+      if (!c.parentId) catCache.set(`${c.type}::${c.name.toLowerCase()}`, c.id);
+      else {
+        const parent = catById(c.parentId);
+        if (parent) catCache.set(`${parent.type}::${parent.name.toLowerCase()}::${c.name.toLowerCase()}`, c.id);
+      }
+    }
+    const resolveCategory = (item) => {
+      const topKey = `${item.type}::${item.catNameIn.toLowerCase()}`;
+      let topId = catCache.get(topKey);
+      if (!topId) {
+        topId = Store.uid();
+        S().categories.push({ id: topId, name: item.catNameIn.trim(), type: item.type, parentId: null });
+        catCache.set(topKey, topId);
+      }
+      if (!item.subNameIn) return topId;
+      const subKey = `${topKey}::${item.subNameIn.toLowerCase()}`;
+      let subId = catCache.get(subKey);
+      if (!subId) {
+        subId = Store.uid();
+        S().categories.push({ id: subId, name: item.subNameIn.trim(), type: item.type, parentId: topId });
+        catCache.set(subKey, subId);
+      }
+      return subId;
+    };
+
+    let done = 0;
+    for (const item of items) {
+      if (status) status.textContent = `Importando ${done + 1}/${items.length}…`;
+      const categoryId = resolveCategory(item);
+      S().transactions.push({
+        id: Store.uid(), date: item.date, type: item.type, amount: item.amount, currency: item.currency,
+        categoryId, methodId: item.methodId, note: item.note,
+        usdSnapshot: await usdSnapshotForDate(item.amount, item.currency, item.date),
+        arsSnapshot: await arsSnapshotForDate(item.amount, item.currency, item.date),
+      });
+      done++;
+    }
+    Store.save();
+    dlg.close();
+    render();
+    alert(`Listo: se importaron ${done} movimiento${done === 1 ? '' : 's'}.`);
+  }
+
+  function importCSVDialog() {
+    const dlg = $('#dialog');
+    dlg.className = 'dialog';
+
+    const catListText = (type) => catGroups(type).map((g) => {
+      const subs = catChildren(g.id).map((c) => c.name).join(', ');
+      return subs ? `${g.name} (${subs})` : g.name;
+    }).join(' · ') || '—';
+    const methodListText = S().methods.map((m) => m.name).join(' · ') || '—';
+
+    function renderIntro() {
+      dlg.innerHTML = `
+        <div class="dialog-head"><span>Importar movimientos desde CSV</span><button type="button" class="row-del" data-close aria-label="Cerrar">✕</button></div>
+        <div class="dialog-body">
+          <div class="hint">Descargá la plantilla, completala en Excel (una fila por movimiento) y subila acá. El separador decimal es la coma (,), igual que en el resto de la app.</div>
+          <button type="button" class="btn btn-sm" id="btn-dl-template">Descargar plantilla (CSV)</button>
+          <div class="hint" style="margin-top:8px"><b>Tus categorías de gasto:</b> ${esc(catListText('gasto'))}</div>
+          <div class="hint"><b>Tus categorías de ingreso:</b> ${esc(catListText('ingreso'))}</div>
+          <div class="hint"><b>Tus medios de pago:</b> ${esc(methodListText)}</div>
+          <div class="hint">Una categoría que no exista se crea sola; el medio de pago tiene que coincidir con uno de los de arriba (así que si hace falta, cargalo antes en Ajustes).</div>
+          <div class="inline-form" style="margin-top:8px">
+            <button type="button" class="btn btn-sm btn-primary" id="btn-choose-file">Elegir archivo…</button>
+            <input type="file" id="csv-import-file" accept=".csv,text/csv" hidden>
+          </div>
+          <div id="csv-import-preview" style="min-width:0"></div>
+        </div>
+        <div class="dialog-foot">
+          <button type="button" class="btn" data-close>Cerrar</button>
+        </div>`;
+      $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => dlg.close()));
+      $('#btn-dl-template', dlg).addEventListener('click', () => {
+        downloadFile('finpepe-plantilla-movimientos.csv', csvImportTemplate(), 'text/csv');
+      });
+      $('#btn-choose-file', dlg).addEventListener('click', () => $('#csv-import-file', dlg).click());
+      $('#csv-import-file', dlg).addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        showPreview(await file.text());
+      });
+    }
+
+    function showPreview(text) {
+      const { items, headerError } = analyzeImportRows(text);
+      const previewEl = $('#csv-import-preview', dlg);
+      if (headerError) {
+        previewEl.innerHTML = `<div class="banner">${esc(headerError)}</div>`;
+        return;
+      }
+      const valid = items.filter((it) => it.ok);
+      const invalid = items.filter((it) => !it.ok);
+      const newCats = new Set();
+      for (const it of valid) {
+        const tipoLbl = it.type === 'ingreso' ? 'Ingreso' : 'Gasto';
+        if (it.willCreateCat) newCats.add(`${tipoLbl}: ${it.catNameIn}`);
+        if (it.willCreateSub) newCats.add(`${tipoLbl}: ${it.catNameIn} › ${it.subNameIn}`);
+      }
+      previewEl.innerHTML = `
+        <div class="hint" style="margin-top:10px"><b>${valid.length}</b> movimiento${valid.length === 1 ? '' : 's'} listo${valid.length === 1 ? '' : 's'} para importar${invalid.length ? `, <b>${invalid.length}</b> con error${invalid.length === 1 ? '' : 'es'} (no se importan)` : ''}.</div>
+        ${newCats.size ? `<div class="hint">Se van a crear estas categorías nuevas: ${esc([...newCats].join(' · '))}</div>` : ''}
+        ${invalid.length ? `<div class="banner" style="display:grid; gap:4px">${invalid.slice(0, 15).map((it) => `<span>Fila ${it.lineNo}: ${esc(it.errors.join(', '))}</span>`).join('')}${invalid.length > 15 ? `<span>…y ${invalid.length - 15} más.</span>` : ''}</div>` : ''}
+        ${valid.length ? `
+        <div style="overflow-x:auto; margin-top:8px; min-width:0">
+          <table class="data">
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Categoría</th><th>Medio</th></tr></thead>
+            <tbody>
+              ${valid.slice(0, 30).map((it) => `<tr><td>${esc(fmtDateShort(it.date))}</td><td>${it.type === 'ingreso' ? 'Ingreso' : 'Gasto'}</td><td>${esc(fmtMoney(it.amount, it.currency))}</td><td>${esc(it.catNameIn)}${it.subNameIn ? ' › ' + esc(it.subNameIn) : ''}</td><td>${esc(it.methodNameIn)}</td></tr>`).join('')}
+            </tbody>
+          </table>
+          ${valid.length > 30 ? `<div class="hint">…y ${valid.length - 30} más.</div>` : ''}
+        </div>` : ''}
+        <div class="inline-form" style="margin-top:12px">
+          <button type="button" class="btn btn-sm btn-primary" id="btn-confirm-import" ${valid.length ? '' : 'disabled'}>Importar ${valid.length} movimiento${valid.length === 1 ? '' : 's'}</button>
+          <span class="hint" id="import-status"></span>
+        </div>`;
+      if (valid.length) {
+        $('#btn-confirm-import', dlg).addEventListener('click', () => runImportRows(valid, dlg));
+      }
+    }
+
+    renderIntro();
+    openModal(dlg);
   }
 
   /* Crear/editar un grupo de categoría: nombre, sus subcategorías (agregar,
@@ -4252,6 +4550,7 @@
             <button class="btn btn-sm" id="btn-export-json">Descargar respaldo (JSON)</button>
             <button class="btn btn-sm" id="btn-import-json">Restaurar respaldo…</button>
             <button class="btn btn-sm" id="btn-export-csv">Exportar movimientos (CSV)</button>
+            <button class="btn btn-sm" id="btn-import-csv">Importar movimientos (CSV)…</button>
             <input type="file" id="file-import" accept="application/json,.json" hidden>
           </div>
           <div class="inline-form" style="margin-top:14px">
@@ -4321,6 +4620,7 @@
       }
     });
     $('#btn-export-csv', el).addEventListener('click', exportCSV);
+    $('#btn-import-csv', el).addEventListener('click', importCSVDialog);
     $('#btn-wipe', el).addEventListener('click', () => {
       if (!confirm('Se borran TODOS los datos de la app en este navegador. Esta acción no se puede deshacer.')) return;
       if (!confirm('¿Seguro? Si no tenés un respaldo JSON, no hay forma de recuperarlos.')) return;

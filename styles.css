@@ -600,7 +600,11 @@ dialog[open].dialog {
 /* flex:1 + min-height:0 + overflow-y:auto es lo que hace que SOLO esta
    zona scrollee cuando el contenido no entra, dejando el encabezado (con
    la ✕) y el pie del diálogo siempre fijos y accesibles. */
-.dialog-body { padding: 16px 18px; display: grid; gap: 12px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* min-width:0 es necesario porque .dialog-body es un flex item (columna
+   dentro de .dialog): sin esto, un hijo ancho (ej. una tabla con scroll
+   propio) empuja el ancho "de contenido" en vez de respetarlo y recortar
+   — el diálogo entero terminaba más ancho que el viewport. */
+.dialog-body { padding: 16px 18px; display: grid; gap: 12px; flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; }
 .dialog-foot {
   padding: 12px 18px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
