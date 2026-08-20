@@ -3844,8 +3844,12 @@
   function installmentListDialog(rows) {
     const bodyHTML = `
       <div class="inst-row-list">
-        ${rows.map((r) => `
-          <div class="inst-row rowlink" data-instgroup="${esc(r.groupId)}">
+        ${rows.map((r) => {
+          // Progreso de la compra: cuánto de las cuotas ya vas pagando —
+          // 1 de 3 = un tercio coloreado, la última cuota = toda coloreada.
+          const prog = Math.round((r.nextK / r.n) * 100);
+          return `
+          <div class="inst-row rowlink" data-instgroup="${esc(r.groupId)}" style="--prog:${prog}%">
             <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(r.categoryId))}</div>
             <div class="inst-row-main">
               <div class="inst-row-title">${esc(r.note || catName(r.categoryId))}</div>
@@ -3855,7 +3859,8 @@
               <div class="inst-row-amount">${fmtMoney(r.next.amount, r.currency)} <span class="inst-row-amount-label">cuota</span></div>
               <div class="inst-row-total">${fmtMoney(r.totalPending, r.currency)} <span class="inst-row-amount-label">restan</span></div>
             </div>
-          </div>`).join('')}
+          </div>`;
+        }).join('')}
       </div>`;
     const dlg = openDialog('Compras en cuotas', bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
     $$('[data-instgroup]', dlg).forEach((row) => row.addEventListener('click', () => {
@@ -3885,13 +3890,8 @@
         <h2 class="card-title">Compras en cuotas</h2>
         ${instRows.length ? `
         ${monthTotals.length ? `
-        <div class="inst-month-totals">
-          ${monthTotals.map((m, i) => `
-            <div class="inst-month-chip ${i === 0 ? 'is-today' : ''}">
-              <span class="inst-month-chip-label">${esc(m.label)}</span>
-              <span class="inst-month-chip-amount">${fmtDisp(m.total)}</span>
-            </div>`).join('')}
-        </div>` : ''}
+        <div class="hint" style="margin-bottom:6px">Cuánto pagás de cuotas cada mes.</div>
+        <div id="chart-inst-months"></div>` : ''}
         <div class="hint" style="margin:10px 0">Cuándo empieza y termina cada compra, con hoy marcado.</div>
         ${installmentGanttHTML(instRows)}
         <button class="link-btn" id="btn-inst-detail" style="margin-top:14px">Ver el detalle de cada compra ›</button>`
@@ -3950,6 +3950,16 @@
         : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos cada mes.</div>'}
       </div>`;
 
+    const instMonthsEl = $('#chart-inst-months', el);
+    if (instMonthsEl) {
+      Charts.lines(instMonthsEl, monthTotals.map((m) => m.label), [
+        { label: 'Cuotas', color: Charts.COLORS.expense, values: monthTotals.map((m) => m.total) },
+      ], {
+        smooth: true, pointLabels: true,
+        fmtAxis: (v) => Charts.compact(v),
+        ariaLabel: 'Total de cuotas por mes',
+      });
+    }
     const instDetailBtn = $('#btn-inst-detail', el);
     if (instDetailBtn) instDetailBtn.addEventListener('click', () => installmentListDialog(instRows));
     $('#btn-add-budget', el).addEventListener('click', () => budgetForm(null));
