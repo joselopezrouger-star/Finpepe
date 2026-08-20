@@ -4037,7 +4037,7 @@
         q(method ? (KIND_LABEL[method.kind] || method.kind) : ''),
         q(isTransfer ? methodName(t.toMethodId) : ''),
         q(t.note || ''),
-        t.installment ? `${t.installment.k}/${t.installment.n}` : '',
+        t.installment ? q(`${t.installment.k} de ${t.installment.n}`) : '',
         t.groupId || '',
         origen,
         t.shared ? 'Sí' : 'No',
