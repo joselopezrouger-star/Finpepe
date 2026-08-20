@@ -144,11 +144,19 @@
      de la variación), tapando la inflación/devaluación real entre medio.
      Si no hay snapshot (movimientos viejos, sin cotización disponible en su
      momento), se convierte con la cotización actual como respaldo. */
+  // Misma lógica que txDispAmount(), pero para una moneda destino puntual en
+  // vez de la moneda de visualización actual — la usa también exportCSV()
+  // para poder mostrar el equivalente en ARS Y en USD de cada movimiento a
+  // la vez, sin depender de cuál esté elegida en el selector de arriba.
+  function amountInCurrency(t, target) {
+    if (t.currency === target) return t.amount;
+    if (target === 'USD' && t.currency === 'ARS' && t.usdSnapshot != null) return t.usdSnapshot;
+    if (target === 'ARS' && t.currency === 'USD' && t.arsSnapshot != null) return t.arsSnapshot;
+    const r = rate();
+    return r ? Math.round(FX.convert(t.amount, t.currency, target, r.value) * 100) / 100 : null;
+  }
   function txDispAmount(t) {
-    if (t.currency === disp()) return t.amount;
-    if (disp() === 'USD' && t.currency === 'ARS' && t.usdSnapshot != null) return t.usdSnapshot;
-    if (disp() === 'ARS' && t.currency === 'USD' && t.arsSnapshot != null) return t.arsSnapshot;
-    return convOrNull(t.amount, t.currency);
+    return amountInCurrency(t, disp());
   }
 
   /* Equivalente en USD de un monto en ARS, con la cotización del momento
@@ -3998,17 +4006,42 @@
   }
 
   /* ================= Vista: Ajustes ================= */
+  // Con todas las columnas disponibles (no solo las mínimas para leer la
+  // lista): incluye el equivalente en ARS y en USD de cada movimiento (con
+  // el mismo criterio de cotización histórica que usa el resto de la app,
+  // ver amountInCurrency()), categoría madre y subcategoría por separado,
+  // y el origen/metadata de cada uno — para poder auditar a fondo desde
+  // una planilla si las cuentas de la app cierran bien.
   function exportCSV() {
     const sep = ';';
     const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-    const lines = ['fecha;tipo;monto;moneda;categoria;medio;detalle;cuota'];
-    const txs = S().transactions.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const numCol = (n) => (n == null ? '' : String(Math.round(n * 100) / 100).replace('.', ','));
+    const header = [
+      'id', 'fecha', 'tipo', 'monto', 'moneda', 'monto_ars', 'monto_usd',
+      'categoria', 'subcategoria', 'medio_pago', 'tipo_medio', 'cuenta_destino',
+      'nota', 'cuota', 'id_compra_cuotas', 'origen', 'compartido', 'porcentaje_compartido',
+    ].join(sep);
+    const lines = [header];
+    const txs = S().transactions.slice().sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
     for (const t of txs) {
-      const catCol = t.type === 'transferencia' ? `→ ${methodName(t.toMethodId)}` : catName(t.categoryId);
+      const isTransfer = t.type === 'transferencia';
+      const cat = !isTransfer ? catById(t.categoryId) : null;
+      const grupoNombre = !isTransfer ? catName(topCategoryOf(t.categoryId)) : '';
+      const subNombre = (cat && cat.parentId) ? cat.name : '';
+      const method = methodById(t.methodId);
+      const origen = t.recurringId ? 'Fijo' : (t.leftoverGen ? 'Sobrante mes anterior' : 'Manual');
       lines.push([
-        t.date, t.type, String(t.amount).replace('.', ','), t.currency,
-        q(catCol), q(methodName(t.methodId)), q(t.note || ''),
+        t.id, t.date, t.type, numCol(t.amount), t.currency,
+        numCol(amountInCurrency(t, 'ARS')), numCol(amountInCurrency(t, 'USD')),
+        q(grupoNombre), q(subNombre), q(methodName(t.methodId)),
+        q(method ? (KIND_LABEL[method.kind] || method.kind) : ''),
+        q(isTransfer ? methodName(t.toMethodId) : ''),
+        q(t.note || ''),
         t.installment ? `${t.installment.k}/${t.installment.n}` : '',
+        t.groupId || '',
+        origen,
+        t.shared ? 'Sí' : 'No',
+        (t.shared && t.sharePct != null) ? String(t.sharePct).replace('.', ',') : '',
       ].join(sep));
     }
     downloadFile('finpepe-movimientos.csv', '﻿' + lines.join('\r\n'), 'text/csv');
