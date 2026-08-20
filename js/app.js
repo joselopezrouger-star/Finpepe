@@ -133,14 +133,21 @@
   const convOrNull = (amount, cur) => toDisp(amount, cur);
 
   /* Monto de un movimiento guardado, en la moneda de visualización.
-     Los gastos/ingresos en ARS llevan un "usdSnapshot": el equivalente en
-     dólares al momento de cargarlos (con la cotización de ese día), para que
-     ver el historial en USD no se distorsione por la inflación entre medio.
-     Si no hay snapshot (movimientos viejos) o se muestra en ARS, se
-     convierte con la cotización actual como antes. */
+     Todo gasto/ingreso guarda el equivalente en la OTRA moneda al momento de
+     cargarlo, con la cotización de ese día: "usdSnapshot" para uno en ARS,
+     "arsSnapshot" para uno en USD (ver usdSnapshotForDate/arsSnapshotForDate
+     más arriba). Sin esto, un movimiento en USD mostrado en ARS se convertía
+     siempre con la cotización DE HOY sin importar su fecha — lo que además
+     de mostrar un monto histórico incorrecto, hacía que la variación % de
+     ese gasto contra el mes anterior diera idéntica en ARS y en USD (un
+     mismo factor de conversión para los dos meses se cancela en la cuenta
+     de la variación), tapando la inflación/devaluación real entre medio.
+     Si no hay snapshot (movimientos viejos, sin cotización disponible en su
+     momento), se convierte con la cotización actual como respaldo. */
   function txDispAmount(t) {
     if (t.currency === disp()) return t.amount;
     if (disp() === 'USD' && t.currency === 'ARS' && t.usdSnapshot != null) return t.usdSnapshot;
+    if (disp() === 'ARS' && t.currency === 'USD' && t.arsSnapshot != null) return t.arsSnapshot;
     return convOrNull(t.amount, t.currency);
   }
 
