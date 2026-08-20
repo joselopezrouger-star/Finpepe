@@ -801,6 +801,26 @@
     const fallback = S().categories.find((c) => c.type === 'ingreso');
     return fallback ? fallback.id : null;
   }
+  // Al generar automáticamente el sobrante o un fijo de un mes que NO es
+  // el actual (poniendo al día varios meses de una sola vez — la primera
+  // vez que se crea el recurrente, o después de un tiempo sin abrir la
+  // app), el snapshot con usdSnapshotFor/arsSnapshotFor de más arriba usa
+  // la cotización de HOY como aproximación instantánea para no bloquear la
+  // generación de los demás meses. Acá se corrige en segundo plano con la
+  // cotización real de esa fecha en cuanto se consigue — mutar "tx" es
+  // seguro porque es la MISMA referencia que ya vive en S().transactions.
+  // Sin esto, un fijo puesto al día quedaba con el mismo tipo de cambio
+  // repetido en todos los meses atrasados, y la variación % contra el mes
+  // anterior daba igual en ARS que en USD para esos movimientos.
+  function refineSnapshotLater(tx) {
+    (async () => {
+      if (tx.currency === 'ARS') tx.usdSnapshot = await usdSnapshotForDate(tx.amount, 'ARS', tx.date);
+      else if (tx.currency === 'USD') tx.arsSnapshot = await arsSnapshotForDate(tx.amount, 'USD', tx.date);
+      Store.save();
+      render();
+    })();
+  }
+
   function generateLeftoverIncome() {
     if (!S().settings.autoLeftoverIncome) return;
     const catId = otrosIngresosCategoryId();
@@ -814,11 +834,14 @@
       if (amt > 0) {
         const [y, mo] = m.split('-').map(Number);
         const d = clampDate(y, mo - 1, 1);
-        S().transactions.push({
-          id: Store.uid(), date: dateToStr(d), type: 'ingreso', amount: amt,
+        const dateStr = dateToStr(d);
+        const tx = {
+          id: Store.uid(), date: dateStr, type: 'ingreso', amount: amt,
           currency: disp(), categoryId: catId, note: 'Sobrante mes anterior',
           leftoverGen: true, usdSnapshot: usdSnapshotFor(amt, disp()), arsSnapshot: arsSnapshotFor(amt, disp()),
-        });
+        };
+        S().transactions.push(tx);
+        if (dateStr !== todayStr()) refineSnapshotLater(tx);
         changed = true;
       }
       s.leftoverLastGen = m;
@@ -836,12 +859,15 @@
       while (m <= cm) {
         const [y, mo] = m.split('-').map(Number);
         const d = clampDate(y, mo - 1, r.day);
-        S().transactions.push({
-          id: Store.uid(), date: dateToStr(d), type: r.type, amount: r.amount,
+        const dateStr = dateToStr(d);
+        const tx = {
+          id: Store.uid(), date: dateStr, type: r.type, amount: r.amount,
           currency: r.currency, categoryId: r.categoryId, methodId: r.methodId,
           note: r.name, recurringId: r.id,
           usdSnapshot: usdSnapshotFor(r.amount, r.currency), arsSnapshot: arsSnapshotFor(r.amount, r.currency),
-        });
+        };
+        S().transactions.push(tx);
+        if (dateStr !== todayStr()) refineSnapshotLater(tx);
         r.lastGen = m;
         changed = true;
         m = addMonthsKey(m, 1);
