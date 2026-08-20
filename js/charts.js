@@ -345,7 +345,10 @@ const Charts = (() => {
             x: p.x, y: p.y + (si === 0 ? -8 : 14), 'text-anchor': 'middle',
             class: 'point-label', fill: s.color,
           };
-          if (opts.pointLabelSize) attrs['font-size'] = opts.pointLabelSize;
+          // font-size como atributo de presentación pierde contra la regla
+          // CSS ".point-label" (shorthand "font"); hace falta "style" inline
+          // para poder pisarlo.
+          if (opts.pointLabelSize) attrs.style = `font-size:${opts.pointLabelSize}px`;
           add(svg, 'text', attrs, opts.fmtAxis ? opts.fmtAxis(s.values[i]) : Math.round(s.values[i]));
         }
       });
