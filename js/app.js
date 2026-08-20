@@ -197,6 +197,36 @@
     return arsSnapshotFor(amount, currency);
   }
 
+  /* Vuelve a calcular usdSnapshot/arsSnapshot de TODOS los movimientos, con
+     la cotización real de la fecha de cada uno (no la de hoy) — para
+     corregir movimientos que quedaron con la cotización "actual" por no
+     haber podido pedir la histórica en su momento (sin conexión, fuente
+     caída), o que son de antes de que existiera este mecanismo. Sin esto,
+     esos movimientos comparan siempre con el mismo factor de conversión y
+     la variación % da igual en ARS que en USD (ver comentario de
+     txDispAmount más arriba). */
+  async function recalcHistoricalSnapshots(el) {
+    const btn = $('#btn-recalc-snapshots', el);
+    const status = $('#recalc-status', el);
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    const txs = S().transactions;
+    let done = 0;
+    for (const t of txs) {
+      if (status) status.textContent = `Recalculando ${done + 1}/${txs.length}…`;
+      if (t.currency === 'ARS') t.usdSnapshot = await usdSnapshotForDate(t.amount, 'ARS', t.date);
+      else if (t.currency === 'USD') t.arsSnapshot = await arsSnapshotForDate(t.amount, 'USD', t.date);
+      done++;
+    }
+    Store.save();
+    // El aviso final va por alert() y no por el <span> de estado: render()
+    // reconstruye toda la vista de Ajustes apenas termina (para que el
+    // resto de la app refleje las cotizaciones nuevas), y eso borraría el
+    // mensaje del <span> antes de que se llegue a ver.
+    render();
+    alert(`Listo: ${done} movimiento${done === 1 ? '' : 's'} actualizado${done === 1 ? '' : 's'}.`);
+  }
+
   // Número protagonista (ej. Patrimonio neto): sin decimales, como el resto
   // de los montos de la app.
   function heroMoneyHTML(n, cur) {
@@ -4143,6 +4173,11 @@
             ${s.manualRate ? '<button class="btn btn-sm" id="btn-manual-clear">Volver a automática</button>' : ''}
           </div>
           <div class="hint" style="margin-top:10px">Se usa para convertir ARS ⇄ USD en toda la app.</div>
+          <div class="inline-form" style="margin-top:10px">
+            <button class="btn btn-sm" id="btn-recalc-snapshots">Recalcular cotizaciones históricas</button>
+            <span class="hint" id="recalc-status"></span>
+          </div>
+          <div class="hint" style="margin-top:8px">Vuelve a buscar, movimiento por movimiento, la cotización real del día en que lo cargaste (en vez de la de hoy) — útil si algunos quedaron con la cotización "actual" por no tener conexión en su momento, o si son de antes de esta función. Puede tardar un rato si tenés muchos movimientos.</div>
         </div>
 
         <div class="card">
@@ -4193,6 +4228,7 @@
       render();
     });
     $('#btn-fx-refresh', el).addEventListener('click', refreshRates);
+    $('#btn-recalc-snapshots', el).addEventListener('click', () => recalcHistoricalSnapshots(el));
     $('#btn-manual-save', el).addEventListener('click', () => {
       const v = parseFloat($('#set-manual', el).value);
       S().settings.manualRate = v > 0 ? v : null;
