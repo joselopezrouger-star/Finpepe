@@ -3955,7 +3955,7 @@
       Charts.lines(instMonthsEl, monthTotals.map((m) => m.label), [
         { label: 'Cuotas', color: Charts.COLORS.expense, values: monthTotals.map((m) => m.total) },
       ], {
-        smooth: true, pointLabels: true, pointLabelSize: 13, topPad: 22,
+        smooth: true, pointLabels: true, pointLabelSize: 20, topPad: 30,
         fmtAxis: (v) => Charts.compact(v),
         ariaLabel: 'Total de cuotas por mes',
       });
