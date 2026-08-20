@@ -275,7 +275,7 @@ const Charts = (() => {
     el.replaceChildren();
     if (!months.length) return;
     const W = 640, H = 220;
-    const m = { t: 10, r: 8, b: 26, l: 34 };
+    const m = { t: opts.topPad || 10, r: 8, b: 26, l: 34 };
     const iw = W - m.l - m.r;
     const ih = H - m.t - m.b;
 
@@ -341,10 +341,12 @@ const Charts = (() => {
       pts.forEach((p, i) => {
         add(svg, 'circle', { cx: p.x, cy: p.y, r: markerR, fill: s.color });
         if (opts.pointLabels) {
-          add(svg, 'text', {
+          const attrs = {
             x: p.x, y: p.y + (si === 0 ? -8 : 14), 'text-anchor': 'middle',
             class: 'point-label', fill: s.color,
-          }, opts.fmtAxis ? opts.fmtAxis(s.values[i]) : Math.round(s.values[i]));
+          };
+          if (opts.pointLabelSize) attrs['font-size'] = opts.pointLabelSize;
+          add(svg, 'text', attrs, opts.fmtAxis ? opts.fmtAxis(s.values[i]) : Math.round(s.values[i]));
         }
       });
     });
