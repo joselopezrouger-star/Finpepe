@@ -1398,10 +1398,10 @@
     }
     function wizardFootHTML(key) {
       if (key === 'date') {
-        return '<div class="dialog-foot"><button type="button" class="btn btn-primary" data-wnext>Siguiente →</button></div>';
+        return '<div class="dialog-foot"><button type="button" class="btn btn-primary btn-full" data-wnext>Siguiente →</button></div>';
       }
       if (key === 'amount') {
-        return `<div class="dialog-foot"><button type="button" class="btn btn-primary" data-wnext ${finalAmount() > 0 ? '' : 'disabled'}>Siguiente →</button></div>`;
+        return `<div class="dialog-foot"><button type="button" class="btn btn-primary btn-full" data-wnext ${finalAmount() > 0 ? '' : 'disabled'}>Siguiente →</button></div>`;
       }
       if (key === 'extra') {
         return '<div class="dialog-foot"><button type="button" class="btn btn-primary" data-save>Guardar</button></div>';
