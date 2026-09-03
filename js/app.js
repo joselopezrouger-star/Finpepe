@@ -3058,9 +3058,7 @@
       const m = methodById(id);
       if (!m) return;
       if (kind === 'month') {
-        const txs = S().transactions.filter(
-          (t) => t.methodId === id && t.type === 'gasto' && monthKeyOf(t.date) === curMonth());
-        methodPeriodDetailDialog(`${m.name} · ${monthLabel(curMonth())}`, txs);
+        accountMonthDetailDialog(m);
         return;
       }
       const cy = cardCycle(m);
@@ -3138,6 +3136,50 @@
       ${txDayGroupsHTML(txs, 'No hay movimientos en este período.')}`;
     const dlg = openDialog(title, bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
     wireTxDetailRows(dlg);
+  }
+
+  /* Como methodPeriodDetailDialog(), pero para una cuenta sin resúmenes
+     (débito, efectivo, caja de ahorro): antes solo mostraba el mes actual
+     sin forma de moverse — acá se puede navegar mes a mes, igual que en
+     Inicio, para ver por ejemplo cuánto se gastó el mes pasado con esa
+     cuenta. */
+  function accountMonthDetailDialog(method) {
+    const dlg = $('#dialog');
+    dlg.className = 'dialog';
+    let month = curMonth();
+
+    function paint() {
+      const txs = S().transactions.filter(
+        (t) => t.methodId === method.id && t.type === 'gasto' && monthKeyOf(t.date) === month);
+      dlg.innerHTML = `
+        <div class="dialog-head">
+          <span>${esc(method.name)}</span>
+          <button type="button" class="row-del" data-close aria-label="Cerrar">✕</button>
+        </div>
+        <div class="dialog-body">
+          <div class="hero-month-bar">
+            <button type="button" class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
+            <span class="hero-month-bar-label">${iconSvg('calendar')}${esc(monthLabel(month))}</span>
+            <button type="button" class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
+          </div>
+          ${month === curMonth() ? '' : '<button type="button" class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>'}
+          <div class="dialog-total">Total: ${fmtDisp(sumDisp(txs))}</div>
+          ${txDayGroupsHTML(txs, 'No hay movimientos en este período.')}
+        </div>
+        <div class="dialog-foot">
+          <button type="button" class="btn" data-close>Cerrar</button>
+        </div>`;
+      $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => dlg.close()));
+      $$('[data-mnav]', dlg).forEach((b) => b.addEventListener('click', () => {
+        month = addMonthsKey(month, Number(b.dataset.mnav));
+        paint();
+      }));
+      const btnToday = $('[data-mtoday]', dlg);
+      if (btnToday) btnToday.addEventListener('click', () => { month = curMonth(); paint(); });
+      wireTxDetailRows(dlg);
+    }
+    paint();
+    openModal(dlg);
   }
 
   /* Detalle de una categoría (o subcategoría) desde "Análisis de
