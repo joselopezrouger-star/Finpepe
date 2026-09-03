@@ -386,7 +386,7 @@ button {
    Siempre lado a lado (valor a la izquierda, curva a la derecha) — no se
    apila ni siquiera en pantallas angostas, a pedido explícito: el diseño de
    referencia es ese, en todos los tamaños. */
-.savings-rate-card { display: flex; align-items: stretch; gap: 16px; }
+.savings-rate-card { display: flex; align-items: stretch; gap: 16px; cursor: pointer; }
 .savings-rate-left {
   flex: none; width: 200px;
   display: flex; flex-direction: column; justify-content: space-between; gap: 18px;

@@ -176,7 +176,7 @@ const Charts = (() => {
     el.replaceChildren();
     if (!rows.length) return;
     const W = 640, H = 236;
-    const m = { t: 10, r: 8, b: 26, l: 56 };
+    const m = { t: opts.topPad || 10, r: 8, b: opts.bottomPad || 26, l: 56 };
     const iw = W - m.l - m.r;
     const ih = H - m.t - m.b;
 
@@ -239,6 +239,14 @@ const Charts = (() => {
           : `M${x0},${yZero} L${x0},${yy - rad} Q${x0},${yy} ${x0 + rad},${yy}` +
             ` L${x0 + colW - rad},${yy} Q${x0 + colW},${yy} ${x0 + colW},${yy - rad} L${x0 + colW},${yZero} Z`;
         add(svg, 'path', { d, fill: color });
+      }
+      if (opts.valueLabels && r.value !== 0) {
+        const attrs = {
+          x: cx, y: r.value >= 0 ? yy - 6 : yy + 14, 'text-anchor': 'middle',
+          class: 'point-label', fill: color,
+        };
+        if (opts.valueLabelSize) attrs.style = `font-size:${opts.valueLabelSize}px`;
+        add(svg, 'text', attrs, opts.fmt ? opts.fmt(r.value) : compact(r.value));
       }
       add(svg, 'text', {
         x: cx, y: H - 8, 'text-anchor': 'middle', class: 'tick-label',

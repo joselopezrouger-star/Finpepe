@@ -936,7 +936,12 @@
   }
 
   /* ================= Diálogo genérico ================= */
-  function openDialog(title, bodyHTML, { submitLabel = 'Guardar', onSubmit, footExtra = '' } = {}) {
+  // viewOnly: true es para diálogos de solo lectura (un detalle, una lista)
+  // que no tienen nada que "cancelar" — antes esos usaban submitLabel:
+  // 'Cerrar' igual, así que el pie terminaba con "Cancelar" Y "Cerrar" una
+  // al lado de la otra haciendo exactamente lo mismo. Acá el pie queda con
+  // un solo botón.
+  function openDialog(title, bodyHTML, { submitLabel = 'Guardar', onSubmit, footExtra = '', viewOnly = false } = {}) {
     const dlg = $('#dialog');
     dlg.className = 'dialog'; // por si quedó una clase de txForm/authDialog de un uso anterior
     dlg.innerHTML = `
@@ -948,13 +953,16 @@
         <div class="dialog-body">${bodyHTML}</div>
         <div class="dialog-foot">
           ${footExtra}
-          <button type="button" class="btn" data-close>Cancelar</button>
-          <button type="submit" class="btn btn-primary">${esc(submitLabel)}</button>
+          ${viewOnly
+            ? `<button type="button" class="btn btn-primary" data-close>${esc(submitLabel)}</button>`
+            : `<button type="button" class="btn" data-close>Cancelar</button>
+               <button type="submit" class="btn btn-primary">${esc(submitLabel)}</button>`}
         </div>
       </form>`;
     $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => dlg.close()));
     $('form', dlg).addEventListener('submit', (e) => {
       e.preventDefault();
+      if (viewOnly) { dlg.close(); return; }
       const form = e.target;
       if (!form.reportValidity()) return;
       const data = {};
@@ -2158,7 +2166,7 @@
         </div>
       </div>
 
-      <div class="card savings-rate-card">
+      <div class="card savings-rate-card" data-goto-savings>
         <div class="savings-rate-left">
           <div class="savings-rate-head">
             <span class="tile-badge tile-badge-income savings-rate-icon">${iconSvg('trend')}</span>
@@ -2292,6 +2300,11 @@
       ui.view = 'tarjetas';
       render();
     }));
+    const gotoSavings = $('[data-goto-savings]', el);
+    if (gotoSavings) gotoSavings.addEventListener('click', () => {
+      ui.view = 'ahorros';
+      render();
+    });
     const gotoShared = $('[data-goto-shared]', el);
     if (gotoShared) gotoShared.addEventListener('click', () => {
       ui.view = 'compartido';
@@ -2908,10 +2921,7 @@
       <button type="button" class="link-btn" id="ov-toggle-upcoming">Ver más adelante</button>
       <div id="ov-upcoming" hidden></div>`;
 
-    const dlg = openDialog(`Resúmenes de ${card.name}`, body, {
-      submitLabel: 'Cerrar',
-      onSubmit() {},
-    });
+    const dlg = openDialog(`Resúmenes de ${card.name}`, body, { submitLabel: 'Cerrar', viewOnly: true });
     $$('[data-resumeidx]', dlg).forEach((rowEl) => rowEl.addEventListener('click', (e) => {
       if (e.target.closest('[data-resumedel]')) return;
       const row = rows[Number(rowEl.dataset.resumeidx)];
@@ -3134,7 +3144,7 @@
     const bodyHTML = `
       <div class="dialog-total">Total: ${fmtDisp(sumDisp(txs))}</div>
       ${txDayGroupsHTML(txs, 'No hay movimientos en este período.')}`;
-    const dlg = openDialog(title, bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
+    const dlg = openDialog(title, bodyHTML, { submitLabel: 'Cerrar', viewOnly: true });
     wireTxDetailRows(dlg);
   }
 
@@ -3198,7 +3208,7 @@
       </div>`;
     const bodyHTML = section(monthLabel(mk), curTxs) +
       '<div class="cat-detail-divider"></div>' + section(monthLabel(prevMk), prevTxs);
-    const dlg = openDialog(label, bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
+    const dlg = openDialog(label, bodyHTML, { submitLabel: 'Cerrar', viewOnly: true });
     wireTxDetailRows(dlg);
   }
 
@@ -3273,7 +3283,7 @@
     const bodyHTML = `
       <div class="dialog-total">Gastos: ${fmtDisp(gastoTotal)} · Ingresos: ${fmtDisp(incomeTotal)}</div>
       <div class="tx-card-list">${rowsHTML}</div>`;
-    const dlg = openDialog(fmtDateFull(dateStr), bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
+    const dlg = openDialog(fmtDateFull(dateStr), bodyHTML, { submitLabel: 'Cerrar', viewOnly: true });
     $$('.tx-card-row', dlg).forEach((row) => row.addEventListener('click', () => {
       const tx = S().transactions.find((t) => t.id === row.dataset.tx);
       if (tx) { dlg.close(); txDetailDialog(tx); }
@@ -3598,12 +3608,15 @@
     if (savMonths.length) {
       Charts.singleBars($('#chart-sav-nominal', el), savNominalRows, {
         ariaLabel: 'Ahorro nominal por mes',
+        valueLabels: true, valueLabelSize: 11, topPad: 24, bottomPad: 40,
+        fmt: (v) => Charts.compact(v),
       });
       Charts.lines($('#chart-sav-cumulative', el), savMonths.map((m) => monthShortLabel(m)), [
         { label: 'Ahorro acumulado', color: Charts.COLORS.income, values: savCumulativeSeries },
       ], {
         fmtAxis: (v) => Charts.compact(v),
         ariaLabel: 'Ahorro total acumulado por mes',
+        pointLabels: true, pointLabelSize: 11, topPad: 24,
       });
     }
 
@@ -3907,7 +3920,7 @@
           </div>`;
         }).join('')}
       </div>`;
-    const dlg = openDialog('Compras en cuotas', bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
+    const dlg = openDialog('Compras en cuotas', bodyHTML, { submitLabel: 'Cerrar', viewOnly: true });
     $$('[data-instgroup]', dlg).forEach((row) => row.addEventListener('click', () => {
       const g = rows.find((r) => r.groupId === row.dataset.instgroup);
       if (g) { dlg.close(); txForm(g.next); }
@@ -4497,7 +4510,7 @@
             <button class="link-btn" data-addgroup="${type}" style="margin-top:8px">+ Agregar categoría</button>
           </div>`).join('')}
       </div>`;
-    const dlg = openDialog('Categorías y subcategorías', bodyHTML, { submitLabel: 'Cerrar', onSubmit: () => {} });
+    const dlg = openDialog('Categorías y subcategorías', bodyHTML, { submitLabel: 'Cerrar', viewOnly: true });
     $('#set-subcats', dlg).addEventListener('change', (e) => {
       S().settings.useSubcategories = e.target.checked;
       Store.save();
