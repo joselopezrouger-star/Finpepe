@@ -290,7 +290,10 @@ const Charts = (() => {
     // El eje sólo baja de cero si alguna serie realmente tiene un valor
     // negativo (ej. una tasa de ahorro negativa un mes) — si todo es
     // positivo, no tiene sentido reservar la mitad del gráfico de más.
-    const allVals = series.flatMap((s) => s.values);
+    // null en un valor puntual (ver más abajo) es un mes sin dato para ESA
+    // serie (ej. sin ingresos ese mes) — no debe entrar ni al dominio ni
+    // dibujarse, pero el resto de la serie y las demás sí siguen de largo.
+    const allVals = series.flatMap((s) => s.values).filter((v) => v != null);
     const maxVal = Math.max(0, ...allVals);
     const minVal = Math.min(0, ...allVals);
     let top, bottom, ticks;
@@ -340,13 +343,18 @@ const Charts = (() => {
 
     const markerR = opts.markerRadius || 3;
     series.forEach((s, si) => {
-      const pts = s.values.map((v, i) => ({ x: x(i), y: y(v) }));
+      // Un valor null en la serie (mes sin dato para ESTA serie puntual,
+      // ej. sin ingresos) se salta: ni marcador ni etiqueta ahí, y la línea
+      // conecta derecho los puntos vecinos en vez de mostrar un 0% falso.
+      const pts = s.values
+        .map((v, i) => (v == null ? null : { x: x(i), y: y(v), v }))
+        .filter((p) => p != null);
       const d = opts.smooth ? smoothPathD(pts) : pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
       add(svg, 'path', {
         d, fill: 'none', stroke: s.color, 'stroke-width': 2,
         'stroke-linecap': 'round', 'stroke-linejoin': 'round',
       });
-      pts.forEach((p, i) => {
+      pts.forEach((p) => {
         add(svg, 'circle', { cx: p.x, cy: p.y, r: markerR, fill: s.color });
         if (opts.pointLabels) {
           const attrs = {
@@ -357,7 +365,7 @@ const Charts = (() => {
           // CSS ".point-label" (shorthand "font"); hace falta "style" inline
           // para poder pisarlo.
           if (opts.pointLabelSize) attrs.style = `font-size:${opts.pointLabelSize}px`;
-          add(svg, 'text', attrs, opts.fmtAxis ? opts.fmtAxis(s.values[i]) : Math.round(s.values[i]));
+          add(svg, 'text', attrs, opts.fmtAxis ? opts.fmtAxis(p.v) : Math.round(p.v));
         }
       });
     });

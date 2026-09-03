@@ -2511,6 +2511,29 @@
     return [...groups.values()].sort((a, b) => b.total - a.total);
   }
 
+  // Agrega al desglose del mes actual, en $0, las categorías/subcategorías
+  // que tuvieron gasto el mes anterior pero no este mes — sin esto,
+  // apenas una categoría dejaba de tener movimientos en el mes elegido
+  // desaparecía entera de la tabla en vez de mostrarse reducida a cero
+  // (que es justamente lo que "vs. ant." está pensado para mostrar).
+  function withPrevZeros(breakdown, prevBreakdown) {
+    const result = breakdown.map((g) => ({ ...g, subs: g.subs.map((s) => ({ ...s })) }));
+    const byId = new Map(result.map((g) => [g.id, g]));
+    for (const pg of prevBreakdown) {
+      let g = byId.get(pg.id);
+      if (!g) {
+        g = { id: pg.id, name: pg.name, total: 0, subs: [], direct: 0 };
+        result.push(g);
+        byId.set(pg.id, g);
+      }
+      const subIds = new Set(g.subs.map((s) => s.id));
+      for (const ps of pg.subs) {
+        if (!subIds.has(ps.id)) g.subs.push({ id: ps.id, name: ps.name, value: 0 });
+      }
+    }
+    return result.sort((a, b) => b.total - a.total);
+  }
+
   function vCategorias(el) {
     const mk = ui.month;
     const txs = S().transactions;
@@ -2520,7 +2543,7 @@
     const inMonth = txs.filter((t) => monthKeyOf(t.date) === mk);
     const inc = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
     const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
-    const breakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'gasto'));
+    let breakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'gasto'));
 
     // Variación contra el mes anterior, por grupo y por subcategoría, para
     // la columna nueva de la tabla — se arman dos mapas (id → monto) a
@@ -2532,6 +2555,7 @@
     const prevGroupTotals = new Map(prevBreakdown.map((g) => [g.id, g.total]));
     const prevSubTotals = new Map();
     for (const g of prevBreakdown) for (const s of g.subs) prevSubTotals.set(s.id, s.value);
+    breakdown = withPrevZeros(breakdown, prevBreakdown);
 
     // Mismo desglose, pero de ingresos: de dónde viene la plata del mes
     // (sueldo, freelance, etc.), no sólo en qué se gastó.
@@ -2572,12 +2596,25 @@
     const months = [];
     for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
     const windowBreakdown = categoryBreakdown(txs.filter((t) => t.type === 'gasto' && months.includes(monthKeyOf(t.date))));
+    // Ids que se pueden elegir en el selector de abajo: cada grupo Y cada
+    // una de sus subcategorías reales (no la fila sintética "Otros (sin
+    // subcategoría)", que no es una categoría de verdad que se pueda
+    // graficar sola).
+    const catAnalysisOptions = windowBreakdown.map((g) => (
+      { id: g.id, name: g.name, subs: g.subs.filter((s) => !s.id.endsWith(':directo')) }
+    ));
+    const validAnalysisIds = new Set(catAnalysisOptions.flatMap((g) => [g.id, ...g.subs.map((s) => s.id)]));
 
-    if (!windowBreakdown.some((g) => g.id === ui.catAnalysisId)) {
+    if (!validAnalysisIds.has(ui.catAnalysisId)) {
       ui.catAnalysisId = windowBreakdown[0] ? windowBreakdown[0].id : null;
     }
     const selId = ui.catAnalysisId;
-    const selGroup = windowBreakdown.find((g) => g.id === selId) || null;
+    // Si el id elegido tiene parentId es una subcategoría (comparar
+    // categoryId directo); si no, es un grupo de arriba (comparar contra
+    // topCatKeyOf, que ya suma las subcategorías propias).
+    const selCat = selId ? catById(selId) : null;
+    const selIsSub = !!(selCat && selCat.parentId);
+    const selName = selId === '__sin' ? 'Sin categoría' : (selCat ? selCat.name : '');
 
     // Meses con algún movimiento (ingreso o gasto), para los gráficos de
     // evolución de abajo — un mes sin nada todavía no tiene "peso" que
@@ -2594,9 +2631,14 @@
       const gastoM = listM.filter((t) => t.type === 'gasto');
       const expM = sumDisp(gastoM);
       const incM = sumDisp(listM.filter((t) => t.type === 'ingreso'));
-      const catValM = selGroup ? sumDisp(gastoM.filter((t) => topCatKeyOf(t) === selId)) : 0;
+      const catValM = selId
+        ? sumDisp(gastoM.filter((t) => selIsSub ? t.categoryId === selId : topCatKeyOf(t) === selId))
+        : 0;
       pctExpSeries.push(expM > 0 ? (catValM / expM) * 100 : 0);
-      pctIncSeries.push(incM > 0 ? (catValM / incM) * 100 : 0);
+      // null (no 0) si no hubo ingresos ese mes: dividir por cero no tiene
+      // sentido, y mostrar 0% sugeriría que la categoría no pesó nada en
+      // vez de "no hay con qué calcularlo" — Charts.lines() salta el punto.
+      pctIncSeries.push(incM > 0 ? (catValM / incM) * 100 : null);
     });
 
     const pct = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0) + '%';
@@ -2616,8 +2658,11 @@
     // tabla de arriba, que ya viene ordenada de mayor a menor) + "Otros"
     // con el resto — así no se amontonan demasiadas porciones finas.
     const PIE_MAX = 4;
-    const pieTop = breakdown.slice(0, PIE_MAX);
-    const pieRest = breakdown.slice(PIE_MAX);
+    // Sobre las categorías con gasto real este mes — las agregadas en $0
+    // solo para la tabla (ver withPrevZeros) no pintan nada en la torta.
+    const pieBreakdown = breakdown.filter((g) => g.total > 0);
+    const pieTop = pieBreakdown.slice(0, PIE_MAX);
+    const pieRest = pieBreakdown.slice(PIE_MAX);
     const pieItems = pieTop.map((g) => ({
       label: g.name, value: g.total, color: catColorOf.get(g.id) || CAT_PALETTE[0],
     }));
@@ -2759,8 +2804,13 @@
         <h2 class="card-title"><span>Evolución del peso por categoría</span></h2>
         ${windowBreakdown.length ? `
         <div class="field">
-          <select id="cat-analysis-sel" aria-label="Categoría a graficar">
-            ${windowBreakdown.map((g) => `<option value="${esc(g.id)}" ${g.id === selId ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
+          <select id="cat-analysis-sel" aria-label="Categoría o subcategoría a graficar">
+            ${catAnalysisOptions.map((g) => {
+              const groupOpt = `<option value="${esc(g.id)}" ${g.id === selId ? 'selected' : ''}>${esc(g.name)}${g.subs.length ? ' (todas)' : ''}</option>`;
+              if (!g.subs.length) return groupOpt;
+              const subOpts = g.subs.map((s) => `<option value="${esc(s.id)}" ${s.id === selId ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
+              return `<optgroup label="${esc(g.name)}">${groupOpt}${subOpts}</optgroup>`;
+            }).join('')}
           </select>
         </div>
         <div class="chart-legend">
@@ -2787,7 +2837,7 @@
         { label: '% de tus ingresos', color: Charts.COLORS.income, values: pctIncSeries },
       ], {
         fmtAxis: (v) => Math.round(v) + '%',
-        ariaLabel: `Evolución del peso de ${selGroup ? selGroup.name : ''} sobre ingresos y gastos`,
+        ariaLabel: `Evolución del peso de ${selName} sobre ingresos y gastos`,
         smooth: true, pointLabels: true, markerRadius: 4,
       });
     }
