@@ -162,6 +162,16 @@
     return amountInCurrency(t, disp());
   }
 
+  /* Mismo mecanismo que amountInCurrency(), pero para un aporte/retiro de
+     un ahorro (savingEntryForm) — la entrada no tiene su propio campo
+     "currency" (la hereda de la cuenta), así que se arma un objeto liviano
+     con la forma que amountInCurrency() espera. */
+  function savingEntryAmountIn(saving, entry, target) {
+    return amountInCurrency(
+      { currency: saving.currency, amount: entry.amount, usdSnapshot: entry.usdSnapshot, arsSnapshot: entry.arsSnapshot },
+      target);
+  }
+
   /* Equivalente en USD de un monto en ARS, con la cotización del momento
      (null si no hay cotización disponible todavía). */
   function usdSnapshotFor(amount, currency) {
@@ -753,8 +763,15 @@
     let total = 0;
     for (const s of S().savings) {
       const entries = opts.excludeOpening ? s.entries.filter((e) => !e.opening) : s.entries;
-      const v = convOrNull(entries.filter((e) => e.date < cutoff).reduce((a, e) => a + e.amount, 0), s.currency);
-      if (v != null) total += v;
+      // Convierte cada entrada por separado (con su propia cotización
+      // histórica/manual si la tiene, ver savingEntryForm) en vez de sumar
+      // todo en la moneda nativa y convertir el total con la cotización de
+      // HOY — así un aporte viejo no queda mal valuado en la otra moneda.
+      for (const e of entries) {
+        if (e.date >= cutoff) continue;
+        const v = savingEntryAmountIn(s, e, disp());
+        if (v != null) total += v;
+      }
     }
     return total;
   }
@@ -2020,20 +2037,19 @@
     }).filter((r) => r.income > 0 || r.expense > 0);
 
     // Misma ventana de meses, pero para la tasa de ahorro (ahorro/ingresos):
-    // se omiten los meses sin ningún movimiento (no tiene sentido mostrar
-    // un 0% en el eje para un mes que ni siquiera había arrancado la app).
+    // se omiten los meses sin ningún ingreso (dividir por cero no tiene
+    // sentido — antes mostraba 0% para un mes sin ingresos, como si ahí no
+    // se hubiera ahorrado nada, en vez de directamente no calcularla).
     const savingsRateRows = months.map((m) => {
       const list = txs.filter((t) => monthKeyOf(t.date) === m);
       const incM = sumDisp(list.filter((t) => t.type === 'ingreso'));
-      const expM = sumDisp(list.filter((t) => t.type === 'gasto'));
       const savM = savingsAtEndOf(m, { excludeOpening: true }) - savingsAtEndOf(addMonthsKey(m, -1), { excludeOpening: true });
       const [y, mo] = m.split('-').map(Number);
       return {
         label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
-        rate: incM > 0 ? Math.round((savM / incM) * 100) : 0,
-        hasActivity: incM > 0 || expM > 0,
+        incM, rate: Math.round((savM / incM) * 100),
       };
-    }).filter((r) => r.hasActivity);
+    }).filter((r) => r.incM > 0);
     const hasSavingsRateTrend = savingsRateRows.length > 0;
 
     // Vencimientos de tarjetas: solo las que ya tienen al menos dos
@@ -3148,6 +3164,17 @@
     wireTxDetailRows(dlg);
   }
 
+  /* Los mismos datos de un gráfico (Ahorros, por ahora), pero en tabla —
+     para cuando "leer la curva" no alcanza y hace falta el número exacto
+     de cada punto sin depender de un hover que en el celular no existe. */
+  function chartTableDialog(title, headers, rows) {
+    const bodyHTML = `<div class="table-scroll"><table class="data">
+      <thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table></div>`;
+    openDialog(title, bodyHTML, { submitLabel: 'Cerrar', viewOnly: true });
+  }
+
   /* Como methodPeriodDetailDialog(), pero para una cuenta sin resúmenes
      (débito, efectivo, caja de ahorro): antes solo mostraba el mes actual
      sin forma de moverse — acá se puede navegar mes a mes, igual que en
@@ -3485,6 +3512,11 @@
         <label for="e-note">Detalle <span class="hint">(opcional)</span></label>
         <input type="text" name="note" id="e-note" maxlength="60">
       </div>
+      <div class="field">
+        <label for="e-fxrate">Cotización del dólar de este movimiento <span class="hint">(opcional)</span></label>
+        <input type="number" name="fxrate" id="e-fxrate" min="0" step="0.01" placeholder="${rate() ? String(rate().value) : 'p. ej. 1250'}">
+      </div>
+      <div class="hint">Si lo dejás vacío, se usa la cotización real de la fecha elegida (o la actual si no hay dato para ese día) — cargala solo si tu dólar fue distinto (cripto, cambio informal, etc.), para que el equivalente en la otra moneda quede bien.</div>
       ${sign > 0 ? `
       <label class="field field-check">
         <input type="checkbox" name="opening" id="e-opening">
@@ -3493,13 +3525,28 @@
       <div class="hint">Usalo para cargar plata que ya tenías de meses anteriores, sin que ese mes puntual parezca que ahorraste todo eso de una — no afecta el total, sólo cómo se ve tu ritmo de ahorro mes a mes.</div>` : ''}`;
     openDialog(sign > 0 ? `Aporte a “${saving.name}”` : `Retiro de “${saving.name}”`, body, {
       submitLabel: sign > 0 ? 'Registrar aporte' : 'Registrar retiro',
-      onSubmit(d) {
+      async onSubmit(d) {
         const amount = Math.round(parseFloat(d.amount) * 100) / 100;
         if (!(amount > 0)) return false;
-        saving.entries.push({
-          id: Store.uid(), date: d.date, amount: amount * sign, note: d.note.trim(),
+        const signedAmount = amount * sign;
+        const manualRate = parseFloat(d.fxrate);
+        const entry = {
+          id: Store.uid(), date: d.date, amount: signedAmount, note: d.note.trim(),
           opening: sign > 0 && !!d.opening,
-        });
+        };
+        // Mismo criterio que un movimiento normal: guarda el equivalente en
+        // la otra moneda con la cotización DE ESE DÍA (o la manual, si se
+        // cargó una) — así "Total ahorrado" y los gráficos no lo convierten
+        // siempre con la cotización de HOY sin importar cuándo fue.
+        if (manualRate > 0) {
+          if (saving.currency === 'ARS') entry.usdSnapshot = Math.round((signedAmount / manualRate) * 100) / 100;
+          else entry.arsSnapshot = Math.round((signedAmount * manualRate) * 100) / 100;
+        } else if (saving.currency === 'ARS') {
+          entry.usdSnapshot = await usdSnapshotForDate(signedAmount, 'ARS', d.date);
+        } else {
+          entry.arsSnapshot = await arsSnapshotForDate(signedAmount, 'USD', d.date);
+        }
+        saving.entries.push(entry);
         Store.save();
         render();
       },
@@ -3510,8 +3557,10 @@
     const savings = S().savings;
     let total = 0;
     for (const s of savings) {
-      const v = convOrNull(s.entries.reduce((a, e) => a + e.amount, 0), s.currency);
-      if (v != null) total += v;
+      for (const e of s.entries) {
+        const v = savingEntryAmountIn(s, e, disp());
+        if (v != null) total += v;
+      }
     }
 
     // Ventana de meses para los 3 gráficos de abajo: desde el primer mes
@@ -3526,11 +3575,12 @@
       if (savMonths.length > 12) savMonths = savMonths.slice(-12);
     }
     const savDeltaOf = (m) => savingsAtEndOf(m, { excludeOpening: true }) - savingsAtEndOf(addMonthsKey(m, -1), { excludeOpening: true });
+    // Igual que en Resumen: sin ingresos ese mes no hay tasa que calcular
+    // (no un 0% engañoso), así que directamente no entra al gráfico.
     const savRateRows = savMonths.map((m) => {
       const incM = sumDisp(S().transactions.filter((t) => effectiveMonthOf(t) === m && t.type === 'ingreso'));
-      const rate = incM > 0 ? Math.round((savDeltaOf(m) / incM) * 100) : 0;
-      return { label: monthShortLabel(m), rate };
-    });
+      return { label: monthShortLabel(m), rate: Math.round((savDeltaOf(m) / incM) * 100), incM };
+    }).filter((r) => r.incM > 0);
     const savNominalRows = savMonths.map((m) => ({ label: monthShortLabel(m), value: savDeltaOf(m) }));
     // El total acumulado sí incluye los aportes históricos (es el saldo
     // real de la cuenta a fin de cada mes), a diferencia de la tasa y el
@@ -3539,19 +3589,22 @@
     const savCumulativeSeries = savMonths.map((m) => savingsAtEndOf(m));
 
     el.innerHTML = `
+      <div class="card tile tile-wide">
+        <div class="tile-label">Total ahorrado</div>
+        <div class="tile-value">${fmtDisp(total)}</div>
+      </div>
       <div class="toolbar">
-        <div class="card tile" style="min-width:220px">
-          <div class="tile-label">Total ahorrado</div>
-          <div class="tile-value">${fmtDisp(total)}</div>
-        </div>
         <div class="spacer"></div>
-        <button class="btn btn-primary btn-sm" id="btn-add-saving">+ Nuevo ahorro</button>
+        <button class="btn btn-primary btn-sm" id="btn-add-saving">+ Nueva cuenta de ahorro</button>
       </div>
       ${savings.length ? `<div class="entity-grid">
         ${savings.map((s) => {
           const bal = s.entries.reduce((a, e) => a + e.amount, 0);
           const other = s.currency === 'ARS' ? 'USD' : 'ARS';
-          const conv = FX.convert(bal, s.currency, other, rate() ? rate().value : null);
+          const conv = s.entries.reduce((a, e) => {
+            const v = savingEntryAmountIn(s, e, other);
+            return v != null ? a + v : a;
+          }, 0);
           const pct = s.target ? Math.min(100, Math.round((bal / s.target) * 100)) : null;
           const open = !!ui.openSavings[s.id];
           const entries = s.entries.slice().sort((a, b) => b.date.localeCompare(a.date));
@@ -3561,7 +3614,7 @@
               <span class="badge badge-cur">${esc(s.currency)}</span>
             </div>
             <div class="tile-value" style="font-size:21px">${fmtMoney(bal, s.currency)}</div>
-            <div class="cell-sub">${conv != null ? '≈ ' + fmtMoney(conv, other) : ''}</div>
+            <div class="cell-sub">${s.entries.length ? '≈ ' + fmtMoney(conv, other) : ''}</div>
             ${s.target ? `
               <div class="meter ${pct >= 100 ? 'meter-ok' : 'meter-ok'}"><span style="width:${pct}%"></span></div>
               <div class="cell-sub">Meta: ${fmtMoney(s.target, s.currency)} · ${pct}%</div>` : ''}
@@ -3589,18 +3642,28 @@
 
       ${savMonths.length ? `
       <div class="card">
-        <h2 class="card-title"><span>Tasa de ahorro por mes</span></h2>
-        ${savingsRateTrendSvg(savRateRows)}
+        <h2 class="card-title">
+          <span>Tasa de ahorro por mes</span>
+          ${savRateRows.length ? '<button type="button" class="link-btn" id="btn-detail-savrate">Ver detalle</button>' : ''}
+        </h2>
+        ${savRateRows.length ? savingsRateTrendSvg(savRateRows)
+          : '<div class="empty">Ningún mes de esta ventana tuvo ingresos registrados.</div>'}
       </div>
 
       <div class="card">
-        <h2 class="card-title"><span>Ahorro nominal por mes</span></h2>
+        <h2 class="card-title">
+          <span>Ahorro nominal por mes</span>
+          <button type="button" class="link-btn" id="btn-detail-savnominal">Ver detalle</button>
+        </h2>
         <div class="hint" style="margin-bottom:10px">Cuánto aportaste (o retiraste, si queda por debajo de la línea) cada mes.</div>
         <div id="chart-sav-nominal"></div>
       </div>
 
       <div class="card">
-        <h2 class="card-title"><span>Ahorro total acumulado</span></h2>
+        <h2 class="card-title">
+          <span>Ahorro total acumulado</span>
+          <button type="button" class="link-btn" id="btn-detail-savcum">Ver detalle</button>
+        </h2>
         <div class="hint" style="margin-bottom:10px">El saldo real de todas tus cuentas de ahorro a fin de cada mes.</div>
         <div id="chart-sav-cumulative"></div>
       </div>` : ''}`;
@@ -3619,6 +3682,22 @@
         pointLabels: true, pointLabelSize: 11, topPad: 24,
       });
     }
+
+    const btnDetailRate = $('#btn-detail-savrate', el);
+    if (btnDetailRate) btnDetailRate.addEventListener('click', () => {
+      chartTableDialog('Tasa de ahorro por mes', ['Mes', 'Tasa de ahorro'],
+        savRateRows.map((r) => [r.label, r.rate + '%']));
+    });
+    const btnDetailNominal = $('#btn-detail-savnominal', el);
+    if (btnDetailNominal) btnDetailNominal.addEventListener('click', () => {
+      chartTableDialog('Ahorro nominal por mes', ['Mes', 'Aporte neto'],
+        savNominalRows.map((r) => [r.label, fmtDisp(r.value)]));
+    });
+    const btnDetailCum = $('#btn-detail-savcum', el);
+    if (btnDetailCum) btnDetailCum.addEventListener('click', () => {
+      chartTableDialog('Ahorro total acumulado', ['Mes', 'Total acumulado'],
+        savMonths.map((m, i) => [monthShortLabel(m), fmtDisp(savCumulativeSeries[i])]));
+    });
 
     $('#btn-add-saving', el).addEventListener('click', () => savingForm(null));
     const byId = (id) => savings.find((s) => s.id === id);

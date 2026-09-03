@@ -362,6 +362,12 @@ button {
 
 /* ---------- Tiles de resumen ---------- */
 .tile { padding: 14px 16px; }
+/* Tile de ancho completo (ej. "Total ahorrado" en Ahorros) en vez del tile
+   chico de siempre metido a la izquierda de un toolbar — más protagonismo
+   para un número que resume toda la sección. */
+.tile-wide { text-align: center; margin-bottom: 12px; }
+.tile-wide .tile-label { justify-content: center; }
+.tile-wide .tile-value { font-size: 32px; }
 .tile-label {
   font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--ink-2); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
