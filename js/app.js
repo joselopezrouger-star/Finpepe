@@ -1164,9 +1164,12 @@
     }
 
     function currentInstMethod() { return methodById(draft.methodId); }
+    // Antes solo se podían cargar cuotas con tarjeta de crédito — pero
+    // también se compra en cuotas con débito, transferencia o efectivo
+    // (financiación de la tienda, acuerdo informal, etc.), así que alcanza
+    // con que haya algún medio de pago elegido.
     function showInstallments() {
-      const m = currentInstMethod();
-      return !editing && draft.type === 'gasto' && m && m.kind === 'credito';
+      return !editing && draft.type === 'gasto' && !!currentInstMethod();
     }
 
     // Elegir cuotas como mini-tarjetas (1/3/6/12/otra) en vez de un campo
