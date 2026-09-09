@@ -549,6 +549,13 @@ select:focus, input:focus, .btn:focus-visible, .icon-btn:focus-visible {
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-check { flex-direction: row; align-items: center; gap: 8px; }
 .hint { font-size: 11.5px; color: var(--muted); }
+/* Separa la grilla de cuentas de la de ahorros en el selector de medio de
+   pago de un gasto (ver methodOptionsHTML) — sin esto las tarjetas de
+   ambos grupos se veían como una sola lista sin distinción. */
+.tx-pick-section-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--ink-2); margin: 12px 0 8px;
+}
 
 .dialog {
   border: 1px solid var(--border);

@@ -172,6 +172,51 @@
       target);
   }
 
+  /* Retiro automático de un ahorro cuando un gasto se paga "con un ahorro"
+     (ver canPayFromSavings() en txForm): arma la entrada negativa que va a
+     saving.entries, reutilizando el usdSnapshot/arsSnapshot que el propio
+     gasto ya resolvió (a la cotización DE SU FECHA) en vez de pedir la
+     cotización de nuevo — así no hace falta otro round-trip de red y el
+     monto en la moneda del ahorro queda consistente con el del gasto. */
+  function withdrawalEntryForTx(tx, saving) {
+    const amt = amountInCurrency(tx, saving.currency);
+    if (amt == null) return null;
+    const other = saving.currency === 'ARS' ? 'USD' : 'ARS';
+    const otherAmt = amountInCurrency(tx, other);
+    const entry = {
+      id: Store.uid(), date: tx.date, amount: -Math.round(amt * 100) / 100,
+      note: tx.note || catName(tx.categoryId), linkedTxId: tx.id,
+    };
+    if (other === 'USD') entry.usdSnapshot = otherAmt != null ? -otherAmt : null;
+    else entry.arsSnapshot = otherAmt != null ? -otherAmt : null;
+    return entry;
+  }
+
+  // Saca, de cualquier ahorro, la entrada de retiro vinculada a un gasto
+  // puntual — se usa antes de recrearla (el gasto se editó) y al borrar el
+  // gasto, para que el saldo del ahorro no quede mal por un retiro
+  // "huérfano" que ya no corresponde a ningún movimiento real.
+  function removeLinkedSavingEntry(txId) {
+    for (const s of S().savings) {
+      const before = s.entries.length;
+      s.entries = s.entries.filter((e) => e.linkedTxId !== txId);
+      if (s.entries.length !== before) return;
+    }
+  }
+
+  // Después de guardar/editar un gasto, deja el retiro vinculado en el
+  // ahorro correspondiente al día: lo saca si ya no corresponde (se borró
+  // el vínculo o cambió de medio de pago) y lo vuelve a crear con los
+  // datos finales si el medio elegido sigue siendo un ahorro.
+  function syncSavingWithdrawalForTx(tx) {
+    removeLinkedSavingEntry(tx.id);
+    if (tx.type !== 'gasto') return;
+    const saving = savingById(tx.methodId);
+    if (!saving) return;
+    const entry = withdrawalEntryForTx(tx, saving);
+    if (entry) saving.entries.push(entry);
+  }
+
   /* Equivalente en USD de un monto en ARS, con la cotización del momento
      (null si no hay cotización disponible todavía). */
   function usdSnapshotFor(amount, currency) {
@@ -241,7 +286,19 @@
   }
 
   const catById = (id) => S().categories.find((c) => c.id === id);
-  const methodById = (id) => S().methods.find((m) => m.id === id);
+  // Un ahorro también se puede elegir como "de dónde salió la plata" para un
+  // gasto (ver canPayFromSavings()/onSave) — methodId puede entonces ser el
+  // id de un ahorro en vez de uno de S().methods. Se resuelve acá, en un
+  // solo lugar, así el resto de la app (CSV, detalle de movimiento,
+  // Movimientos) no necesita saber la diferencia.
+  const savingById = (id) => S().savings.find((s) => s.id === id);
+  const isSavingMethod = (id) => !!(id && savingById(id));
+  const methodById = (id) => {
+    const m = S().methods.find((m) => m.id === id);
+    if (m) return m;
+    const s = savingById(id);
+    return s ? { id: s.id, name: s.name, kind: 'ahorro' } : undefined;
+  };
   const catName = (id) => (catById(id) || {}).name || '—';
   const methodName = (id) => (methodById(id) || {}).name || '—';
 
@@ -279,12 +336,14 @@
 
   const KIND_LABEL = {
     efectivo: 'Efectivo', debito: 'Débito', caja_ahorro: 'Caja de ahorro', credito: 'Crédito', billetera: 'Billetera virtual',
+    ahorro: 'Ahorro',
   };
   // Un color por tipo de medio, para diferenciar las tarjetas de un vistazo
   // en "Tarjetas y medios" (fondo tenue + borde), tomados de la misma
   // paleta que las categorías.
   const KIND_COLOR = {
     efectivo: '#f5d142', debito: '#5b8def', caja_ahorro: '#08d59d', credito: '#c77dff', billetera: '#4dd0e1',
+    ahorro: '#ff8a5c',
   };
 
   /* ================= Iconos (SVG propios, sin depender de una librería externa) ================= */
@@ -1167,9 +1226,11 @@
     // Antes solo se podían cargar cuotas con tarjeta de crédito — pero
     // también se compra en cuotas con débito, transferencia o efectivo
     // (financiación de la tienda, acuerdo informal, etc.), así que alcanza
-    // con que haya algún medio de pago elegido.
+    // con que haya algún medio de pago elegido. Pagar con un ahorro queda
+    // afuera: ahí se retira el total de una sola vez (ver onSave()), no
+    // tiene sentido "financiarlo" en cuotas contra el propio ahorro.
     function showInstallments() {
-      return !editing && draft.type === 'gasto' && !!currentInstMethod();
+      return !editing && draft.type === 'gasto' && !!currentInstMethod() && !isSavingMethod(draft.methodId);
     }
 
     // Elegir cuotas como mini-tarjetas (1/3/6/12/otra) en vez de un campo
@@ -1256,8 +1317,19 @@
     function methodOptionsHTML(selId, excludeId) {
       let items = S().methods;
       if (excludeId) items = items.filter((m) => m.id !== excludeId);
-      return items.length ? catTileGridHTML(items, false, selId)
+      const methodsHTML = items.length ? catTileGridHTML(items, false, selId)
         : '<div class="empty">No hay medios. Agregá uno desde Tarjetas y medios.</div>';
+      // Pagar un gasto directo con un ahorro (retiro automático, ver
+      // onSave()) solo tiene sentido para gastos — un ingreso o el origen/
+      // destino de una transferencia entre tus propias cuentas no "sale" de
+      // un fondo de ahorro. draft.type === 'gasto' ya alcanza para
+      // distinguir este caso de 'from'/'to' (esos solo existen para
+      // transferencia, ver wizardSteps()).
+      const savings = draft.type === 'gasto' ? S().savings : [];
+      if (!savings.length) return methodsHTML;
+      return `${methodsHTML}
+        <div class="tx-pick-section-label">Pagar con un ahorro</div>
+        ${catTileGridHTML(savings, false, selId)}`;
     }
 
     function formHTML() {
@@ -1510,6 +1582,10 @@
         $$('[data-wtype]', dlg).forEach((b) => b.addEventListener('click', () => {
           draft.type = b.dataset.wtype;
           if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
+          // Pagar con un ahorro solo es válido para un gasto (ver
+          // methodOptionsHTML) — si ya se había elegido uno y se cambia a
+          // ingreso/transferencia, ese medio deja de ser válido.
+          if (draft.methodId && isSavingMethod(draft.methodId) && draft.type !== 'gasto') draft.methodId = '';
           draft.catGroupExpand = null;
           draft.wstep = 1;
           paint();
@@ -1560,6 +1636,7 @@
       $$('.tx-tab', dlg).forEach((b) => b.addEventListener('click', () => {
         draft.type = b.dataset.ttype;
         if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
+        if (draft.methodId && isSavingMethod(draft.methodId) && draft.type !== 'gasto') draft.methodId = '';
         draft.expand = null;
         draft.catGroupExpand = null;
         paint();
@@ -1660,13 +1737,19 @@
         base.usdSnapshot = (sameAmount && tx.usdSnapshot != null) ? tx.usdSnapshot : await usdSnapshotForDate(amount, draft.currency, draft.date);
         base.arsSnapshot = (sameAmount && tx.arsSnapshot != null) ? tx.arsSnapshot : await arsSnapshotForDate(amount, draft.currency, draft.date);
         Object.assign(tx, base);
+        // Si se pagó (o se dejó de pagar) con un ahorro, o cambió de monto/
+        // fecha/moneda, el retiro vinculado en ese ahorro se rehace desde
+        // cero con los datos finales (ver syncSavingWithdrawalForTx()).
+        syncSavingWithdrawalForTx(tx);
       } else {
         if (n === 1) {
-          S().transactions.push({
+          const newTx = {
             id: Store.uid(), ...base,
             usdSnapshot: await usdSnapshotForDate(amount, draft.currency, draft.date),
             arsSnapshot: await arsSnapshotForDate(amount, draft.currency, draft.date),
-          });
+          };
+          S().transactions.push(newTx);
+          syncSavingWithdrawalForTx(newTx);
         } else {
           const groupId = Store.uid();
           const per = (draft.instMode === 'per') ? entered : Math.round((amount / n) * 100) / 100;
@@ -1710,9 +1793,14 @@
     if (tx.groupId) {
       const group = S().transactions.filter((t) => t.groupId === tx.groupId);
       if (!confirm(`Este movimiento es una compra en ${group.length} cuotas. Se eliminarán todas las cuotas.`)) return;
+      // Si alguna cuota tenía un retiro de ahorro vinculado (no debería
+      // pasar hoy — savings+cuotas está bloqueado en el alta — pero una
+      // compra vieja podría tenerlo de antes), se saca junto con ella.
+      for (const t of group) removeLinkedSavingEntry(t.id);
       S().transactions = S().transactions.filter((t) => t.groupId !== tx.groupId);
     } else {
       if (!confirm('¿Eliminar este movimiento?')) return;
+      removeLinkedSavingEntry(tx.id);
       S().transactions = S().transactions.filter((t) => t.id !== tx.id);
     }
     Store.save();
@@ -2394,6 +2482,7 @@
           <select id="fil-method" aria-label="Medio de pago" class="mov-filter-full">
             <option value="">Todos los medios</option>
             ${selOptions(S().methods, ui.fMethod)}
+            ${S().savings.length ? `<optgroup label="Ahorros">${selOptions(S().savings, ui.fMethod)}</optgroup>` : ''}
           </select>
         </div>
         <button class="btn btn-primary btn-sm mov-add" id="btn-add-tx">+ Movimiento</button>
@@ -3682,9 +3771,11 @@
               <tbody>${entries.length ? entries.map((e) => `
                 <tr>
                   <td class="cell-sub">${esc(fmtDateShort(e.date))}</td>
-                  <td>${esc(e.note || (e.amount >= 0 ? 'Aporte' : 'Retiro'))}${e.opening ? ' <span class="badge">histórico</span>' : ''}</td>
+                  <td>${esc(e.note || (e.amount >= 0 ? 'Aporte' : 'Retiro'))}${e.opening ? ' <span class="badge">histórico</span>' : ''}${e.linkedTxId ? ' <span class="badge">gasto</span>' : ''}</td>
                   <td class="num ${e.amount >= 0 ? 'amount-in' : ''}">${e.amount >= 0 ? '+' : '−'} ${fmtMoney(Math.abs(e.amount), s.currency)}</td>
-                  <td><button class="row-del" data-edel="${esc(s.id)}:${esc(e.id)}" aria-label="Eliminar">✕</button></td>
+                  <td>${e.linkedTxId
+                    ? `<span class="hint" title="Se borra junto con el gasto que lo generó">🔒</span>`
+                    : `<button class="row-del" data-edel="${esc(s.id)}:${esc(e.id)}" aria-label="Eliminar">✕</button>`}</td>
                 </tr>`).join('') : '<tr><td class="empty">Sin movimientos.</td></tr>'}
               </tbody>
             </table></div>` : ''}
