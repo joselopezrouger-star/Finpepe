@@ -607,7 +607,6 @@
     fAllMonths: false,        // true = ignora el mes, trae todos (filtro de Movimientos)
     fType: '', fCat: '', fMethod: '',
     trendTable: false,
-    dailyBalancePrev: false,  // comparar balance por día con el mes anterior
     openSavings: {},          // id -> bool (historial expandido)
     calSel: null,             // 'YYYY-MM-DD' día seleccionado en el calendario
     catAnalysisId: null,      // categoría elegida para el gráfico de evolución
@@ -2349,17 +2348,13 @@
       <div class="card">
         <h2 class="card-title">
           <span>Balance por día</span>
-          <label class="subcats-toggle">
-            Comparar con mes anterior
-            <input type="checkbox" id="chk-daily-prev" ${ui.dailyBalancePrev ? 'checked' : ''}>
-          </label>
           <button type="button" class="icon-btn" id="btn-expand-daily" title="Ampliar" aria-label="Ampliar gráfico">${iconSvg('expand')}</button>
         </h2>
         <div class="chart-legend">
           <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
+          <span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>
           <span><span class="key key-dotted"></span>Ingresos del mes</span>
           <span><span class="key key-dotted key-dotted-warn"></span>Ingresos − ahorro</span>
-          ${ui.dailyBalancePrev ? `<span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>` : ''}
         </div>
         <div id="chart-daily-balance"></div>
       </div>
@@ -2415,9 +2410,10 @@
       Charts.trend(trendEl, trendRows, {});
     }
     Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {
-      prevPoints: ui.dailyBalancePrev ? dailyBalancePrev : null,
+      prevPoints: dailyBalancePrev,
       incomeLine: incomeLineCal,
       incomeMinusSavingsLine: incomeMinusSavingsLineCal,
+      todayLine: mk === curMonth(),
       ariaLabel: 'Gastos acumulados por día del mes',
     });
 
@@ -2429,10 +2425,6 @@
     if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
     $('[data-trendtable]', el).addEventListener('click', () => {
       ui.trendTable = !ui.trendTable;
-      render();
-    });
-    $('#chk-daily-prev', el).addEventListener('change', (e) => {
-      ui.dailyBalancePrev = e.target.checked;
       render();
     });
     // "Ampliar": mismo gráfico en un diálogo, pero con un día por franja fija
@@ -2481,17 +2473,18 @@
         ${cmpHTML}
         <div class="chart-legend">
           <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
+          <span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>
           <span><span class="key key-dotted"></span>Ingresos del mes</span>
           <span><span class="key key-dotted key-dotted-warn"></span>Ingresos − ahorro</span>
-          ${ui.dailyBalancePrev ? `<span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>` : ''}
         </div>
         <div id="chart-daily-balance-big" class="chart-daily-big-host"></div>
       `, { viewOnly: true, submitLabel: 'Cerrar' });
       Charts.dailyBalance($('#chart-daily-balance-big', dlg), dailyBalance, {
         big: true,
-        prevPoints: ui.dailyBalancePrev ? dailyBalancePrev : null,
+        prevPoints: dailyBalancePrev,
         incomeLine: incomeLineCal,
         incomeMinusSavingsLine: incomeMinusSavingsLineCal,
+        todayLine: mk === curMonth(),
         ariaLabel: 'Gastos acumulados por día del mes',
       });
     });

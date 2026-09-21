@@ -666,6 +666,22 @@ const Charts = (() => {
       });
     }
 
+    // Línea vertical en el día de hoy: sin ella, con la curva del mes
+    // actual y la del mes anterior cruzándose, no queda claro qué punto de
+    // cada una corresponde a "hoy" — sólo tiene sentido si se está mirando
+    // el mes en curso (para un mes ya cerrado no hay un "hoy" real).
+    if (opts.todayLine) {
+      const last = known[known.length - 1];
+      const xx = x(last.day - 1);
+      add(svg, 'line', {
+        x1: xx, x2: xx, y1: m.t, y2: H - m.b,
+        stroke: 'var(--ink-2)', 'stroke-width': 1, 'stroke-dasharray': '2,3',
+      });
+      add(svg, 'text', {
+        x: xx, y: m.t + 8, 'text-anchor': 'middle', class: 'tick-label',
+      }, 'Hoy');
+    }
+
     // Mes anterior primero (detrás), punteado, para que la línea del mes
     // actual quede siempre arriba y sea la que más salta a la vista.
     if (prevPoints.length) {
