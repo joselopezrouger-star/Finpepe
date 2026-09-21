@@ -1645,6 +1645,14 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
       DESPUÉS del bloque del anillo, así esa región vuelve a quedar
       simétrica respecto del centro real de la tarjeta completa. */
 .hero-ring-legend-mirror, .card-title-mirror { visibility: hidden; }
+/* KPI nuevo debajo de la leyenda ("cuánto puedo gastar por día") — a
+   propósito rompe la simetría de los espejos de arriba: empuja el anillo
+   hacia arriba en vez de dejarlo en el medio exacto de la tarjeta, que es
+   lo que se pidió para hacerle lugar. */
+.hero-ring-kpi { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 4px; }
+.hero-ring-kpi-label { font-size: 10px; color: var(--muted); text-align: center; }
+.hero-ring-kpi-value { font: 700 16px var(--font-heading); color: var(--ink); }
+.hero-ring-kpi-value.neg { color: var(--crit); }
 .hero-label {
   position: relative;
   font-size: 12px;

@@ -2160,6 +2160,12 @@
     const pctLeft = (exp <= 0 && savingsMonth <= 0) ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round((balance / inc) * 100))) : 0);
     const pctMonthLeft = monthLeftPct(mk);
     const daysLeft = daysLeftInMonth(mk);
+    // Cuánto se puede gastar por día sin pasarse del balance actual — solo
+    // tiene sentido para el mes en curso (en uno pasado "días restantes" es
+    // 0 y en uno futuro es el mes entero, ninguno de los dos es una
+    // pregunta real). Al día de hoy incluido, así el último día del mes no
+    // divide por cero: ese día entero "vale" el balance que queda.
+    const perDayLeft = mk === curMonth() ? balance / Math.max(1, daysLeft) : null;
 
     // Balance acumulado día a día del mes (cuánto queda de plata a medida
     // que pasan los días, no el mes completo de un saque): usa la fecha
@@ -2268,6 +2274,11 @@
               <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
               <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
             </div>
+            ${perDayLeft != null ? `
+            <div class="hero-ring-kpi">
+              <span class="hero-ring-kpi-label">Podés gastar por día</span>
+              <span class="hero-ring-kpi-value ${perDayLeft < 0 ? 'neg' : ''}">${fmtDisp(perDayLeft)}</span>
+            </div>` : ''}
           </div>
           <h2 class="card-title card-title-mirror" aria-hidden="true">Balance y días del mes</h2>
         </div>
