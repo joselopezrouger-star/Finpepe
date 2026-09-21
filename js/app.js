@@ -2195,6 +2195,12 @@
       dailyBalance.push({ day: d, value: dailyRunning });
     }
     const incomeLineCal = sumDisp(calMonthTxs.filter((t) => t.type === 'ingreso'));
+    // Ingresos menos lo ya aportado a ahorros ese mes: el techo real de
+    // gasto sin "meterle mano" a lo que ya se guardó — si el gasto
+    // acumulado lo cruza, de ahí en más se estaría ahorrando menos de lo
+    // que ya se ahorró (savingsMonth viene de más arriba, es el aporte
+    // neto del mes, siempre por fecha real de la entrada).
+    const incomeMinusSavingsLineCal = incomeLineCal - savingsMonth;
 
     // Mismo cálculo para el mes anterior, alineado día a día, para cuando
     // el usuario activa "comparar con mes anterior" (ver si el gasto
@@ -2271,11 +2277,7 @@
         <div class="card card-compact">
           <h2 class="card-title">Balance y días del mes</h2>
           <div class="hero-ring-standalone">
-            <div class="hero-ring-legend hero-ring-legend-mirror" aria-hidden="true">
-              <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
-              <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
-            </div>
-            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 80)}</div>
+            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 64)}</div>
             <div class="hero-ring-legend">
               <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
               <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
@@ -2286,7 +2288,6 @@
               <span class="hero-ring-kpi-value ${perDayLeft < 0 ? 'neg' : ''}">${fmtDisp(perDayLeft)}</span>
             </div>` : ''}
           </div>
-          <h2 class="card-title card-title-mirror" aria-hidden="true">Balance y días del mes</h2>
         </div>
       </div>
 
@@ -2346,6 +2347,7 @@
         <div class="chart-legend">
           <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
           <span><span class="key key-dotted"></span>Ingresos del mes</span>
+          <span><span class="key key-dotted key-dotted-warn"></span>Ingresos − ahorro</span>
           ${ui.dailyBalancePrev ? `<span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>` : ''}
         </div>
         <div id="chart-daily-balance"></div>
@@ -2404,6 +2406,7 @@
     Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {
       prevPoints: ui.dailyBalancePrev ? dailyBalancePrev : null,
       incomeLine: incomeLineCal,
+      incomeMinusSavingsLine: incomeMinusSavingsLineCal,
       ariaLabel: 'Gastos acumulados por día del mes',
     });
 

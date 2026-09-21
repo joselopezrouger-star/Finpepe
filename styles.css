@@ -1235,6 +1235,9 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   border-top: 2px dotted var(--income);
   vertical-align: 2px;
 }
+/* Segunda línea constante ("ingresos - ahorro"): mismo punteado, color de
+   advertencia para distinguirla de la de ingresos totales. */
+.chart-legend .key-dotted-warn { border-top-color: var(--warn); }
 .chart-legend-col { flex-direction: column; align-items: flex-start; gap: 7px; }
 
 /* ---------- Torta cilindro (Categorías) ---------- */
@@ -1640,24 +1643,13 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 /* Tarjeta separada del anillo doble (balance + días del mes), al lado del
    gráfico de tendencia. */
 .hero-ring-standalone { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0 4px; }
-.card-compact .hero-ring-standalone { gap: 5px; padding: 2px 0 0; flex: 1; justify-content: center; }
-/* El anillo (no el bloque anillo+leyenda) debe quedar en el medio real de
-   TODA la tarjeta, título incluido. Dos espejos invisibles (misma altura
-   y contenido que sus originales, sólo ocultos) resuelven las dos
-   asimetrías:
-   1. La leyenda de abajo pesa y no hay nada arriba adentro del bloque
-      centrado → espejo de la leyenda ANTES del anillo, así el bloque
-      queda simétrico alrededor del anillo.
-   2. El título de la tarjeta sólo existe arriba, así que la región que
-      se centra (todo lo que no es el título) ya arranca corrida hacia
-      abajo respecto del centro real de la tarjeta → espejo del título
-      DESPUÉS del bloque del anillo, así esa región vuelve a quedar
-      simétrica respecto del centro real de la tarjeta completa. */
-.hero-ring-legend-mirror, .card-title-mirror { visibility: hidden; }
-/* KPI nuevo debajo de la leyenda ("cuánto puedo gastar por día") — a
-   propósito rompe la simetría de los espejos de arriba: empuja el anillo
-   hacia arriba en vez de dejarlo en el medio exacto de la tarjeta, que es
-   lo que se pidió para hacerle lugar. */
+/* Antes el anillo se centraba en el medio real de toda la tarjeta (con dos
+   espejos invisibles alrededor, uno de la leyenda y otro del título, para
+   compensar que el título sólo pesa arriba) — a pedido explícito el anillo
+   ahora queda pegado arriba, lo más cerca posible del título, en vez de
+   centrado; el espacio de más que deja una categoría vecina más alta
+   simplemente queda vacío abajo. */
+.card-compact .hero-ring-standalone { gap: 4px; padding: 2px 0 0; }
 .hero-ring-kpi { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 4px; }
 .hero-ring-kpi-label { font-size: 10px; color: var(--muted); text-align: center; }
 .hero-ring-kpi-value { font: 700 16px var(--font-heading); color: var(--ink); }

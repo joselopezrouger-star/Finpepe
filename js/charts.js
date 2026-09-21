@@ -525,14 +525,17 @@ const Charts = (() => {
      con value en null para los días que todavía no llegaron (no se
      proyecta una línea plana a futuro, pero el eje sigue mostrando el mes
      completo) — value es GASTO acumulado (arranca en 0, sólo sube).
-     opts: {ariaLabel, prevPoints, incomeLine}.
+     opts: {ariaLabel, prevPoints, incomeLine, incomeMinusSavingsLine}.
      opts.prevPoints (mismo formato, gasto acumulado del mes anterior) se
      dibuja como línea punteada detrás de la línea del mes actual, alineada
      por número de día, para comparar de un vistazo si este mes se gasta
      más rápido o más lento que el pasado.
      opts.incomeLine (número) es el ingreso total del mes: una línea
      constante de referencia, para ver cuánto falta de gasto acumulado
-     para "comerse" todo lo que entró ese mes. */
+     para "comerse" todo lo que entró ese mes.
+     opts.incomeMinusSavingsLine (número) es ingresos menos lo ya aportado
+     a ahorros ese mes: otra línea constante, más abajo — cruzarla significa
+     empezar a ahorrar menos de lo que ya se ahorró este mes. */
   function dailyBalance(el, points, opts) {
     el.replaceChildren();
     if (!points.length) return;
@@ -553,6 +556,7 @@ const Charts = (() => {
     // que las tres queden a la misma altura relativa.
     const allVals = known.map((p) => p.value).concat(prevPoints.map((p) => p.value));
     if (opts.incomeLine != null) allVals.push(opts.incomeLine);
+    if (opts.incomeMinusSavingsLine != null) allVals.push(opts.incomeMinusSavingsLine);
     const maxVal = Math.max(0, ...allVals);
     const minVal = Math.min(0, ...allVals);
     let top, bottom, ticks;
@@ -612,6 +616,16 @@ const Charts = (() => {
       add(svg, 'line', {
         x1: m.l, x2: W - m.r, y1: yy, y2: yy,
         stroke: COLORS.income, 'stroke-width': 1.5, 'stroke-dasharray': '2,3',
+      });
+    }
+    // Ingresos menos ahorro aportado: otro techo, más abajo — cruzarlo
+    // significa empezar a ahorrar menos de lo ya ahorrado este mes. Trazo
+    // más fino y punteado distinto para no confundirla con la de arriba.
+    if (opts.incomeMinusSavingsLine != null) {
+      const yy = y(opts.incomeMinusSavingsLine);
+      add(svg, 'line', {
+        x1: m.l, x2: W - m.r, y1: yy, y2: yy,
+        stroke: 'var(--warn)', 'stroke-width': 1.5, 'stroke-dasharray': '1,4',
       });
     }
 
