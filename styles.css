@@ -1689,6 +1689,25 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .ring-kpi-neg { background: var(--danger-bg); }
 .ring-kpi-neg .ring-kpi-icon { background: color-mix(in srgb, var(--crit) 18%, transparent); color: var(--crit); }
 .ring-kpi-neg .ring-kpi-value { color: var(--crit); }
+
+/* Comparación "hoy vs. mismo día del mes pasado" arriba del diálogo de
+   "Ampliar" en Balance por día — dos valores chicos + una tarjeta grande
+   con la diferencia en $ y %, en vez de una oración suelta de texto. */
+.daycmp { margin-bottom: 4px; }
+.daycmp-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.daycmp-item { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--accent-wash); }
+.daycmp-item-muted { background: color-mix(in srgb, var(--ink-2) 10%, var(--surface)); }
+.daycmp-diff {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px;
+  padding: 10px 12px; border-radius: 10px;
+}
+.daycmp-diff-good { background: var(--accent-wash); }
+.daycmp-diff-bad { background: var(--danger-bg); }
+.daycmp-diff-arrow { font-size: 13px; }
+.daycmp-diff-good .daycmp-diff-arrow, .daycmp-diff-good .daycmp-diff-main { color: var(--accent); }
+.daycmp-diff-bad .daycmp-diff-arrow, .daycmp-diff-bad .daycmp-diff-main { color: var(--crit); }
+.daycmp-diff-main { font: 700 16px var(--font-heading); }
+.daycmp-diff-label { font-size: 12px; color: var(--ink-2); }
 .hero-label {
   position: relative;
   font-size: 12px;

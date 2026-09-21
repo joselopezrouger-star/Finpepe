@@ -2440,7 +2440,45 @@
     // etiqueta en cada día — así se puede tocar/scrollear para leer un día
     // puntual con precisión, en vez de estimarlo a ojo en la versión chica.
     $('#btn-expand-daily', el).addEventListener('click', () => {
+      // Comparación "hoy vs. el mismo día del mes pasado": punto actual del
+      // mes que se está mirando contra el gasto acumulado al mismo número
+      // de día en el mes anterior (si ese mes fue más corto, se usa su
+      // último día disponible) — independiente del toggle "Comparar con
+      // mes anterior", que sólo controla la línea punteada del gráfico.
+      const todayEntry = [...dailyBalance].reverse().find((p) => p.value != null);
+      const prevKnown = dailyBalancePrev.filter((p) => p.value != null);
+      const prevEntry = todayEntry
+        ? (prevKnown.find((p) => p.day === todayEntry.day) || prevKnown[prevKnown.length - 1])
+        : null;
+      let cmpHTML = '';
+      // prevCalMonthTxs.length: sin movimientos cargados el mes anterior no
+      // hay nada real con qué comparar (todos los días quedarían en 0, lo
+      // que se leería como "gastaste $X de más" siendo mentira).
+      if (todayEntry && prevEntry && prevCalMonthTxs.length) {
+        const diff = todayEntry.value - prevEntry.value;
+        const worse = diff > 0; // gastó más que en el mismo punto del mes pasado
+        const pct = prevEntry.value > 0 ? Math.round(Math.abs(diff) / prevEntry.value * 100) : null;
+        cmpHTML = `
+        <div class="daycmp">
+          <div class="daycmp-row">
+            <div class="daycmp-item">
+              <div class="ring-stat-label">Hoy · día ${todayEntry.day}</div>
+              <div class="ring-stat-value">${fmtDisp(todayEntry.value)}</div>
+            </div>
+            <div class="daycmp-item daycmp-item-muted">
+              <div class="ring-stat-label">Día ${prevEntry.day} de ${esc(monthShortLabel(prevMkDaily))}</div>
+              <div class="ring-stat-value">${fmtDisp(prevEntry.value)}</div>
+            </div>
+          </div>
+          <div class="daycmp-diff ${worse ? 'daycmp-diff-bad' : 'daycmp-diff-good'}">
+            <span class="daycmp-diff-arrow">${worse ? '▲' : '▼'}</span>
+            <span class="daycmp-diff-main">${fmtDisp(Math.abs(diff))}${pct != null ? ` (${pct}%)` : ''}</span>
+            <span class="daycmp-diff-label">${worse ? 'más' : 'menos'} que el ${prevEntry.day} de ${esc(monthShortLabel(prevMkDaily))}</span>
+          </div>
+        </div>`;
+      }
       const dlg = openDialog('Balance por día', `
+        ${cmpHTML}
         <div class="chart-legend">
           <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
           <span><span class="key key-dotted"></span>Ingresos del mes</span>
