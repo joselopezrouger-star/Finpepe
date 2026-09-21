@@ -2296,12 +2296,12 @@
             </div>
             ${perDayLeft != null ? `
             <div class="ring-kpi-card ${perDayLeft < 0 ? 'ring-kpi-neg' : ''}">
-              <span class="ring-kpi-icon">${iconSvg('cash')}</span>
-              <span class="ring-kpi-divider"></span>
-              <div>
+              <div class="ring-kpi-top">
+                <span class="ring-kpi-icon">${iconSvg('cash')}</span>
+                <span class="ring-kpi-divider"></span>
                 <div class="ring-stat-label">Podés gastar por día</div>
-                <div class="ring-kpi-value">${fmtDisp(perDayLeft)}</div>
               </div>
+              <div class="ring-kpi-value">${fmtDisp(perDayLeft)}</div>
             </div>` : ''}
           </div>
         </div>
