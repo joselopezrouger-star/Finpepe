@@ -2281,17 +2281,13 @@
             <div class="ring-stat-row">
               <div class="ring-stat-card ring-stat-accent">
                 <span class="dot dot-accent"></span>
-                <div>
-                  <div class="ring-stat-label">Balance</div>
-                  <div class="ring-stat-value">${pctLeft}%</div>
-                </div>
+                <span class="ring-stat-label">Balance</span>
+                <span class="ring-stat-value">${pctLeft}%</span>
               </div>
               <div class="ring-stat-card ring-stat-warn">
                 <span class="dot dot-warn"></span>
-                <div>
-                  <div class="ring-stat-label">Faltan</div>
-                  <div class="ring-stat-value">${daysLeft} día${daysLeft === 1 ? '' : 's'}</div>
-                </div>
+                <span class="ring-stat-label">Faltan</span>
+                <span class="ring-stat-value">${daysLeft} día${daysLeft === 1 ? '' : 's'}</span>
               </div>
             </div>
             ${perDayLeft != null ? `
@@ -2299,9 +2295,9 @@
               <div class="ring-kpi-top">
                 <span class="ring-kpi-icon">${iconSvg('cash')}</span>
                 <span class="ring-kpi-divider"></span>
-                <div class="ring-stat-label">Podés gastar por día</div>
+                <span class="ring-kpi-value">${fmtDisp(perDayLeft)}</span>
               </div>
-              <div class="ring-kpi-value">${fmtDisp(perDayLeft)}</div>
+              <div class="ring-kpi-label">Podés gastar por día</div>
             </div>` : ''}
           </div>
         </div>

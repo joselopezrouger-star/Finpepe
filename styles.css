@@ -1636,37 +1636,37 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 /* Balance/Faltan como dos tarjetitas con su propio fondo tenue en vez de
    una leyenda de texto plano — mismo espíritu que .tile, pero de a dos en
    fila y con el color de cada anillo (accent/warn) de fondo. */
-.ring-stat-row { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.ring-stat-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+/* Una sola línea: punto + label + valor, el valor pegado al borde derecho. */
 .ring-stat-card {
-  flex: 1 1 110px; min-width: 0; display: flex; align-items: center; gap: 6px;
-  padding: 8px 8px; border-radius: 12px;
+  flex: 1 1 90px; min-width: 0; display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 10px;
 }
 .ring-stat-accent { background: var(--accent-wash); }
 .ring-stat-warn { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); }
-.ring-stat-card .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-.ring-stat-card > div { flex: 1; min-width: 0; }
-.ring-stat-label { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
-.ring-stat-value { font: 700 16px var(--font-heading); color: var(--ink); white-space: nowrap; }
-/* Tarjeta ancha de abajo ("Podés gastar por día"): ícono + separador +
-   label arriba, y el monto grande abajo ocupando todo el ancho de la
-   tarjeta (no al lado del ícono) para que nunca le falte lugar, incluso
-   en pantallas angostas donde esta tarjeta comparte fila con "Gastos por
-   categoría". En rojo si el balance restante ya da negativo. */
+.ring-stat-card .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ring-stat-label { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ring-stat-value { font: 700 14px var(--font-heading); color: var(--ink); white-space: nowrap; margin-left: auto; padding-left: 4px; }
+/* Tarjeta ancha de abajo ("Podés gastar por día"): dos líneas nomás —
+   ícono + monto arriba, label chico abajo ocupando todo el ancho (en vez
+   de al lado del ícono, que en la tarjeta angosta no le deja lugar).
+   En rojo si el balance restante ya da negativo. */
 .ring-kpi-card {
-  display: flex; flex-direction: column; gap: 6px; width: 100%;
-  padding: 10px 12px; border-radius: 12px;
+  display: flex; flex-direction: column; gap: 2px; width: 100%;
+  padding: 8px 10px; border-radius: 10px;
   background: var(--accent-wash);
 }
-.ring-kpi-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.ring-kpi-top > .ring-stat-label { flex: 1; min-width: 0; white-space: normal; }
+.ring-kpi-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ring-kpi-icon {
-  width: 28px; height: 28px; border-radius: 50%; flex: none;
+  width: 20px; height: 20px; border-radius: 50%; flex: none;
   display: flex; align-items: center; justify-content: center;
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
 }
+.ring-kpi-icon svg { width: 12px; height: 12px; }
 .ring-kpi-divider { width: 1px; align-self: stretch; background: var(--border); flex: none; }
-.ring-kpi-value { font: 700 19px var(--font-heading); color: var(--ink); overflow-wrap: break-word; }
+.ring-kpi-value { flex: 1; min-width: 0; font: 700 16px var(--font-heading); color: var(--ink); overflow-wrap: break-word; }
+.ring-kpi-label { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ring-kpi-neg { background: var(--danger-bg); }
 .ring-kpi-neg .ring-kpi-icon { background: color-mix(in srgb, var(--crit) 18%, transparent); color: var(--crit); }
 .ring-kpi-neg .ring-kpi-value { color: var(--crit); }
