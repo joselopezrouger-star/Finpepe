@@ -368,6 +368,7 @@
     plus: '<circle cx="10" cy="10" r="7.2"/><path d="M10 6.8v6.4M6.8 10h6.4"/>',
     swap: '<path d="M4 7h10.5M12 4.2 15 7l-3 2.8"/><path d="M16 13H5.5M8 10.2 5 13l3 2.8"/>',
     calendar: '<rect x="3" y="4.5" width="14" height="12" rx="1.5"/><path d="M3 8h14"/><path d="M6.5 3v3M13.5 3v3"/>',
+    expand: '<path d="M7 3H3v4M13 3h4v4M3 13v4h4M17 13v4h-4"/>',
   };
   function iconSvg(name, cls) {
     const body = ICON_PATHS[name] || ICON_PATHS.tag;
@@ -2352,6 +2353,7 @@
             Comparar con mes anterior
             <input type="checkbox" id="chk-daily-prev" ${ui.dailyBalancePrev ? 'checked' : ''}>
           </label>
+          <button type="button" class="icon-btn" id="btn-expand-daily" title="Ampliar" aria-label="Ampliar gráfico">${iconSvg('expand')}</button>
         </h2>
         <div class="chart-legend">
           <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
@@ -2432,6 +2434,28 @@
     $('#chk-daily-prev', el).addEventListener('change', (e) => {
       ui.dailyBalancePrev = e.target.checked;
       render();
+    });
+    // "Ampliar": mismo gráfico en un diálogo, pero con un día por franja fija
+    // (en vez de repartir el ancho disponible entre los ~30 días del mes) y
+    // etiqueta en cada día — así se puede tocar/scrollear para leer un día
+    // puntual con precisión, en vez de estimarlo a ojo en la versión chica.
+    $('#btn-expand-daily', el).addEventListener('click', () => {
+      const dlg = openDialog('Balance por día', `
+        <div class="chart-legend">
+          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
+          <span><span class="key key-dotted"></span>Ingresos del mes</span>
+          <span><span class="key key-dotted key-dotted-warn"></span>Ingresos − ahorro</span>
+          ${ui.dailyBalancePrev ? `<span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>` : ''}
+        </div>
+        <div id="chart-daily-balance-big" class="chart-daily-big-host"></div>
+      `, { viewOnly: true, submitLabel: 'Cerrar' });
+      Charts.dailyBalance($('#chart-daily-balance-big', dlg), dailyBalance, {
+        big: true,
+        prevPoints: ui.dailyBalancePrev ? dailyBalancePrev : null,
+        incomeLine: incomeLineCal,
+        incomeMinusSavingsLine: incomeMinusSavingsLineCal,
+        ariaLabel: 'Gastos acumulados por día del mes',
+      });
     });
     $('#btn-cta-tx', el).addEventListener('click', () => txForm(null));
     $$('[data-goto-card]', el).forEach((row) => row.addEventListener('click', () => {

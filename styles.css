@@ -351,6 +351,11 @@ button {
    centre el anillo ahí adentro, en vez de quedar pegado arriba. */
 .card-compact { padding: 12px; display: flex; flex-direction: column; }
 .card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; }
+/* Si "Gastos por categoría" tiene pocas filas queda más baja que la
+   tarjeta del anillo de al lado (que la estira parejo por el grid); en vez
+   de dejar todo el sobrante pegado abajo, centramos la lista en el alto
+   disponible para que se reparta arriba y abajo. */
+.card-compact .cats-bars-compact { flex: 1; display: flex; flex-direction: column; justify-content: center; }
 .cats-bars-compact .hbar-row { padding: 2px 0; gap: 1px; }
 .cats-bars-compact .hbar-label { font-size: 10px; gap: 3px; }
 .cats-bars-compact .hbar-dot { width: 6px; height: 6px; }
@@ -1250,6 +1255,20 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .pie-cylinder-wrap .chart-legend-col span { overflow-wrap: break-word; }
 
 .trend-svg { width: 100%; height: auto; display: block; }
+/* Versión "Ampliar" de Balance por día (diálogo): el eje Y vive en un SVG
+   chico y fijo (.trend-svg-axis) al lado del área de datos, que es la que
+   scrollea (.chart-scroll-x) — así, a diferencia de .trend-svg, el gráfico
+   mide sus propios px (uno por día, bien generoso) sin achicarse, y el eje
+   con los números no se va de vista al desplazarse para leer un día lejano. */
+/* .dialog-body es un grid sin columnas explícitas: por default, un hijo
+   con contenido intrínsecamente ancho (el SVG de 900+ px que scrollea)
+   hace que el track entero se estire a ese ancho en vez de quedarse en el
+   ancho del diálogo. min-width:0 en el propio grid item corta eso. */
+.chart-daily-big-host { min-width: 0; }
+.daily-big-wrap { display: flex; align-items: stretch; min-width: 0; }
+.trend-svg-axis { flex: none; display: block; }
+.chart-scroll-x { flex: 1; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.trend-svg-big { display: block; }
 .tick-label { font: 11px var(--font); fill: var(--muted); }
 .point-label { font: 700 10px var(--font-heading); }
 

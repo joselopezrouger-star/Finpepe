@@ -545,8 +545,21 @@ const Charts = (() => {
       return;
     }
     const prevPoints = (opts.prevPoints || []).filter((p) => p.value != null);
-    const W = 640, H = 200;
-    const m = { t: 10, r: 8, b: 22, l: 58 };
+    const dayCount = Math.max(points.length, opts.prevPoints ? opts.prevPoints.length : 0);
+    // "big" (diálogo de "Ampliar"): en vez de repartir un ancho fijo entre
+    // todos los días del mes (lo que en el celular deja cada día en una
+    // franja de pocos px, difícil de leer con precisión), cada día tiene un
+    // ancho fijo generoso y el SVG mide lo que tenga que medir — el
+    // contenedor de afuera lo scrollea horizontalmente en vez de achicarlo.
+    const big = !!opts.big;
+    // "big": el eje Y con las etiquetas va en un SVG chico aparte, fijo, y
+    // sólo el área de datos (mucho más ancha que la pantalla) va adentro
+    // del <div> que scrollea — si no, al scrollear para ver un día lejano
+    // el eje se iba con el resto y quedaba sin referencia para leer valores.
+    const AXIS_W = 74;
+    const m = big ? { t: 10, r: 8, b: 22, l: 4 } : { t: 10, r: 8, b: 22, l: 58 };
+    const W = big ? Math.round(dayCount * 28 + m.l + m.r) : 640;
+    const H = big ? 280 : 200;
     const iw = W - m.l - m.r;
     const ih = H - m.t - m.b;
 
@@ -561,7 +574,7 @@ const Charts = (() => {
     const minVal = Math.min(0, ...allVals);
     let top, bottom, ticks;
     if (minVal >= 0) {
-      const nt = niceTicks(Math.max(1, maxVal), 4);
+      const nt = niceTicks(Math.max(1, maxVal), big ? 7 : 4);
       top = nt.top; bottom = 0; ticks = nt.ticks;
     } else {
       top = niceTicks(Math.max(maxVal, -minVal, 1), 3).top;
@@ -570,15 +583,9 @@ const Charts = (() => {
     }
     const range = top - bottom;
     const y = (v) => m.t + ih - ((v - bottom) / range) * ih;
-    const dayCount = Math.max(points.length, opts.prevPoints ? opts.prevPoints.length : 0);
     const band = iw / dayCount;
     const x = (i) => m.l + band * i + band / 2;
-
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.setAttribute('class', 'trend-svg');
-    svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', opts.ariaLabel || 'Gastos acumulados por día del mes');
+    const fmtTick = (v) => big ? Math.round(v).toLocaleString('es-AR') : compact(v);
 
     const NS = 'http://www.w3.org/2000/svg';
     const add = (parent, tag, attrs, text) => {
@@ -588,6 +595,34 @@ const Charts = (() => {
       parent.appendChild(n);
       return n;
     };
+    const mkSvg = (w, h) => {
+      const s = document.createElementNS(NS, 'svg');
+      s.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      s.setAttribute('role', 'img');
+      return s;
+    };
+
+    const svg = mkSvg(W, H);
+    svg.setAttribute('aria-label', opts.ariaLabel || 'Gastos acumulados por día del mes');
+    if (big) {
+      svg.setAttribute('width', W);
+      svg.setAttribute('height', H);
+      svg.setAttribute('class', 'trend-svg-big');
+    } else {
+      svg.setAttribute('class', 'trend-svg');
+    }
+    // En "big" el eje Y (con el número completo) va en este SVG chico y
+    // fijo aparte, al lado del que scrollea, para que no se vaya de vista
+    // al desplazarse para leer un día lejano.
+    const axisSvg = big ? mkSvg(AXIS_W, H) : svg;
+    if (big) {
+      // Sin width/height explícitos un <svg> con sólo viewBox se estira al
+      // 100% del contenedor por default — acá tiene que quedarse en su
+      // ancho fijo (AXIS_W) para no comerse el lugar de lo que scrollea.
+      axisSvg.setAttribute('width', AXIS_W);
+      axisSvg.setAttribute('height', H);
+      axisSvg.setAttribute('class', 'trend-svg-axis');
+    }
 
     for (const t of ticks) {
       const yy = y(t);
@@ -596,15 +631,17 @@ const Charts = (() => {
         stroke: t === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1,
         'shape-rendering': 'crispEdges',
       });
-      add(svg, 'text', {
-        x: m.l - 8, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label',
-      }, compact(t));
+      add(axisSvg, 'text', {
+        x: (big ? AXIS_W : m.l) - 8, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label',
+      }, fmtTick(t));
     }
 
-    // Días en el eje X: no entran los 31 números sin amontonarse, así que
-    // se etiqueta el primero, el último y cada 5.
+    // Días en el eje X: en la versión chica no entran los 31 números sin
+    // amontonarse, así que se etiqueta el primero, el último y cada 5. En
+    // la versión "big" cada día tiene ancho de sobra (ver W más arriba), así
+    // que se numeran todos.
     points.forEach((p, i) => {
-      if (p.day === 1 || p.day === points.length || p.day % 5 === 0) {
+      if (big || p.day === 1 || p.day === points.length || p.day % 5 === 0) {
         add(svg, 'text', { x: x(i), y: H - 6, 'text-anchor': 'middle', class: 'tick-label' }, String(p.day));
       }
     });
@@ -648,7 +685,18 @@ const Charts = (() => {
     const last = known[known.length - 1];
     add(svg, 'circle', { cx: x(last.day - 1), cy: y(last.value), r: 3.5, fill: COLORS.expense });
 
-    el.appendChild(svg);
+    if (big) {
+      const wrap = document.createElement('div');
+      wrap.className = 'daily-big-wrap';
+      const scrollDiv = document.createElement('div');
+      scrollDiv.className = 'chart-scroll-x';
+      scrollDiv.appendChild(svg);
+      wrap.appendChild(axisSvg);
+      wrap.appendChild(scrollDiv);
+      el.appendChild(wrap);
+    } else {
+      el.appendChild(svg);
+    }
   }
 
   return { COLORS, hBars, trend, lines, singleBars, dailyBalance, pieCylinder, stacked100, compact };
