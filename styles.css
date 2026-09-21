@@ -1226,6 +1226,15 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   border-top: 2px dashed var(--muted);
   vertical-align: 2px;
 }
+/* Línea constante de referencia (ej. ingresos del mes en "Balance por
+   día"): punteado fino para distinguirla del dato que sí varía día a día
+   y del "mes anterior" (que usa .key-dashed, trazos más largos). */
+.chart-legend .key-dotted {
+  width: 14px; height: 0;
+  background: none;
+  border-top: 2px dotted var(--income);
+  vertical-align: 2px;
+}
 .chart-legend-col { flex-direction: column; align-items: flex-start; gap: 7px; }
 
 /* ---------- Torta cilindro (Categorías) ---------- */

@@ -2167,21 +2167,25 @@
     // divide por cero: ese día entero "vale" el balance que queda.
     const perDayLeft = mk === curMonth() ? balance / Math.max(1, daysLeft) : null;
 
-    // Balance acumulado día a día del mes (cuánto queda de plata a medida
-    // que pasan los días, no el mes completo de un saque): usa la fecha
-    // calendario real de cada movimiento, no el mes "efectivo" (que puede
-    // correr un gasto de tarjeta al mes de vencimiento). En el mes en curso
-    // corta en el día de hoy (no tiene sentido proyectar una línea plana a
-    // futuro); en un mes que todavía no llegó no hay nada que mostrar.
+    // Gastos acumulados día a día del mes (arranca en 0 y sólo sube — a
+    // diferencia del balance neto de antes, que también bajaba con cada
+    // ingreso): usa la fecha calendario real de cada movimiento, no el mes
+    // "efectivo" (que puede correr un gasto de tarjeta al mes de
+    // vencimiento). En el mes en curso corta en el día de hoy (no tiene
+    // sentido proyectar una línea plana a futuro); en un mes que todavía no
+    // llegó no hay nada que mostrar. El ingreso total del mes se muestra
+    // aparte como línea constante, para ver de un vistazo cuánto falta de
+    // gasto acumulado para "comerse" todo lo que entró.
     const [mkY, mkM] = mk.split('-').map(Number);
     const daysInMk = new Date(mkY, mkM, 0).getDate();
     const lastDayToShow = mk > curMonth() ? 0 : (mk === curMonth() ? new Date().getDate() : daysInMk);
     const calMonthTxs = txs.filter((t) => monthKeyOf(t.date) === mk);
     const dailyDelta = new Array(daysInMk + 1).fill(0);
     for (const t of calMonthTxs) {
+      if (t.type !== 'gasto') continue;
       const v = txDispAmount(t);
       if (v == null) continue;
-      dailyDelta[parseDate(t.date).getDate()] += t.type === 'ingreso' ? v : -v;
+      dailyDelta[parseDate(t.date).getDate()] += v;
     }
     let dailyRunning = 0;
     const dailyBalance = [];
@@ -2190,10 +2194,11 @@
       dailyRunning += dailyDelta[d];
       dailyBalance.push({ day: d, value: dailyRunning });
     }
+    const incomeLineCal = sumDisp(calMonthTxs.filter((t) => t.type === 'ingreso'));
 
     // Mismo cálculo para el mes anterior, alineado día a día, para cuando
-    // el usuario activa "comparar con mes anterior" (ver si un rojo de hoy
-    // ya venía del mes pasado o es nuevo).
+    // el usuario activa "comparar con mes anterior" (ver si el gasto
+    // acumulado de hoy va más rápido o más lento que el mes pasado).
     const prevMkDaily = addMonthsKey(mk, -1);
     const [prevDY, prevDM] = prevMkDaily.split('-').map(Number);
     const daysInPrevMkDaily = new Date(prevDY, prevDM, 0).getDate();
@@ -2201,9 +2206,10 @@
     const prevCalMonthTxs = txs.filter((t) => monthKeyOf(t.date) === prevMkDaily);
     const prevDailyDelta = new Array(daysInPrevMkDaily + 1).fill(0);
     for (const t of prevCalMonthTxs) {
+      if (t.type !== 'gasto') continue;
       const v = txDispAmount(t);
       if (v == null) continue;
-      prevDailyDelta[parseDate(t.date).getDate()] += t.type === 'ingreso' ? v : -v;
+      prevDailyDelta[parseDate(t.date).getDate()] += v;
     }
     let prevDailyRunning = 0;
     const dailyBalancePrev = [];
@@ -2337,11 +2343,11 @@
             <input type="checkbox" id="chk-daily-prev" ${ui.dailyBalancePrev ? 'checked' : ''}>
           </label>
         </h2>
-        ${ui.dailyBalancePrev ? `
         <div class="chart-legend">
-          <span><span class="key" style="background:var(--accent)"></span>${esc(monthShortLabel(mk))}</span>
-          <span><span class="key key-dashed"></span>${esc(monthShortLabel(prevMkDaily))}</span>
-        </div>` : ''}
+          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
+          <span><span class="key key-dotted"></span>Ingresos del mes</span>
+          ${ui.dailyBalancePrev ? `<span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>` : ''}
+        </div>
         <div id="chart-daily-balance"></div>
       </div>
 
@@ -2397,6 +2403,8 @@
     }
     Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {
       prevPoints: ui.dailyBalancePrev ? dailyBalancePrev : null,
+      incomeLine: incomeLineCal,
+      ariaLabel: 'Gastos acumulados por día del mes',
     });
 
     $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {

@@ -520,21 +520,25 @@ const Charts = (() => {
     return String(Math.round(n));
   }
 
-  /* ---------- Balance acumulado por día del mes ----------
+  /* ---------- Gastos acumulados por día del mes ----------
      points: [{day, value}] uno por cada día DEL MES ENTERO (1 al último),
      con value en null para los días que todavía no llegaron (no se
      proyecta una línea plana a futuro, pero el eje sigue mostrando el mes
-     completo) · opts: {ariaLabel, prevPoints}. El eje Y baja de cero sólo si
-     el balance acumulado realmente llega a ser negativo algún día.
-     opts.prevPoints (mismo formato, mes anterior) se dibuja como línea
-     punteada detrás de la línea del mes actual, alineada por número de día,
-     para comparar de un vistazo si un tramo en rojo ya venía del mes pasado. */
+     completo) — value es GASTO acumulado (arranca en 0, sólo sube).
+     opts: {ariaLabel, prevPoints, incomeLine}.
+     opts.prevPoints (mismo formato, gasto acumulado del mes anterior) se
+     dibuja como línea punteada detrás de la línea del mes actual, alineada
+     por número de día, para comparar de un vistazo si este mes se gasta
+     más rápido o más lento que el pasado.
+     opts.incomeLine (número) es el ingreso total del mes: una línea
+     constante de referencia, para ver cuánto falta de gasto acumulado
+     para "comerse" todo lo que entró ese mes. */
   function dailyBalance(el, points, opts) {
     el.replaceChildren();
     if (!points.length) return;
     const known = points.filter((p) => p.value != null);
     if (!known.length) {
-      el.innerHTML = '<div class="empty">Todavía no hay movimientos este mes.</div>';
+      el.innerHTML = '<div class="empty">Todavía no hay gastos este mes.</div>';
       return;
     }
     const prevPoints = (opts.prevPoints || []).filter((p) => p.value != null);
@@ -543,12 +547,12 @@ const Charts = (() => {
     const iw = W - m.l - m.r;
     const ih = H - m.t - m.b;
 
-    // El eje sólo baja de cero si el balance realmente llega a ser negativo
-    // algún día (no tiene sentido reservar la mitad del gráfico para
-    // negativos si el mes nunca se fue en rojo). Si hay mes anterior de
-    // comparación, sus valores también entran en la escala para que ambas
-    // líneas queden a la misma altura relativa.
+    // El eje sólo baja de cero si algún valor realmente es negativo (no
+    // debería pasar con gasto acumulado, pero se deja el caso general). La
+    // línea de ingresos y el mes anterior también entran en la escala, para
+    // que las tres queden a la misma altura relativa.
     const allVals = known.map((p) => p.value).concat(prevPoints.map((p) => p.value));
+    if (opts.incomeLine != null) allVals.push(opts.incomeLine);
     const maxVal = Math.max(0, ...allVals);
     const minVal = Math.min(0, ...allVals);
     let top, bottom, ticks;
@@ -570,7 +574,7 @@ const Charts = (() => {
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.setAttribute('class', 'trend-svg');
     svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', opts.ariaLabel || 'Balance acumulado por día del mes');
+    svg.setAttribute('aria-label', opts.ariaLabel || 'Gastos acumulados por día del mes');
 
     const NS = 'http://www.w3.org/2000/svg';
     const add = (parent, tag, attrs, text) => {
@@ -601,6 +605,16 @@ const Charts = (() => {
       }
     });
 
+    // Ingresos del mes: línea constante punteada, dibujada antes que las
+    // curvas de gasto para que quede de fondo.
+    if (opts.incomeLine != null) {
+      const yy = y(opts.incomeLine);
+      add(svg, 'line', {
+        x1: m.l, x2: W - m.r, y1: yy, y2: yy,
+        stroke: COLORS.income, 'stroke-width': 1.5, 'stroke-dasharray': '2,3',
+      });
+    }
+
     // Mes anterior primero (detrás), punteado, para que la línea del mes
     // actual quede siempre arriba y sea la que más salta a la vista.
     if (prevPoints.length) {
@@ -613,12 +627,12 @@ const Charts = (() => {
 
     const d = known.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.day - 1)},${y(p.value)}`).join(' ');
     add(svg, 'path', {
-      d, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2,
+      d, fill: 'none', stroke: COLORS.expense, 'stroke-width': 2,
       'stroke-linecap': 'round', 'stroke-linejoin': 'round',
     });
     // Punto de hoy (último día cargado): destaca dónde está parado el mes.
     const last = known[known.length - 1];
-    add(svg, 'circle', { cx: x(last.day - 1), cy: y(last.value), r: 3.5, fill: 'var(--accent)' });
+    add(svg, 'circle', { cx: x(last.day - 1), cy: y(last.value), r: 3.5, fill: COLORS.expense });
 
     el.appendChild(svg);
   }
