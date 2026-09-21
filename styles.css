@@ -351,14 +351,14 @@ button {
    centre el anillo ahí adentro, en vez de quedar pegado arriba. */
 .card-compact { padding: 12px; display: flex; flex-direction: column; }
 .card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; }
-.cats-bars-compact .hbar-row { padding: 5px 0; gap: 2px; }
-.cats-bars-compact .hbar-label { font-size: 11px; gap: 4px; }
+.cats-bars-compact .hbar-row { padding: 2px 0; gap: 1px; }
+.cats-bars-compact .hbar-label { font-size: 10px; gap: 3px; }
 .cats-bars-compact .hbar-dot { width: 6px; height: 6px; }
-.cats-bars-compact .hbar-amount { font-size: 11px; }
+.cats-bars-compact .hbar-amount { font-size: 10px; }
 .cats-bars-compact .hbar-trackrow { gap: 4px; }
-.cats-bars-compact .hbar-track { height: 10px; }
-.cats-bars-compact .hbar-bar { height: 10px; }
-.cats-bars-compact .hbar-pct { font-size: 9.5px; min-width: 20px; }
+.cats-bars-compact .hbar-track { height: 8px; }
+.cats-bars-compact .hbar-bar { height: 8px; }
+.cats-bars-compact .hbar-pct { font-size: 9px; min-width: 18px; }
 
 /* ---------- Tiles de resumen ---------- */
 .tile { padding: 14px 16px; }

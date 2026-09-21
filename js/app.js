@@ -1943,9 +1943,10 @@
       return `<span class="savings-rate-pill ${cls}">${up ? '▲' : '▼'} ${Math.abs(diff)} pp MoM</span>`;
     })();
 
-    // Gastos por categoría (top 3 + Otros, para que la tarjeta principal
-    // entre compacta al lado del anillo) — por fecha real de carga, no por
-    // el mes de vencimiento (ver comentario al principio de la función).
+    // Gastos por categoría (top 5, sin agrupar el resto en "Otros" — para
+    // que la tarjeta principal entre compacta al lado del anillo) — por
+    // fecha real de carga, no por el mes de vencimiento (ver comentario al
+    // principio de la función).
     const byCat = new Map();
     for (const t of inMonthCal.filter((x) => x.type === 'gasto')) {
       const v = txDispAmount(t);
@@ -1955,12 +1956,8 @@
     }
     let catItems = [...byCat.entries()]
       .map(([id, value]) => ({ label: catName(id), value }))
-      .sort((a, b) => b.value - a.value);
-    if (catItems.length > 3) {
-      const rest = catItems.slice(3);
-      catItems = catItems.slice(0, 3);
-      catItems.push({ label: 'Otros', value: rest.reduce((a, i) => a + i.value, 0) });
-    }
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
     catItems = catItems.map((it, i) => ({ ...it, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
 
     // "Cómo vas este mes": comentario automático a partir de reglas simples
