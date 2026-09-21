@@ -1621,39 +1621,50 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
    siempre en el mismo renglón que el %, sin cortarse a una línea aparte. */
 .hero-split-3 .tile-delta { font-size: 11px; white-space: nowrap; }
 .hero-ring { position: relative; flex: none; }
-.hero-ring-legend {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.hero-ring-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.hero-ring-item b { color: var(--ink); font-weight: 700; }
-.hero-ring-item .dot {
-  width: 7px; height: 7px; border-radius: 50%; flex: none;
-}
 .dot-accent { background: var(--accent); }
 .dot-warn { background: var(--warn); }
 /* Tarjeta separada del anillo doble (balance + días del mes), al lado del
    gráfico de tendencia. */
-.hero-ring-standalone { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0 4px; }
+.hero-ring-standalone { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0 4px; width: 100%; }
 /* Antes el anillo se centraba en el medio real de toda la tarjeta (con dos
    espejos invisibles alrededor, uno de la leyenda y otro del título, para
    compensar que el título sólo pesa arriba) — a pedido explícito el anillo
    ahora queda pegado arriba, lo más cerca posible del título, en vez de
    centrado; el espacio de más que deja una categoría vecina más alta
    simplemente queda vacío abajo. */
-.card-compact .hero-ring-standalone { gap: 4px; padding: 2px 0 0; }
-.hero-ring-kpi { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 4px; }
-.hero-ring-kpi-label { font-size: 10px; color: var(--muted); text-align: center; }
-.hero-ring-kpi-value { font: 700 16px var(--font-heading); color: var(--ink); }
-.hero-ring-kpi-value.neg { color: var(--crit); }
+.card-compact .hero-ring-standalone { gap: 8px; padding: 2px 0 0; }
+/* Balance/Faltan como dos tarjetitas con su propio fondo tenue en vez de
+   una leyenda de texto plano — mismo espíritu que .tile, pero de a dos en
+   fila y con el color de cada anillo (accent/warn) de fondo. */
+.ring-stat-row { display: flex; gap: 8px; width: 100%; }
+.ring-stat-card {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 12px;
+}
+.ring-stat-accent { background: var(--accent-wash); }
+.ring-stat-warn { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); }
+.ring-stat-card .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.ring-stat-label { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.ring-stat-value { font: 700 17px var(--font-heading); color: var(--ink); white-space: nowrap; }
+/* Tarjeta ancha de abajo ("Podés gastar por día"): ícono en círculo +
+   separador + label/valor, mismo criterio de fondo tenue que las de
+   arriba. En rojo si el balance restante ya da negativo. */
+.ring-kpi-card {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 10px 14px; border-radius: 12px;
+  background: var(--accent-wash);
+}
+.ring-kpi-icon {
+  width: 38px; height: 38px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.ring-kpi-divider { width: 1px; align-self: stretch; background: var(--border); flex: none; }
+.ring-kpi-value { font: 700 21px var(--font-heading); color: var(--ink); }
+.ring-kpi-neg { background: var(--danger-bg); }
+.ring-kpi-neg .ring-kpi-icon { background: color-mix(in srgb, var(--crit) 18%, transparent); color: var(--crit); }
+.ring-kpi-neg .ring-kpi-value { color: var(--crit); }
 .hero-label {
   position: relative;
   font-size: 12px;

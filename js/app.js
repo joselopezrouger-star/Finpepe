@@ -2278,14 +2278,30 @@
           <h2 class="card-title">Balance y días del mes</h2>
           <div class="hero-ring-standalone">
             <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 64)}</div>
-            <div class="hero-ring-legend">
-              <div class="hero-ring-item"><span class="dot dot-accent"></span>Balance: <b>${pctLeft}%</b></div>
-              <div class="hero-ring-item"><span class="dot dot-warn"></span>Faltan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b></div>
+            <div class="ring-stat-row">
+              <div class="ring-stat-card ring-stat-accent">
+                <span class="dot dot-accent"></span>
+                <div>
+                  <div class="ring-stat-label">Balance</div>
+                  <div class="ring-stat-value">${pctLeft}%</div>
+                </div>
+              </div>
+              <div class="ring-stat-card ring-stat-warn">
+                <span class="dot dot-warn"></span>
+                <div>
+                  <div class="ring-stat-label">Faltan</div>
+                  <div class="ring-stat-value">${daysLeft} día${daysLeft === 1 ? '' : 's'}</div>
+                </div>
+              </div>
             </div>
             ${perDayLeft != null ? `
-            <div class="hero-ring-kpi">
-              <span class="hero-ring-kpi-label">Podés gastar por día</span>
-              <span class="hero-ring-kpi-value ${perDayLeft < 0 ? 'neg' : ''}">${fmtDisp(perDayLeft)}</span>
+            <div class="ring-kpi-card ${perDayLeft < 0 ? 'ring-kpi-neg' : ''}">
+              <span class="ring-kpi-icon">${iconSvg('cash')}</span>
+              <span class="ring-kpi-divider"></span>
+              <div>
+                <div class="ring-stat-label">Podés gastar por día</div>
+                <div class="ring-kpi-value">${fmtDisp(perDayLeft)}</div>
+              </div>
             </div>` : ''}
           </div>
         </div>
