@@ -373,6 +373,8 @@
     arrowDown: '<path d="M10 4v12M5 11l5 5 5-5"/>',
     arrowUp: '<path d="M10 16V4M5 9l5-5 5 5"/>',
     minus: '<path d="M5 10h10"/>',
+    chevLeft: '<path d="M12 4.5 6.5 10l5.5 5.5"/>',
+    chevRight: '<path d="M8 4.5 13.5 10 8 15.5"/>',
   };
   function iconSvg(name, cls) {
     const body = ICON_PATHS[name] || ICON_PATHS.tag;
@@ -417,94 +419,99 @@
       ${arc(rI, strokeI, pctInner, '--warn')}
     </svg>`;
   }
-  // Línea de tendencia de la tasa de ahorro, con una etiqueta redondeada
-  // arriba de cada punto (el último, resaltado en sólido) y relleno en
-  // degradé debajo de la curva. Sin eje numérico: los valores los da cada
-  // etiqueta, no una escala de fondo. rows: [{label, rate}] (rate en %,
+  // Curva suave (monótona: no inventa picos ni valles entre dos meses)
+  // que pasa por todos los puntos. pts: [{x, y}] ordenados por x.
+  function smoothLinePath(pts) {
+    if (pts.length < 2) return pts.length ? `M${pts[0].x},${pts[0].y}` : '';
+    const n = pts.length;
+    const m = [];
+    for (let i = 0; i < n - 1; i++) m.push((pts[i + 1].y - pts[i].y) / (pts[i + 1].x - pts[i].x));
+    const t = [m[0]];
+    for (let i = 1; i < n - 1; i++) t.push(m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2);
+    t.push(m[n - 2]);
+    for (let i = 0; i < n - 1; i++) {
+      if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+      const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
+      if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+    }
+    let d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < n - 1; i++) {
+      const p = pts[i], q = pts[i + 1], dx = (q.x - p.x) / 3;
+      d += ` C${p.x + dx},${p.y + t[i] * dx} ${q.x - dx},${q.y - t[i + 1] * dx} ${q.x},${q.y}`;
+    }
+    return d;
+  }
+
+  // Tendencia de la tasa de ahorro (media tarjeta del Resumen): curva suave
+  // con marcador en cada mes y relleno en degradé debajo. Sin eje numérico:
+  // los valores los dan las etiquetas. rows: [{label, rate}] (rate en %,
   // puede ser negativo).
   function savingsRateTrendSvg(rows) {
     if (!rows.length) return '';
-    const W = 640, H = 230;
-    const topPad = 46, bottomPad = 34, padX = 30;
+    const W = 300, H = 200;
+    const topPad = 42, bottomPad = 28, padX = 24;
     const plotTop = topPad, plotBottom = H - bottomPad;
     const plotH = plotBottom - plotTop;
-    const plotLeft = padX, plotRight = W - padX;
-    const plotW = plotRight - plotLeft;
-    // Con pocos meses (recién arrancando la app) no tiene sentido estirar la
-    // línea a lo ancho de toda la tarjeta: se limita el espacio entre
-    // puntos y se centra el tramo usado, en vez de un diagonal exagerado
-    // de punta a punta.
-    const MAX_BAND = 120;
-    const band = rows.length > 1 ? Math.min(MAX_BAND, plotW / rows.length) : plotW;
-    const usedWidth = rows.length > 1 ? band * rows.length : band;
-    const startX = plotLeft + Math.max(0, (plotW - usedWidth) / 2);
-    const x = (i) => rows.length > 1 ? startX + band * i + band / 2 : startX + usedWidth / 2;
+    const plotW = W - padX * 2;
+    const x = (i) => rows.length > 1 ? padX + (plotW * i) / (rows.length - 1) : W / 2;
 
     const rates = rows.map((r) => r.rate);
     const domainMax = Math.max(...rates);
     const domainMin = Math.min(...rates);
     const span = Math.max(domainMax - domainMin, 1);
-    const pad = span * 0.2;
-    const scaledMax = domainMax + pad, scaledMin = domainMin - pad;
-    const scaledRange = scaledMax - scaledMin || 1;
-    const y = (v) => plotTop + (scaledMax - v) / scaledRange * plotH;
+    const scaledMax = domainMax + span * 0.15, scaledMin = domainMin - span * 0.25;
+    const y = (v) => plotTop + (scaledMax - v) / (scaledMax - scaledMin) * plotH;
 
-    // Últimos 6 meses en verde (buena racha); si el mes en curso quedó
-    // negativo (retiro neto), toda la curva pasa a la paleta de alerta.
+    // Verde si el mes en curso quedó ahorrando; si fue un retiro neto
+    // (negativo), toda la curva pasa a la paleta de alerta.
     const bad = rates[rates.length - 1] < 0;
     const lineColor = bad ? 'var(--crit)' : 'var(--income)';
-    const fillColor = bad ? 'var(--crit)' : 'var(--income)';
     const gradId = 'savRateGrad' + Math.round(Math.random() * 1e6);
 
     const pts = rows.map((r, i) => ({ x: x(i), y: y(r.rate), rate: r.rate, label: r.label }));
-    const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+    const linePath = smoothLinePath(pts);
     const areaPath = `${linePath} L${pts[pts.length - 1].x},${plotBottom} L${pts[0].x},${plotBottom} Z`;
 
     const gridLines = pts.map((p) => `<line x1="${p.x}" y1="${p.y}" x2="${p.x}" y2="${plotBottom}"
-      stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>`).join('');
-
+      stroke="var(--border)" stroke-width="1.5" stroke-dasharray="3 4"/>`).join('');
     const dots = pts.map((p, i) => {
       const isLast = i === pts.length - 1;
-      return `<circle cx="${p.x}" cy="${p.y}" r="${isLast ? 5.5 : 4}" fill="${lineColor}" stroke="var(--surface)" stroke-width="2"/>`;
+      return `<circle cx="${p.x}" cy="${p.y}" r="${isLast ? 7.5 : 5.5}" fill="${isLast ? lineColor : 'var(--surface)'}" stroke="${lineColor}" stroke-width="3.5"/>`;
     }).join('');
 
     const svg = `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="Evolución de la tasa de ahorro">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${fillColor}" stop-opacity="0.28"/>
-          <stop offset="100%" stop-color="${fillColor}" stop-opacity="0"/>
+          <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
         </linearGradient>
       </defs>
-      <line x1="${startX}" y1="${plotBottom}" x2="${startX + usedWidth}" y2="${plotBottom}" stroke="var(--axis)" stroke-width="1"/>
+      <line x1="${padX - 10}" y1="${plotBottom}" x2="${W - padX + 10}" y2="${plotBottom}" stroke="var(--axis)" stroke-width="1.5"/>
       ${gridLines}
       <path d="${areaPath}" fill="url(#${gradId})" stroke="none"/>
-      <path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
       ${dots}
     </svg>`;
 
-    // Las etiquetas van como HTML encima del SVG (no como <text> adentro):
-    // un SVG escala todo por igual, así que en una tarjeta angosta el texto
-    // de las burbujas se volvía ilegible junto con el resto del dibujo. Como
-    // overlay en % sobre el mismo contenedor, el tamaño de letra queda fijo
-    // sin importar cuánto se achique la curva.
+    // Etiquetas como HTML encima del SVG (en % del contenedor) para que el
+    // tamaño de letra no se achique junto con el dibujo. El mes actual va
+    // en una píldora de color; los demás, como texto chico sin fondo (en
+    // una media tarjeta las píldoras de todos se pisaban entre sí). Con
+    // más de 4 meses no entran todos: quedan el primero y el actual.
     const pctX = (px) => (px / W) * 100;
     const pctY = (py) => (py / H) * 100;
-    // En una pantalla angosta no entran 5 o 6 burbujas sin pisarse entre
-    // ellas — ahí se etiquetan solo la primera y la actual (el punto de
-    // partida y adónde se llegó), y el resto queda solo como puntos sobre
-    // la línea, sin perder la forma de la curva.
-    const narrow = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 560px)').matches;
-    const showBubble = (i) => !narrow || rows.length <= 3 || i === 0 || i === pts.length - 1;
-    const bubblesHTML = pts.map((p, i) => {
-      if (!showBubble(i)) return '';
+    const showLabel = (i) => rows.length <= 4 || i === 0 || i === pts.length - 1;
+    const labelsHTML = pts.map((p, i) => {
+      if (!showLabel(i)) return '';
       const isLast = i === pts.length - 1;
-      const posStyle = `left:${pctX(p.x)}%;top:${pctY(p.y)}%`;
-      const colorStyle = isLast ? `;background:${lineColor};color:var(--on-accent)` : '';
-      return `<span class="savings-rate-bubble${isLast ? ' current' : ''}" style="${posStyle}${colorStyle}">${p.rate}%</span>`;
+      const pos = `left:${pctX(p.x)}%;top:${pctY(p.y)}%`;
+      return isLast
+        ? `<span class="savings-rate-bubble current" style="${pos};background:${lineColor}">${p.rate}%</span>`
+        : `<span class="savings-rate-bubble" style="${pos}">${p.rate}%</span>`;
     }).join('');
-    const monthLabelsHTML = pts.map((p) => `<span class="savings-rate-xlabel" style="left:${pctX(p.x)}%;top:${pctY(H - 6)}%">${esc(p.label)}</span>`).join('');
+    const monthLabelsHTML = pts.map((p) => `<span class="savings-rate-xlabel" style="left:${pctX(p.x)}%;top:${pctY(plotBottom + 6)}%">${esc(p.label)}</span>`).join('');
 
-    return `<div class="savings-rate-chart-inner">${svg}${bubblesHTML}${monthLabelsHTML}</div>`;
+    return `<div class="savings-rate-chart-inner">${svg}${labelsHTML}${monthLabelsHTML}</div>`;
   }
 
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
@@ -2219,8 +2226,8 @@
         <div class="hero-head">
           <span class="hero-head-label">${iconSvg('calendar')}<span>${esc(monthLabel(mk))}</span></span>
           <span class="hero-head-nav">
-            <button class="hero-head-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
-            <button class="hero-head-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
+            <button class="hero-head-btn" data-mnav="-1" aria-label="Mes anterior">${iconSvg('chevLeft')}</button>
+            <button class="hero-head-btn" data-mnav="1" aria-label="Mes siguiente">${iconSvg('chevRight')}</button>
           </span>
           <svg class="hero-wave" viewBox="0 0 400 36" preserveAspectRatio="none" aria-hidden="true">
             <path class="hero-wave-back" d="M0 24 C 70 8, 150 8, 230 20 S 350 30, 400 10 V36 H0 Z"/>
@@ -2234,15 +2241,18 @@
             <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
             <div class="hero-legend">
               <span><span class="dot dot-accent"></span><b>${pctLeft}%</b> balance</span>
-              <span><span class="dot dot-warn"></span><b>${daysLeft}</b> día${daysLeft === 1 ? '' : 's'}</span>
+              <span><span class="dot dot-warn"></span><b>${daysLeft}</b> día${daysLeft === 1 ? '' : 's'} restante${daysLeft === 1 ? '' : 's'}</span>
             </div>
           </div>
-          <div class="hero-ring-col">
-            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 84)}</div>
-            ${perDayLeft != null ? `
-            <div class="hero-perday ${perDayLeft < 0 ? 'neg' : ''}">
-              <b>${fmtDisp(perDayLeft)}</b><span>por día</span>
-            </div>` : ''}
+          <div class="hero-ring">
+            ${ringSvg2(pctLeft, pctMonthLeft, 112)}
+            ${perDayLeft != null ? (() => {
+              const txt = fmtDisp(perDayLeft);
+              const sizeCls = txt.length > 10 ? 'xs' : txt.length > 8 ? 'sm' : '';
+              return `<div class="hero-ring-center ${perDayLeft < 0 ? 'neg' : ''}">
+              <b class="${sizeCls}">${txt}</b><span>por día</span>
+            </div>`;
+            })() : ''}
           </div>
         </div>
         <div class="hero-stats">
@@ -2279,7 +2289,6 @@
           <div class="savings-rate-value ${savingsRatePct == null ? '' : savingsRatePct > 0 ? 'pos' : savingsRatePct < 0 ? 'neg' : ''}">${savingsRatePct == null ? '—' : savingsRatePct + '%'}</div>
           ${savingsRateDeltaHTML}
         </div>
-        <div class="savings-rate-sub">Últimos 6 meses</div>
         <div class="savings-rate-chart">
           ${hasSavingsRateTrend ? savingsRateTrendSvg(savingsRateRows)
             : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}

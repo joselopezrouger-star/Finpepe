@@ -11,6 +11,7 @@
   --bg: #f4f6f8;
   --surface: #ffffff;
   --hero-body: #f5faf7;
+  --pill-ink: #ffffff;
   --surface-2: #eef1f4;
   --border: #e2e6ec;
   --border-strong: #cbd2dc;
@@ -49,6 +50,7 @@
   --bg: #0a0f1e;
   --surface: #13192b;
   --hero-body: #13192b;
+  --pill-ink: #032a1f;
   --surface-2: #1a2235;
   --border: #202a40;
   --border-strong: #2c3a58;
@@ -371,7 +373,7 @@ button {
    entrar en media pantalla. */
 .grid-2.grid-2-pair { grid-template-columns: 1fr 1fr; gap: 10px; }
 .card-compact { padding: 12px; display: flex; flex-direction: column; min-width: 0; }
-.card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; margin-bottom: 8px; }
+.card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; margin-bottom: 8px; align-items: flex-start; min-height: 0; }
 .cats-bars-compact .hbar-row { padding: 3px 0; gap: 1px; }
 .cats-bars-compact .hbar-label { font-size: 10.5px; gap: 3px; }
 .cats-bars-compact .hbar-dot { width: 6px; height: 6px; }
@@ -384,7 +386,6 @@ button {
 /* ---------- Tasa de ahorro (Resumen): valor + variación arriba, curva abajo ---------- */
 .savings-rate-card { cursor: pointer; }
 .savings-rate-stat { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
-.savings-rate-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
 .savings-rate-value { font: 700 26px/1.1 var(--font-heading); letter-spacing: -0.02em; color: var(--ink); }
 .savings-rate-value.pos { color: var(--income); }
 .savings-rate-value.neg { color: var(--crit); }
@@ -395,7 +396,7 @@ button {
 }
 .savings-rate-pill.pos { background: var(--accent-wash); color: var(--accent-down); }
 .savings-rate-pill.neg { background: var(--danger-bg); color: var(--danger-ink); }
-.savings-rate-chart { flex: 1; min-width: 0; display: flex; align-items: flex-end; margin-top: 22px; }
+.savings-rate-chart { flex: 1; min-width: 0; display: flex; align-items: center; margin-top: 6px; }
 .savings-rate-chart .empty { margin: auto; font-size: 13px; }
 .savings-rate-chart-inner { position: relative; width: 100%; }
 .savings-rate-chart-inner svg { display: block; width: 100%; height: auto; }
@@ -403,19 +404,17 @@ button {
    del SVG, que escala todo por igual) — así siguen siendo legibles aunque
    la curva se achique mucho en una tarjeta angosta. */
 .savings-rate-bubble {
-  position: absolute; transform: translate(-50%, calc(-100% - 10px));
-  white-space: nowrap; font: 700 11.5px var(--font-heading);
-  padding: 4px 9px; border-radius: 999px;
-  background: var(--surface-2); color: var(--ink-2);
+  position: absolute; transform: translate(-50%, calc(-100% - 7px));
+  white-space: nowrap; font: 700 10.5px var(--font-heading); color: var(--ink-2);
   pointer-events: none;
 }
-.savings-rate-bubble.current { font-size: 13.5px; font-weight: 800; padding: 5px 11px; }
-.card-compact .savings-rate-bubble { font-size: 10px; padding: 3px 7px; }
-.card-compact .savings-rate-bubble.current { font-size: 11px; padding: 3px 8px; }
-.card-compact .savings-rate-xlabel { font-size: 9.5px; }
+.savings-rate-bubble.current {
+  font-size: 11.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px;
+  color: var(--pill-ink); transform: translate(-50%, calc(-100% - 9px));
+}
 .savings-rate-xlabel {
   position: absolute; transform: translate(-50%, 0);
-  font-size: 11px; color: var(--muted); white-space: nowrap; pointer-events: none;
+  font-size: 10px; color: var(--muted); white-space: nowrap; pointer-events: none;
 }
 
 /* ---------- "Cómo vas este mes" (comentario automático en Resumen) ---------- */
@@ -1576,7 +1575,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .hero-head {
   position: relative;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 16px 18px 34px;
+  padding: 16px 18px 32px;
   background: linear-gradient(135deg, var(--honey-deep), color-mix(in srgb, var(--honey-deep) 70%, #0b3d2c));
   color: #fff;
 }
@@ -1596,6 +1595,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   font-size: 20px; line-height: 1; color: #fff;
   background: color-mix(in srgb, white 16%, transparent);
 }
+.hero-head-btn svg { width: 18px; height: 18px; stroke-width: 2.4; display: block; }
 .hero-head-btn:hover { background: color-mix(in srgb, white 26%, transparent); }
 .hero-head-btn:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 .hero-wave { position: absolute; left: 0; right: 0; bottom: -1px; width: 100%; height: 30px; display: block; }
@@ -1607,10 +1607,12 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 /* Balance a la izquierda (monto + leyenda de los anillos) y el anillo
    doble a la derecha: externo = % de balance, interno = % del mes que
    falta. La leyenda de abajo del monto hace de referencia de colores. */
-.hero-main { display: flex; align-items: center; gap: 12px; padding: 2px 18px 0; }
+.hero-main { display: flex; align-items: flex-start; gap: 12px; padding: 0 18px 0; }
 .hero-main-left { flex: 1; min-width: 0; }
-.hero-main .hero-label { text-transform: uppercase; }
-.hero-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink-2); }
+.hero-main .hero-label { text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.06em; }
+.hero-main .hero-value { font-size: 42px; line-height: 1.1; margin: 2px 0 8px; }
+@media (max-width: 560px) { .hero-main .hero-value { font-size: clamp(26px, 9.2vw, 36px); } }
+.hero-legend { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-2); }
 .hero-legend > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .hero-legend b { font: 700 13px var(--font-heading); color: var(--ink); }
 .hero-legend .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
@@ -1618,17 +1620,18 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .hero-ring svg { display: block; }
 .dot-accent { background: var(--accent); }
 .dot-warn { background: var(--warn); }
-/* Columna derecha: anillo doble y, debajo, cuánto se puede gastar por
-   día (chico, como dato secundario del anillo). Rojo si ya no queda plata. */
-.hero-ring-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.hero-perday {
-  display: flex; flex-direction: column; align-items: center; line-height: 1.15;
-  padding: 3px 8px; border-radius: 8px; background: var(--accent-wash);
+/* Cuánto se puede gastar por día, en el hueco del anillo doble (la letra
+   se achica si el monto es largo). Rojo si ya no queda plata. */
+.hero-ring-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  line-height: 1.1; pointer-events: none;
 }
-.hero-perday b { font: 700 12.5px var(--font-heading); color: var(--ink); white-space: nowrap; }
-.hero-perday span { font-size: 9.5px; color: var(--ink-2); white-space: nowrap; }
-.hero-perday.neg { background: var(--danger-bg); }
-.hero-perday.neg b { color: var(--crit); }
+.hero-ring-center b { font: 700 14px var(--font-heading); color: var(--ink); white-space: nowrap; }
+.hero-ring-center b.sm { font-size: 12px; }
+.hero-ring-center b.xs { font-size: 10px; }
+.hero-ring-center span { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.hero-ring-center.neg b { color: var(--crit); }
 /* Ingresos / Gastos / Ahorros: tres tarjetitas con ícono de color. */
 .hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 12px 4px; }
 .hero-stat { min-width: 0; padding: 9px 8px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
