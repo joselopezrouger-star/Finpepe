@@ -411,7 +411,7 @@
           stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
           transform="rotate(-90 ${size / 2} ${size / 2})"/>`;
     };
-    const strokeO = 7, strokeI = 6, gap = 3;
+    const strokeO = 9.5, strokeI = 8.5, gap = 3;
     const rO = size / 2 - strokeO / 2 - 1;
     const rI = rO - strokeO / 2 - gap - strokeI / 2;
     return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
@@ -2250,7 +2250,7 @@
             </div>
           </div>
           <div class="hero-ring">
-            ${ringSvg2(pctLeft, pctMonthLeft, 112)}
+            ${ringSvg2(pctLeft, pctMonthLeft, 104)}
             ${perDayLeft != null ? (() => {
               const txt = fmtDisp(perDayLeft);
               const sizeCls = txt.length > 10 ? 'xs' : txt.length > 8 ? 'sm' : '';

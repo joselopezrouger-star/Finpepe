@@ -1635,10 +1635,10 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   line-height: 1.1; pointer-events: none;
 }
-.hero-ring-center b { font: 700 14px var(--font-heading); color: var(--ink); white-space: nowrap; }
-.hero-ring-center b.sm { font-size: 12px; }
-.hero-ring-center b.xs { font-size: 10px; }
-.hero-ring-center span { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.hero-ring-center b { font: 700 13px var(--font-heading); color: var(--ink); white-space: nowrap; }
+.hero-ring-center b.sm { font-size: 11.5px; }
+.hero-ring-center b.xs { font-size: 9.5px; }
+.hero-ring-center span { font-size: 9.5px; color: var(--muted); margin-top: 1px; }
 .hero-ring-center.neg b { color: var(--crit); }
 /* Ingresos / Gastos / Ahorros: tres tarjetitas con ícono de color. */
 .hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 12px 4px; }
