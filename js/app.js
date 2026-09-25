@@ -44,6 +44,7 @@
     const dim = new Date(y, m0 + 1, 0).getDate();
     return new Date(y, m0, Math.min(day, dim));
   };
+  const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
 
   const monthLongFmt = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' });
   const monthShortFmt = new Intl.DateTimeFormat('es-AR', { month: 'short' });
@@ -908,26 +909,48 @@
   }
 
   /* ================= Recurrentes: generación automática ================= */
+  // Un fijo "monthly" (o sin freq, para los ya cargados antes de esto) sigue
+  // generándose mes a mes por r.day, con r.lastGen como mes-clave. Uno
+  // "weekly"/"biweekly" no tiene un "mes" natural (puede caer 4 o 5 veces
+  // en el mismo mes), así que se genera por fecha real: cada 7 o 14 días
+  // desde r.startDate, con r.lastGenDate (una fecha, no un mes) llevando la
+  // cuenta de la última ocurrencia ya creada.
+  function pushRecurringTx(r, dateStr) {
+    const tx = {
+      id: Store.uid(), date: dateStr, type: r.type, amount: r.amount,
+      currency: r.currency, categoryId: r.categoryId, methodId: r.methodId,
+      note: r.name, recurringId: r.id,
+      usdSnapshot: usdSnapshotFor(r.amount, r.currency), arsSnapshot: arsSnapshotFor(r.amount, r.currency),
+    };
+    S().transactions.push(tx);
+    if (dateStr !== todayStr()) refineSnapshotLater(tx);
+  }
   function generateRecurring() {
     const cm = curMonth();
+    const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
     let changed = false;
     for (const r of S().recurring) {
-      let m = r.lastGen ? addMonthsKey(r.lastGen, 1) : cm;
-      while (m <= cm) {
-        const [y, mo] = m.split('-').map(Number);
-        const d = clampDate(y, mo - 1, r.day);
-        const dateStr = dateToStr(d);
-        const tx = {
-          id: Store.uid(), date: dateStr, type: r.type, amount: r.amount,
-          currency: r.currency, categoryId: r.categoryId, methodId: r.methodId,
-          note: r.name, recurringId: r.id,
-          usdSnapshot: usdSnapshotFor(r.amount, r.currency), arsSnapshot: arsSnapshotFor(r.amount, r.currency),
-        };
-        S().transactions.push(tx);
-        if (dateStr !== todayStr()) refineSnapshotLater(tx);
-        r.lastGen = m;
-        changed = true;
-        m = addMonthsKey(m, 1);
+      if (r.freq === 'weekly' || r.freq === 'biweekly') {
+        if (!r.startDate) continue;
+        const step = r.freq === 'weekly' ? 7 : 14;
+        let cursor = r.lastGenDate ? addDays(parseDate(r.lastGenDate), step) : parseDate(r.startDate);
+        while (cursor <= todayD) {
+          const dateStr = dateToStr(cursor);
+          pushRecurringTx(r, dateStr);
+          r.lastGenDate = dateStr;
+          changed = true;
+          cursor = addDays(cursor, step);
+        }
+      } else {
+        let m = r.lastGen ? addMonthsKey(r.lastGen, 1) : cm;
+        while (m <= cm) {
+          const [y, mo] = m.split('-').map(Number);
+          const d = clampDate(y, mo - 1, r.day);
+          pushRecurringTx(r, dateToStr(d));
+          r.lastGen = m;
+          changed = true;
+          m = addMonthsKey(m, 1);
+        }
       }
     }
     if (changed) Store.save();
@@ -3474,13 +3497,37 @@
     const events = [];
 
     for (const r of S().recurring) {
-      const d = clampDate(y, mo - 1, r.day);
-      events.push({
-        date: dateToStr(d), kind: r.type, // 'gasto' | 'ingreso'
-        icon: r.type === 'ingreso' ? '💰' : '🔁',
-        title: r.name, sub: (r.type === 'ingreso' ? 'Ingreso fijo' : 'Gasto fijo') + ' · día ' + r.day,
-        amount: r.amount, currency: r.currency,
-      });
+      const label = r.type === 'ingreso' ? 'Ingreso fijo' : 'Gasto fijo';
+      if (r.freq === 'weekly' || r.freq === 'biweekly') {
+        // No hay un "día del mes" fijo: puede caer 4 o 5 veces en el mismo
+        // mes, así que se listan todas las ocurrencias reales que entran
+        // dentro de ese mes en vez de una sola.
+        if (!r.startDate) continue;
+        const step = r.freq === 'weekly' ? 7 : 14;
+        const monthStart = new Date(y, mo - 1, 1);
+        const monthEnd = new Date(y, mo, 0);
+        let cursor = parseDate(r.startDate);
+        if (cursor < monthStart) {
+          const steps = Math.ceil((monthStart - cursor) / DAY_MS / step);
+          cursor = addDays(cursor, steps * step);
+        }
+        for (; cursor <= monthEnd; cursor = addDays(cursor, step)) {
+          events.push({
+            date: dateToStr(cursor), kind: r.type,
+            icon: r.type === 'ingreso' ? '💰' : '🔁',
+            title: r.name, sub: label + (r.freq === 'weekly' ? ' · semanal' : ' · quincenal'),
+            amount: r.amount, currency: r.currency,
+          });
+        }
+      } else {
+        const d = clampDate(y, mo - 1, r.day);
+        events.push({
+          date: dateToStr(d), kind: r.type, // 'gasto' | 'ingreso'
+          icon: r.type === 'ingreso' ? '💰' : '🔁',
+          title: r.name, sub: label + ' · día ' + r.day,
+          amount: r.amount, currency: r.currency,
+        });
+      }
     }
 
     for (const c of S().methods.filter((m) => m.kind === 'credito')) {
@@ -4015,12 +4062,19 @@
     wireAmountInput($('#b-amount', dlg));
   }
 
+  const RECURRING_FREQ_HINT = {
+    monthly: 'Se genera un movimiento automáticamente cada mes, a partir de este mes.',
+    weekly: 'Se genera un movimiento automáticamente cada 7 días, a partir de la fecha elegida.',
+    biweekly: 'Se genera un movimiento automáticamente cada 15 días, a partir de la fecha elegida.',
+  };
   function recurringForm(rec) {
     const editing = !!rec;
     const r = rec || {
       name: '', type: 'gasto', amount: '', currency: 'ARS',
       categoryId: '', methodId: S().methods[0] ? S().methods[0].id : '', day: 1,
+      freq: 'monthly',
     };
+    const freq = r.freq || 'monthly';
     const body = `
       <div class="field">
         <label for="r-name">Nombre</label>
@@ -4036,9 +4090,21 @@
           </select>
         </div>
         <div class="field">
-          <label for="r-day">Día del mes</label>
-          <input type="number" name="day" id="r-day" min="1" max="28" step="1" required value="${esc(r.day)}">
+          <label for="r-freq">Frecuencia</label>
+          <select name="freq" id="r-freq">
+            <option value="monthly" ${freq === 'monthly' ? 'selected' : ''}>Mensual</option>
+            <option value="weekly" ${freq === 'weekly' ? 'selected' : ''}>Semanal</option>
+            <option value="biweekly" ${freq === 'biweekly' ? 'selected' : ''}>Quincenal</option>
+          </select>
         </div>
+      </div>
+      <div class="field" id="r-day-wrap">
+        <label for="r-day">Día del mes</label>
+        <input type="number" name="day" id="r-day" min="1" max="28" step="1" value="${esc(r.day || 1)}">
+      </div>
+      <div class="field" id="r-start-wrap">
+        <label for="r-start">Fecha del primer pago</label>
+        <input type="date" name="startDate" id="r-start" value="${esc(r.startDate || todayStr())}">
       </div>
       <div class="field-row">
         <div class="field">
@@ -4061,20 +4127,25 @@
         <label for="r-method">Medio de pago</label>
         <select name="methodId" id="r-method" required>${selOptions(S().methods, r.methodId)}</select>
       </div>
-      <span class="hint">Se genera un movimiento automáticamente cada mes, a partir de este mes.</span>`;
+      <span class="hint" id="r-hint">${RECURRING_FREQ_HINT[freq]}</span>`;
     const dlg = openDialog(editing ? 'Editar movimiento fijo' : 'Nuevo movimiento fijo', body, {
       onSubmit(d) {
         const amount = parseAmountInput(d.amount);
         if (!(amount > 0)) return false;
         const data = {
           name: d.name.trim(), type: d.type, amount, currency: d.currency,
-          categoryId: d.categoryId, methodId: d.methodId,
-          day: Math.min(28, Math.max(1, parseInt(d.day, 10) || 1)),
+          categoryId: d.categoryId, methodId: d.methodId, freq: d.freq,
         };
+        if (d.freq === 'monthly') {
+          data.day = Math.min(28, Math.max(1, parseInt(d.day, 10) || 1));
+        } else {
+          if (!d.startDate) return false;
+          data.startDate = d.startDate;
+        }
         if (editing) {
           Object.assign(rec, data);
         } else {
-          S().recurring.push({ id: Store.uid(), ...data, lastGen: null });
+          S().recurring.push({ id: Store.uid(), ...data, lastGen: null, lastGenDate: null });
           generateRecurring();
         }
         Store.save();
@@ -4085,6 +4156,20 @@
       const sel = $('#r-cat', dlg);
       sel.innerHTML = catSelectOptionsHTML($('#r-type', dlg).value, sel.value);
     });
+    // Alterna entre "Día del mes" (mensual) y "Fecha del primer pago"
+    // (semanal/quincenal, que no tienen un día de mes fijo) sin dos campos
+    // a la vez ocupando lugar.
+    const syncFreqFields = () => {
+      const f = $('#r-freq', dlg).value;
+      const isMonthly = f === 'monthly';
+      $('#r-day-wrap', dlg).hidden = !isMonthly;
+      $('#r-day', dlg).required = isMonthly;
+      $('#r-start-wrap', dlg).hidden = isMonthly;
+      $('#r-start', dlg).required = !isMonthly;
+      $('#r-hint', dlg).textContent = RECURRING_FREQ_HINT[f];
+    };
+    syncFreqFields();
+    $('#r-freq', dlg).addEventListener('change', syncFreqFields);
     wireAmountInput($('#r-amount', dlg));
   }
 
@@ -4293,18 +4378,21 @@
 
       <div class="card">
         <h2 class="card-title">
-          <span>Movimientos fijos (se repiten todos los meses)</span>
+          <span>Movimientos fijos</span>
           <button class="link-btn" id="btn-add-rec">+ Fijo</button>
         </h2>
         ${S().recurring.length ? `
         <div class="tx-card-list">
           ${S().recurring.map((r) => {
             const isIncome = r.type === 'ingreso';
+            const freqSub = r.freq === 'weekly' ? 'Semanal'
+              : r.freq === 'biweekly' ? 'Quincenal'
+              : `Día ${r.day}`;
             return `<div class="tx-card-row" data-rid="${esc(r.id)}">
               <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(isIncome ? 'trend' : 'cash')}</div>
               <div class="tx-card-main">
                 <div class="tx-card-title">${esc(r.name)}</div>
-                <div class="tx-card-sub">${esc(catName(r.categoryId))} · ${esc(methodName(r.methodId))} · día ${r.day}</div>
+                <div class="tx-card-sub">${esc(catName(r.categoryId))} · ${esc(methodName(r.methodId))} · ${esc(freqSub)}</div>
               </div>
               <div class="tx-card-amount">
                 <div class="v ${isIncome ? 'pos' : ''}">${isIncome ? '+' : '−'} ${fmtMoney(r.amount, r.currency)}</div>
@@ -4313,8 +4401,8 @@
             </div>`;
           }).join('')}
         </div>
-        <div class="hint" style="margin-top:8px">Al abrir la app en un mes nuevo, estos movimientos se cargan solos. Los ya generados se pueden editar o borrar como cualquier movimiento.</div>`
-        : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos cada mes.</div>'}
+        <div class="hint" style="margin-top:8px">Se cargan solos según su frecuencia (mensual, semanal o quincenal). Los ya generados se pueden editar o borrar como cualquier movimiento.</div>`
+        : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos, mensual, semanal o quincenalmente.</div>'}
       </div>`;
 
     const instMonthsEl = $('#chart-inst-months', el);
