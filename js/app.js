@@ -370,6 +370,9 @@
     swap: '<path d="M4 7h10.5M12 4.2 15 7l-3 2.8"/><path d="M16 13H5.5M8 10.2 5 13l3 2.8"/>',
     calendar: '<rect x="3" y="4.5" width="14" height="12" rx="1.5"/><path d="M3 8h14"/><path d="M6.5 3v3M13.5 3v3"/>',
     expand: '<path d="M7 3H3v4M13 3h4v4M3 13v4h4M17 13v4h-4"/>',
+    arrowDown: '<path d="M10 4v12M5 11l5 5 5-5"/>',
+    arrowUp: '<path d="M10 16V4M5 9l5-5 5 5"/>',
+    minus: '<path d="M5 10h10"/>',
   };
   function iconSvg(name, cls) {
     const body = ICON_PATHS[name] || ICON_PATHS.tag;
@@ -412,56 +415,6 @@
     return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
       ${arc(rO, strokeO, pctOuter, '--accent')}
       ${arc(rI, strokeI, pctInner, '--warn')}
-    </svg>`;
-  }
-  // Mismo criterio de color en todo el degradé del velocímetro
-  // (crit→warn→good): se usa tanto para pintar la barra como el número
-  // grande de adentro.
-  function speedoColorFor(pct) {
-    const p = Math.max(0, Math.min(100, pct)) / 100;
-    return p <= 0.5
-      ? `color-mix(in srgb, var(--gauge-warn) ${Math.round((p / 0.5) * 100)}%, var(--gauge-crit))`
-      : `color-mix(in srgb, var(--gauge-good) ${Math.round(((p - 0.5) / 0.5) * 100)}%, var(--gauge-warn))`;
-  }
-  // "Velocímetro" horizontal (barra recta, no arco): a la izquierda 0%
-  // (rojo), a la derecha 100% (verde). Arriba de la barra van el % grande
-  // y la etiqueta "Balance del mes", centrados; debajo de la barra sólo
-  // quedan las referencias 0% y 100% (los extremos, no toda la escala).
-  // El ancho real en pantalla lo fija el CSS (hero-speedo-section svg),
-  // acá sólo se define la proporción interna.
-  function speedoGaugeSvg(pct, viewW) {
-    viewW = viewW || 220;
-    const padX = 14;
-    // Sin sub-etiqueta "Balance del mes": ya lo dice el título de arriba
-    // de la tarjeta, repetirlo acá era redundante. El % también se achica
-    // (antes competía en tamaño con el número grande de más arriba).
-    const labelSize = Math.round(viewW * 0.11);
-    const labelTopY = 2;
-    const barH = Math.max(10, Math.round(viewW * 0.055));
-    const barTopY = labelTopY + labelSize + 8;
-    const barCenterY = barTopY + barH / 2;
-    const tickY = barCenterY + barH / 2 + 14;
-    const height = tickY + 4;
-    const p0 = { x: padX, y: barCenterY };
-    const p1 = { x: viewW - padX, y: barCenterY };
-    const p = Math.max(0, Math.min(100, pct)) / 100;
-    const markerX = p0.x + (p1.x - p0.x) * p;
-    const gradId = 'speedoGrad' + Math.round(Math.random() * 1e6);
-    const tick0 = `<text x="${p0.x}" y="${tickY}" text-anchor="start" font-size="10.5" fill="var(--muted)" font-family="var(--font)">0%</text>`;
-    const tick100 = `<text x="${p1.x}" y="${tickY}" text-anchor="end" font-size="10.5" fill="var(--muted)" font-family="var(--font)">100%</text>`;
-    const textColor = speedoColorFor(pct);
-    return `<svg width="100%" height="${height}" viewBox="0 0 ${viewW} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Balance del mes: ${Math.round(pct)}%">
-      <defs>
-        <linearGradient id="${gradId}" x1="${p0.x}" y1="${p0.y}" x2="${p1.x}" y2="${p1.y}" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stop-color="var(--gauge-crit)"/>
-          <stop offset="50%" stop-color="var(--gauge-warn)"/>
-          <stop offset="100%" stop-color="var(--gauge-good)"/>
-        </linearGradient>
-      </defs>
-      <line x1="${p0.x}" y1="${p0.y}" x2="${p1.x}" y2="${p1.y}" stroke="url(#${gradId})" stroke-width="${barH}" stroke-linecap="round"/>
-      <line x1="${markerX}" y1="${barCenterY - 9}" x2="${markerX}" y2="${barCenterY + 9}" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
-      ${tick0}${tick100}
-      <text x="${viewW / 2}" y="${labelTopY}" text-anchor="middle" dominant-baseline="hanging" font-size="${labelSize}" font-weight="800" fill="${textColor}" font-family="var(--font-heading)">${Math.round(pct)}%</text>
     </svg>`;
   }
   // Línea de tendencia de la tasa de ahorro, con una etiqueta redondeada
@@ -2269,58 +2222,48 @@
           <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
         </div>
         ${mk === curMonth() ? '' : '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>'}
-        <div class="hero-balance-center">
-          <div class="hero-label">Balance del mes</div>
-          <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
+        <div class="hero-main">
+          <div class="hero-main-left">
+            <div class="hero-label">Balance del mes</div>
+            <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
+            <div class="hero-legend">
+              <span><span class="dot dot-accent"></span><b>${pctLeft}%</b> balance</span>
+              <span><span class="dot dot-warn"></span><b>${daysLeft}</b> día${daysLeft === 1 ? '' : 's'}</span>
+            </div>
+          </div>
+          <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 84)}</div>
         </div>
-        <div class="hero-speedo-mini">
-          ${speedoGaugeSvg(pctLeft, 220)}
-        </div>
-        <div class="hero-split-3">
-          <div><div class="k">Ingresos</div><div class="v pos">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}</div>
-          <div><div class="k">Gastos</div><div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}</div>
-          <div><div class="k">Ahorros</div><div class="v ${savingsMonth < 0 ? 'neg' : ''}">${fmtDisp(savingsMonth)}</div>${savingsDelta}</div>
+        ${perDayLeft != null ? `
+        <div class="hero-perday ${perDayLeft < 0 ? 'neg' : ''}">
+          <span class="hero-perday-icon">${iconSvg('cash')}</span>
+          <span class="hero-perday-label">Podés gastar por día</span>
+          <span class="hero-perday-value">${fmtDisp(perDayLeft)}</span>
+        </div>` : ''}
+        <div class="hero-stats">
+          <div class="hero-stat hero-stat-inc">
+            <div class="hero-stat-head"><span class="hero-stat-icon">${iconSvg('arrowDown')}</span><span class="k">Ingresos</span></div>
+            <div class="v">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}
+          </div>
+          <div class="hero-stat hero-stat-exp">
+            <div class="hero-stat-head"><span class="hero-stat-icon">${iconSvg('arrowUp')}</span><span class="k">Gastos</span></div>
+            <div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}
+          </div>
+          <div class="hero-stat hero-stat-sav">
+            <div class="hero-stat-head"><span class="hero-stat-icon">${iconSvg('minus')}</span><span class="k">Ahorros</span></div>
+            <div class="v ${savingsMonth < 0 ? 'neg' : ''}">${fmtDisp(savingsMonth)}</div>${savingsDelta}
+          </div>
         </div>
       </div>
 
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
       ${sharedWidget}
 
-      <div class="grid-2 grid-2-tight">
-        <div class="card card-compact">
-          <h2 class="card-title">
-            <span>Gastos por categoría</span>
-            <button class="link-btn" data-goto-categorias>Ver análisis</button>
-          </h2>
-          ${catItems.length ? `<div id="chart-cats" class="cats-bars cats-bars-compact"></div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
-        </div>
-        <div class="card card-compact">
-          <h2 class="card-title">Balance y días del mes</h2>
-          <div class="hero-ring-standalone">
-            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 64)}</div>
-            <div class="ring-stat-row">
-              <div class="ring-stat-card ring-stat-accent">
-                <span class="dot dot-accent"></span>
-                <span class="ring-stat-label">Balance</span>
-                <span class="ring-stat-value">${pctLeft}%</span>
-              </div>
-              <div class="ring-stat-card ring-stat-warn">
-                <span class="dot dot-warn"></span>
-                <span class="ring-stat-label">Faltan</span>
-                <span class="ring-stat-value">${daysLeft} día${daysLeft === 1 ? '' : 's'}</span>
-              </div>
-            </div>
-            ${perDayLeft != null ? `
-            <div class="ring-kpi-card ${perDayLeft < 0 ? 'ring-kpi-neg' : ''}">
-              <div class="ring-kpi-top">
-                <span class="ring-kpi-icon">${iconSvg('cash')}</span>
-                <span class="ring-kpi-divider"></span>
-                <span class="ring-kpi-value">${fmtDisp(perDayLeft)}</span>
-              </div>
-              <div class="ring-kpi-label">Podés gastar por día</div>
-            </div>` : ''}
-          </div>
-        </div>
+      <div class="card">
+        <h2 class="card-title">
+          <span>Gastos por categoría</span>
+          <button class="link-btn" data-goto-categorias>Ver análisis</button>
+        </h2>
+        ${catItems.length ? `<div id="chart-cats" class="cats-bars"></div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
       </div>
 
       <div class="card savings-rate-card" data-goto-savings>

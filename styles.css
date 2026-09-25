@@ -32,9 +32,6 @@
   --good: #04996f;
   --warn: #a15c00;
   --crit: #d6362f;
-  --gauge-good: #7cd6b9;
-  --gauge-warn: #f0c869;
-  --gauge-crit: #f0928c;
   --danger-bg: #fdf0ef;
   --danger-border: #f4c9c6;
   --danger-ink: #8c241f;
@@ -72,9 +69,6 @@
   --good: #08d59d;
   --warn: #f5d142;
   --crit: #ff5e5b;
-  --gauge-good: #5eb99e;
-  --gauge-warn: #d9bd6a;
-  --gauge-crit: #d9807d;
   --danger-bg: #2a1416;
   --danger-border: #4a2228;
   --danger-ink: #ff5e5b;
@@ -340,30 +334,6 @@ button {
   .grid-tiles { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* "Gastos por categoría" + anillo: par que se pidió mantener lado a lado
-   incluso en el ancho de un celular (a diferencia del resto de los pares
-   de tarjetas, que se apilan abajo de los 820px). Achica todo lo demás
-   para que entre cómodo en la mitad del ancho de una pantalla chica. */
-.grid-2.grid-2-tight { grid-template-columns: 1fr 1fr; gap: 10px; }
-/* display:flex + flex-direction:column deja que .hero-ring-standalone (con
-   flex:1 más abajo) crezca para llenar el alto que le da la grilla (la
-   tarjeta de al lado, "Gastos por categoría", suele ser más alta) y
-   centre el anillo ahí adentro, en vez de quedar pegado arriba. */
-.card-compact { padding: 12px; display: flex; flex-direction: column; }
-.card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; }
-/* Si "Gastos por categoría" tiene pocas filas queda más baja que la
-   tarjeta del anillo de al lado (que la estira parejo por el grid); en vez
-   de dejar todo el sobrante pegado abajo, centramos la lista en el alto
-   disponible para que se reparta arriba y abajo. */
-.card-compact .cats-bars-compact { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-.cats-bars-compact .hbar-row { padding: 2px 0; gap: 1px; }
-.cats-bars-compact .hbar-label { font-size: 10px; gap: 3px; }
-.cats-bars-compact .hbar-dot { width: 6px; height: 6px; }
-.cats-bars-compact .hbar-amount { font-size: 10px; }
-.cats-bars-compact .hbar-trackrow { gap: 4px; }
-.cats-bars-compact .hbar-track { height: 8px; }
-.cats-bars-compact .hbar-bar { height: 8px; }
-.cats-bars-compact .hbar-pct { font-size: 9px; min-width: 18px; }
 
 /* ---------- Tiles de resumen ---------- */
 .tile { padding: 14px 16px; }
@@ -1586,10 +1556,9 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 }
 
 /* ---------- Hero: patrimonio neto ---------- */
-/* Barra de mes a todo el ancho arriba (con el overflow:hidden de .hero
-   recorta a las esquinas redondeadas), balance centrado debajo, franja de
-   Ingresos/Gastos/Ahorros en tres columnas con separadores, y el
-   velocímetro de medio círculo a todo el ancho al final. */
+/* Barra de mes a todo el ancho arriba (el overflow:hidden de .hero la
+   recorta a las esquinas redondeadas), balance + anillo doble, franja de
+   "por día" y tres tarjetitas de Ingresos/Gastos/Ahorros al final. */
 .hero {
   position: relative;
   overflow: hidden;
@@ -1615,80 +1584,58 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 /* Sólo se dibuja (ver app.js) cuando NO es el mes actual, así que acá no
    hace falta reservarle espacio de antemano. */
 .hero-mtoday { position: relative; display: block; width: 100%; text-align: center; font-size: 11px; margin: 4px 0 0; }
-.hero-balance-center { text-align: center; padding: 4px 20px 0; }
-.hero-balance-center .hero-label { justify-content: center; text-transform: uppercase; }
-/* Velocímetro chico, pegado debajo del número grande de Balance del mes
-   (no en su propia sección aparte): mismo dibujo que antes, sólo que
-   mucho más chico en pantalla vía el ancho del contenedor. */
-.hero-speedo-mini { text-align: center; padding: 2px 20px 0; }
-.hero-speedo-mini svg { width: 56%; max-width: 190px; min-width: 130px; height: auto; display: inline-block; }
-.hero-split-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  column-gap: 10px;
-  border-top: 1px solid var(--border);
-  padding: 8px 20px 0;
-}
-.hero-split-3 > div { min-width: 0; }
-.hero-split-3 > div + div { border-left: 1px solid var(--border); padding-left: 10px; }
-.hero-split-3 .k { font-size: 11.5px; color: var(--muted); }
-.hero-split-3 .v { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); margin-top: 2px; }
-.hero-split-3 .v.neg { color: var(--crit); }
-/* Gastos es la columna con menos margen de las tres (más ajustada de
-   ancho + porcentajes que pueden llegar a 4 dígitos): la variación va un
-   toque más chica que el resto de la tarjeta para que "MoM" entre
-   siempre en el mismo renglón que el %, sin cortarse a una línea aparte. */
-.hero-split-3 .tile-delta { font-size: 11px; white-space: nowrap; }
+/* Balance a la izquierda (monto + leyenda de los anillos) y el anillo
+   doble a la derecha: externo = % de balance, interno = % del mes que
+   falta. La leyenda de abajo del monto hace de referencia de colores. */
+.hero-main { display: flex; align-items: center; gap: 12px; padding: 8px 18px 0; }
+.hero-main-left { flex: 1; min-width: 0; }
+.hero-main .hero-label { text-transform: uppercase; }
+.hero-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink-2); }
+.hero-legend > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.hero-legend b { font: 700 13px var(--font-heading); color: var(--ink); }
+.hero-legend .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .hero-ring { position: relative; flex: none; }
+.hero-ring svg { display: block; }
 .dot-accent { background: var(--accent); }
 .dot-warn { background: var(--warn); }
-/* Tarjeta separada del anillo doble (balance + días del mes), al lado del
-   gráfico de tendencia. */
-.hero-ring-standalone { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0 4px; width: 100%; }
-/* Antes el anillo se centraba en el medio real de toda la tarjeta (con dos
-   espejos invisibles alrededor, uno de la leyenda y otro del título, para
-   compensar que el título sólo pesa arriba) — a pedido explícito el anillo
-   ahora queda pegado arriba, lo más cerca posible del título, en vez de
-   centrado; el espacio de más que deja una categoría vecina más alta
-   simplemente queda vacío abajo. */
-.card-compact .hero-ring-standalone { gap: 8px; padding: 2px 0 0; }
-/* Balance/Faltan como dos tarjetitas con su propio fondo tenue en vez de
-   una leyenda de texto plano — mismo espíritu que .tile, pero de a dos en
-   fila y con el color de cada anillo (accent/warn) de fondo. */
-.ring-stat-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
-/* Una sola línea: punto + label + valor, el valor pegado al borde derecho. */
-.ring-stat-card {
-  flex: 1 1 90px; min-width: 0; display: flex; align-items: center; gap: 6px;
-  padding: 6px 10px; border-radius: 10px;
-}
-.ring-stat-accent { background: var(--accent-wash); }
-.ring-stat-warn { background: color-mix(in srgb, var(--warn) 16%, var(--surface)); }
-.ring-stat-card .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.ring-stat-label { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ring-stat-value { font: 700 14px var(--font-heading); color: var(--ink); white-space: nowrap; margin-left: auto; padding-left: 4px; }
-/* Tarjeta ancha de abajo ("Podés gastar por día"): dos líneas nomás —
-   ícono + monto arriba, label chico abajo ocupando todo el ancho (en vez
-   de al lado del ícono, que en la tarjeta angosta no le deja lugar).
-   En rojo si el balance restante ya da negativo. */
-.ring-kpi-card {
-  display: flex; flex-direction: column; gap: 2px; width: 100%;
-  padding: 8px 10px; border-radius: 10px;
+/* "Podés gastar por día": franja ancha debajo, en rojo si ya no queda plata. */
+.hero-perday {
+  display: flex; align-items: center; gap: 10px;
+  margin: 12px 12px 0; padding: 8px 12px; border-radius: 12px;
   background: var(--accent-wash);
 }
-.ring-kpi-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ring-kpi-icon {
-  width: 20px; height: 20px; border-radius: 50%; flex: none;
+.hero-perday-icon {
+  width: 28px; height: 28px; border-radius: 50%; flex: none;
   display: flex; align-items: center; justify-content: center;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
 }
-.ring-kpi-icon svg { width: 12px; height: 12px; }
-.ring-kpi-divider { width: 1px; align-self: stretch; background: var(--border); flex: none; }
-.ring-kpi-value { flex: 1; min-width: 0; font: 700 16px var(--font-heading); color: var(--ink); overflow-wrap: break-word; }
-.ring-kpi-label { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ring-kpi-neg { background: var(--danger-bg); }
-.ring-kpi-neg .ring-kpi-icon { background: color-mix(in srgb, var(--crit) 18%, transparent); color: var(--crit); }
-.ring-kpi-neg .ring-kpi-value { color: var(--crit); }
+.hero-perday-icon svg { width: 16px; height: 16px; }
+.hero-perday-label { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2); }
+.hero-perday-value { font: 700 17px var(--font-heading); color: var(--ink); white-space: nowrap; }
+.hero-perday.neg { background: var(--danger-bg); }
+.hero-perday.neg .hero-perday-icon { background: color-mix(in srgb, var(--crit) 18%, transparent); color: var(--crit); }
+.hero-perday.neg .hero-perday-value { color: var(--crit); }
+/* Ingresos / Gastos / Ahorros: tres tarjetitas con ícono de color. */
+.hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 12px 4px; }
+.hero-stat { min-width: 0; padding: 9px 8px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
+.hero-stat-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.hero-stat-icon {
+  width: 22px; height: 22px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--surface);
+}
+.hero-stat-icon svg { width: 13px; height: 13px; stroke-width: 2.4; }
+.hero-stat-inc .hero-stat-icon { background: var(--income); }
+.hero-stat-exp .hero-stat-icon { background: var(--crit); }
+.hero-stat-sav .hero-stat-icon { background: var(--warn); }
+.hero-stat .k { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-stat .v { font: 700 14px var(--font-heading); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; color: var(--ink); margin-top: 8px; white-space: nowrap; }
+.hero-stat .v.neg { color: var(--crit); }
+.hero-stat .tile-delta { font-size: 11px; white-space: nowrap; margin-top: 2px; }
+/* Etiqueta/valor chicos reutilizados en la comparación del diálogo
+   "Ampliar" de Balance por día. */
+.ring-stat-label { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ring-stat-value { font: 700 14px var(--font-heading); color: var(--ink); white-space: nowrap; }
 
 /* Comparación "hoy vs. mismo día del mes pasado" arriba del diálogo de
    "Ampliar" en Balance por día — dos valores chicos + una tarjeta grande
