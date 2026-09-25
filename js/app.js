@@ -2216,10 +2216,16 @@
 
     el.innerHTML = `
       <div class="hero">
-        <div class="hero-month-bar">
-          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
-          <span class="hero-month-bar-label">${iconSvg('calendar')}${esc(monthLabel(mk))}</span>
-          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
+        <div class="hero-head">
+          <span class="hero-head-label">${iconSvg('calendar')}<span>${esc(monthLabel(mk))}</span></span>
+          <span class="hero-head-nav">
+            <button class="hero-head-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
+            <button class="hero-head-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
+          </span>
+          <svg class="hero-wave" viewBox="0 0 400 36" preserveAspectRatio="none" aria-hidden="true">
+            <path class="hero-wave-back" d="M0 24 C 70 8, 150 8, 230 20 S 350 30, 400 10 V36 H0 Z"/>
+            <path class="hero-wave-front" d="M0 30 C 90 12, 170 34, 260 26 S 360 14, 400 22 V36 H0 Z"/>
+          </svg>
         </div>
         ${mk === curMonth() ? '' : '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>'}
         <div class="hero-main">
@@ -2231,14 +2237,14 @@
               <span><span class="dot dot-warn"></span><b>${daysLeft}</b> día${daysLeft === 1 ? '' : 's'}</span>
             </div>
           </div>
-          <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 84)}</div>
+          <div class="hero-ring-col">
+            <div class="hero-ring">${ringSvg2(pctLeft, pctMonthLeft, 84)}</div>
+            ${perDayLeft != null ? `
+            <div class="hero-perday ${perDayLeft < 0 ? 'neg' : ''}">
+              <b>${fmtDisp(perDayLeft)}</b><span>por día</span>
+            </div>` : ''}
+          </div>
         </div>
-        ${perDayLeft != null ? `
-        <div class="hero-perday ${perDayLeft < 0 ? 'neg' : ''}">
-          <span class="hero-perday-icon">${iconSvg('cash')}</span>
-          <span class="hero-perday-label">Podés gastar por día</span>
-          <span class="hero-perday-value">${fmtDisp(perDayLeft)}</span>
-        </div>` : ''}
         <div class="hero-stats">
           <div class="hero-stat hero-stat-inc">
             <div class="hero-stat-head"><span class="hero-stat-icon">${iconSvg('arrowDown')}</span><span class="k">Ingresos</span></div>
@@ -2258,33 +2264,27 @@
       <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
       ${sharedWidget}
 
-      <div class="card">
+      <div class="grid-2 grid-2-pair">
+      <div class="card card-compact">
         <h2 class="card-title">
           <span>Gastos por categoría</span>
           <button class="link-btn" data-goto-categorias>Ver análisis</button>
         </h2>
-        ${catItems.length ? `<div id="chart-cats" class="cats-bars"></div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
+        ${catItems.length ? `<div id="chart-cats" class="cats-bars cats-bars-compact"></div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
       </div>
 
-      <div class="card savings-rate-card" data-goto-savings>
-        <div class="savings-rate-left">
-          <div class="savings-rate-head">
-            <span class="tile-badge tile-badge-income savings-rate-icon">${iconSvg('trend')}</span>
-            <div>
-              <div class="savings-rate-title">Tasa de ahorro</div>
-              <div class="savings-rate-sub">Últimos 6 meses</div>
-            </div>
-          </div>
-          <div class="savings-rate-stat">
-            <div class="savings-rate-month">${esc(monthLabel(mk))}</div>
-            <div class="savings-rate-value ${savingsRatePct == null ? '' : savingsRatePct > 0 ? 'pos' : savingsRatePct < 0 ? 'neg' : ''}">${savingsRatePct == null ? '—' : savingsRatePct + '%'}</div>
-            ${savingsRateDeltaHTML}
-          </div>
+      <div class="card card-compact savings-rate-card" data-goto-savings>
+        <h2 class="card-title"><span>Tasa de ahorro</span></h2>
+        <div class="savings-rate-stat">
+          <div class="savings-rate-value ${savingsRatePct == null ? '' : savingsRatePct > 0 ? 'pos' : savingsRatePct < 0 ? 'neg' : ''}">${savingsRatePct == null ? '—' : savingsRatePct + '%'}</div>
+          ${savingsRateDeltaHTML}
         </div>
+        <div class="savings-rate-sub">Últimos 6 meses</div>
         <div class="savings-rate-chart">
           ${hasSavingsRateTrend ? savingsRateTrendSvg(savingsRateRows)
             : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}
         </div>
+      </div>
       </div>
 
       ${insights.length ? `

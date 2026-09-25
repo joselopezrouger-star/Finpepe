@@ -10,6 +10,7 @@
      legibilidad sobre blanco. */
   --bg: #f4f6f8;
   --surface: #ffffff;
+  --hero-body: #f5faf7;
   --surface-2: #eef1f4;
   --border: #e2e6ec;
   --border-strong: #cbd2dc;
@@ -47,6 +48,7 @@
 :root[data-theme="dark"] {
   --bg: #0a0f1e;
   --surface: #13192b;
+  --hero-body: #13192b;
   --surface-2: #1a2235;
   --border: #202a40;
   --border-strong: #2c3a58;
@@ -363,38 +365,37 @@ button {
 .tile-delta .up-good { color: var(--income); }
 .tile-delta .down-bad { color: var(--crit); }
 
-/* ---------- Tasa de ahorro (Resumen): una sola tarjeta, stat + tendencia ----------
-   Siempre lado a lado (valor a la izquierda, curva a la derecha) — no se
-   apila ni siquiera en pantallas angostas, a pedido explícito: el diseño de
-   referencia es ese, en todos los tamaños. */
-.savings-rate-card { display: flex; align-items: stretch; gap: 16px; cursor: pointer; }
-.savings-rate-left {
-  flex: none; width: 200px;
-  display: flex; flex-direction: column; justify-content: space-between; gap: 18px;
-  padding-right: 16px;
-  border-right: 1px solid var(--border);
-}
-.savings-rate-head { display: flex; align-items: center; gap: 10px; }
-.savings-rate-icon svg { width: 20px; height: 20px; }
-.savings-rate-title {
-  font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink);
-}
-.savings-rate-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
-.savings-rate-month {
-  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
-  margin-bottom: 6px;
-}
-.savings-rate-value { font: 700 38px/1.1 var(--font-heading); letter-spacing: -0.02em; color: var(--ink); }
+/* "Gastos por categoría" + "Tasa de ahorro": par que queda siempre lado a
+   lado, incluso en el celular (a diferencia del resto de los .grid-2, que
+   se apilan abajo de los 820px) — todo lo de adentro va más chico para
+   entrar en media pantalla. */
+.grid-2.grid-2-pair { grid-template-columns: 1fr 1fr; gap: 10px; }
+.card-compact { padding: 12px; display: flex; flex-direction: column; min-width: 0; }
+.card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; margin-bottom: 8px; }
+.cats-bars-compact .hbar-row { padding: 3px 0; gap: 1px; }
+.cats-bars-compact .hbar-label { font-size: 10.5px; gap: 3px; }
+.cats-bars-compact .hbar-dot { width: 6px; height: 6px; }
+.cats-bars-compact .hbar-amount { font-size: 10.5px; }
+.cats-bars-compact .hbar-trackrow { gap: 4px; }
+.cats-bars-compact .hbar-track { height: 8px; }
+.cats-bars-compact .hbar-bar { height: 8px; }
+.cats-bars-compact .hbar-pct { font-size: 9px; min-width: 18px; }
+
+/* ---------- Tasa de ahorro (Resumen): valor + variación arriba, curva abajo ---------- */
+.savings-rate-card { cursor: pointer; }
+.savings-rate-stat { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.savings-rate-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.savings-rate-value { font: 700 26px/1.1 var(--font-heading); letter-spacing: -0.02em; color: var(--ink); }
 .savings-rate-value.pos { color: var(--income); }
 .savings-rate-value.neg { color: var(--crit); }
 .savings-rate-pill {
-  display: inline-flex; align-items: center; gap: 4px; margin-top: 10px;
-  font-size: 12.5px; font-weight: 700; padding: 5px 11px; border-radius: 20px;
-  background: var(--surface-2); color: var(--ink-2);
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 20px;
+  background: var(--surface-2); color: var(--ink-2); white-space: nowrap;
 }
 .savings-rate-pill.pos { background: var(--accent-wash); color: var(--accent-down); }
 .savings-rate-pill.neg { background: var(--danger-bg); color: var(--danger-ink); }
-.savings-rate-chart { flex: 1; min-width: 0; display: flex; align-items: center; }
+.savings-rate-chart { flex: 1; min-width: 0; display: flex; align-items: flex-end; margin-top: 22px; }
 .savings-rate-chart .empty { margin: auto; font-size: 13px; }
 .savings-rate-chart-inner { position: relative; width: 100%; }
 .savings-rate-chart-inner svg { display: block; width: 100%; height: auto; }
@@ -409,24 +410,12 @@ button {
   pointer-events: none;
 }
 .savings-rate-bubble.current { font-size: 13.5px; font-weight: 800; padding: 5px 11px; }
+.card-compact .savings-rate-bubble { font-size: 10px; padding: 3px 7px; }
+.card-compact .savings-rate-bubble.current { font-size: 11px; padding: 3px 8px; }
+.card-compact .savings-rate-xlabel { font-size: 9.5px; }
 .savings-rate-xlabel {
   position: absolute; transform: translate(-50%, 0);
   font-size: 11px; color: var(--muted); white-space: nowrap; pointer-events: none;
-}
-
-/* Pantalla angosta: la columna del valor se achica (no se apila) para
-   dejarle más lugar a la curva, que si no queda demasiado apretada. El
-   ícono se oculta acá — a este ancho, entre el ícono y "Tasa de ahorro"
-   no entraban las dos cosas sin que el título se partiera en dos líneas. */
-@media (max-width: 560px) {
-  .savings-rate-card { gap: 8px; }
-  .savings-rate-left { width: 128px; padding-right: 8px; gap: 10px; }
-  .savings-rate-icon { display: none; }
-  .savings-rate-title { font-size: 10.5px; letter-spacing: 0.01em; }
-  .savings-rate-sub { font-size: 9.5px; }
-  .savings-rate-month { font-size: 9px; }
-  .savings-rate-value { font-size: 22px; }
-  .savings-rate-pill { font-size: 10px; padding: 3px 7px; margin-top: 5px; }
 }
 
 /* ---------- "Cómo vas este mes" (comentario automático en Resumen) ---------- */
@@ -1562,7 +1551,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .hero {
   position: relative;
   overflow: hidden;
-  background: var(--surface);
+  background: var(--hero-body);
   border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--ink);
@@ -1581,13 +1570,44 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .hero-month-bar .icon-btn { width: 26px; height: 26px; border: 0; background: color-mix(in srgb, white 14%, transparent); color: #fff; }
 .hero-month-bar .icon-btn:hover { background: color-mix(in srgb, white 24%, transparent); }
 .hero-month-bar-label { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; white-space: nowrap; }
+/* Encabezado del Resumen: mes a la izquierda, flechas redondas a la
+   derecha, degradé verde y borde inferior en forma de ola (dos capas, la
+   de atrás más clara) que se funde con el fondo de la tarjeta. */
+.hero-head {
+  position: relative;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 18px 34px;
+  background: linear-gradient(135deg, var(--honey-deep), color-mix(in srgb, var(--honey-deep) 70%, #0b3d2c));
+  color: #fff;
+}
+.hero-head-label { display: flex; align-items: center; gap: 10px; font: 700 17px var(--font-heading); white-space: nowrap; min-width: 0; overflow: hidden; }
+.hero-head-label span { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 400px) {
+  .hero-head { padding-left: 14px; padding-right: 14px; }
+  .hero-head-label { font-size: 15px; gap: 8px; }
+  .hero-head-label svg { width: 19px; height: 19px; }
+  .hero-head-btn { width: 30px; height: 30px; font-size: 18px; }
+}
+.hero-head-label svg { width: 22px; height: 22px; flex: none; }
+.hero-head-nav { display: flex; gap: 8px; flex: none; }
+.hero-head-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; line-height: 1; color: #fff;
+  background: color-mix(in srgb, white 16%, transparent);
+}
+.hero-head-btn:hover { background: color-mix(in srgb, white 26%, transparent); }
+.hero-head-btn:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.hero-wave { position: absolute; left: 0; right: 0; bottom: -1px; width: 100%; height: 30px; display: block; }
+.hero-wave-back { fill: color-mix(in srgb, var(--hero-body) 30%, transparent); }
+.hero-wave-front { fill: var(--hero-body); }
 /* Sólo se dibuja (ver app.js) cuando NO es el mes actual, así que acá no
    hace falta reservarle espacio de antemano. */
 .hero-mtoday { position: relative; display: block; width: 100%; text-align: center; font-size: 11px; margin: 4px 0 0; }
 /* Balance a la izquierda (monto + leyenda de los anillos) y el anillo
    doble a la derecha: externo = % de balance, interno = % del mes que
    falta. La leyenda de abajo del monto hace de referencia de colores. */
-.hero-main { display: flex; align-items: center; gap: 12px; padding: 8px 18px 0; }
+.hero-main { display: flex; align-items: center; gap: 12px; padding: 2px 18px 0; }
 .hero-main-left { flex: 1; min-width: 0; }
 .hero-main .hero-label { text-transform: uppercase; }
 .hero-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink-2); }
@@ -1598,23 +1618,17 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .hero-ring svg { display: block; }
 .dot-accent { background: var(--accent); }
 .dot-warn { background: var(--warn); }
-/* "Podés gastar por día": franja ancha debajo, en rojo si ya no queda plata. */
+/* Columna derecha: anillo doble y, debajo, cuánto se puede gastar por
+   día (chico, como dato secundario del anillo). Rojo si ya no queda plata. */
+.hero-ring-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .hero-perday {
-  display: flex; align-items: center; gap: 10px;
-  margin: 12px 12px 0; padding: 8px 12px; border-radius: 12px;
-  background: var(--accent-wash);
+  display: flex; flex-direction: column; align-items: center; line-height: 1.15;
+  padding: 3px 8px; border-radius: 8px; background: var(--accent-wash);
 }
-.hero-perday-icon {
-  width: 28px; height: 28px; border-radius: 50%; flex: none;
-  display: flex; align-items: center; justify-content: center;
-  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
-}
-.hero-perday-icon svg { width: 16px; height: 16px; }
-.hero-perday-label { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2); }
-.hero-perday-value { font: 700 17px var(--font-heading); color: var(--ink); white-space: nowrap; }
+.hero-perday b { font: 700 12.5px var(--font-heading); color: var(--ink); white-space: nowrap; }
+.hero-perday span { font-size: 9.5px; color: var(--ink-2); white-space: nowrap; }
 .hero-perday.neg { background: var(--danger-bg); }
-.hero-perday.neg .hero-perday-icon { background: color-mix(in srgb, var(--crit) 18%, transparent); color: var(--crit); }
-.hero-perday.neg .hero-perday-value { color: var(--crit); }
+.hero-perday.neg b { color: var(--crit); }
 /* Ingresos / Gastos / Ahorros: tres tarjetitas con ícono de color. */
 .hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 12px 4px; }
 .hero-stat { min-width: 0; padding: 9px 8px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
