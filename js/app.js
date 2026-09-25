@@ -448,8 +448,8 @@
   // puede ser negativo).
   function savingsRateTrendSvg(rows) {
     if (!rows.length) return '';
-    const W = 300, H = 200;
-    const topPad = 42, bottomPad = 28, padX = 24;
+    const W = 300, H = 165;
+    const topPad = 38, bottomPad = 26, padX = 24;
     const plotTop = topPad, plotBottom = H - bottomPad;
     const plotH = plotBottom - plotTop;
     const plotW = W - padX * 2;
@@ -2275,15 +2275,12 @@
       ${sharedWidget}
 
       <div class="grid-2 grid-2-pair">
-      <div class="card card-compact">
-        <h2 class="card-title">
-          <span>Gastos por categoría</span>
-          <button class="link-btn" data-goto-categorias>Ver análisis</button>
-        </h2>
+      <div class="card card-compact card-link" data-goto-categorias>
+        <h2 class="card-title"><span>Gastos por categoría</span></h2>
         ${catItems.length ? `<div id="chart-cats" class="cats-bars cats-bars-compact"></div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
       </div>
 
-      <div class="card card-compact savings-rate-card" data-goto-savings>
+      <div class="card card-compact card-link savings-rate-card" data-goto-savings>
         <h2 class="card-title"><span>Tasa de ahorro</span></h2>
         <div class="savings-rate-stat">
           <div class="savings-rate-value ${savingsRatePct == null ? '' : savingsRatePct > 0 ? 'pos' : savingsRatePct < 0 ? 'neg' : ''}">${savingsRatePct == null ? '—' : savingsRatePct + '%'}</div>

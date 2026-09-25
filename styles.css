@@ -372,9 +372,9 @@ button {
    se apilan abajo de los 820px) — todo lo de adentro va más chico para
    entrar en media pantalla. */
 .grid-2.grid-2-pair { grid-template-columns: 1fr 1fr; gap: 10px; }
-.card-compact { padding: 12px; display: flex; flex-direction: column; min-width: 0; }
-.card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; margin-bottom: 8px; align-items: flex-start; min-height: 0; }
-.cats-bars-compact .hbar-row { padding: 3px 0; gap: 1px; }
+.card-compact { padding: 10px 11px; display: flex; flex-direction: column; min-width: 0; }
+.card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; margin-bottom: 6px; align-items: flex-start; min-height: 0; }
+.cats-bars-compact .hbar-row { padding: 2px 0; gap: 1px; }
 .cats-bars-compact .hbar-label { font-size: 10.5px; gap: 3px; }
 .cats-bars-compact .hbar-dot { width: 6px; height: 6px; }
 .cats-bars-compact .hbar-amount { font-size: 10.5px; }
@@ -384,9 +384,9 @@ button {
 .cats-bars-compact .hbar-pct { font-size: 9px; min-width: 18px; }
 
 /* ---------- Tasa de ahorro (Resumen): valor + variación arriba, curva abajo ---------- */
-.savings-rate-card { cursor: pointer; }
+.card-link { cursor: pointer; }
 .savings-rate-stat { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
-.savings-rate-value { font: 700 26px/1.1 var(--font-heading); letter-spacing: -0.02em; color: var(--ink); }
+.savings-rate-value { font: 700 22px/1.1 var(--font-heading); letter-spacing: -0.02em; color: var(--ink); }
 .savings-rate-value.pos { color: var(--income); }
 .savings-rate-value.neg { color: var(--crit); }
 .savings-rate-pill {
@@ -396,7 +396,7 @@ button {
 }
 .savings-rate-pill.pos { background: var(--accent-wash); color: var(--accent-down); }
 .savings-rate-pill.neg { background: var(--danger-bg); color: var(--danger-ink); }
-.savings-rate-chart { flex: 1; min-width: 0; display: flex; align-items: center; margin-top: 6px; }
+.savings-rate-chart { flex: 1; min-width: 0; display: flex; align-items: center; margin-top: 2px; }
 .savings-rate-chart .empty { margin: auto; font-size: 13px; }
 .savings-rate-chart-inner { position: relative; width: 100%; }
 .savings-rate-chart-inner svg { display: block; width: 100%; height: auto; }
@@ -1607,11 +1607,11 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 /* Balance a la izquierda (monto + leyenda de los anillos) y el anillo
    doble a la derecha: externo = % de balance, interno = % del mes que
    falta. La leyenda de abajo del monto hace de referencia de colores. */
-.hero-main { display: flex; align-items: flex-start; gap: 12px; padding: 0 18px 0; }
-.hero-main-left { flex: 1; min-width: 0; }
+.hero-main { display: flex; align-items: flex-start; justify-content: center; gap: 22px; padding: 0 14px 0; }
+.hero-main-left { flex: 0 1 auto; min-width: 0; }
 .hero-main .hero-label { text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.06em; }
-.hero-main .hero-value { font-size: 42px; line-height: 1.1; margin: 2px 0 8px; }
-@media (max-width: 560px) { .hero-main .hero-value { font-size: clamp(26px, 9.2vw, 36px); } }
+.hero-main .hero-value { font-size: 48px; line-height: 1.1; margin: 2px 0 8px; }
+@media (max-width: 560px) { .hero-main .hero-value { font-size: clamp(28px, 9.8vw, 42px); } }
 .hero-legend { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-2); }
 .hero-legend > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .hero-legend b { font: 700 13px var(--font-heading); color: var(--ink); }
