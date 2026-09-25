@@ -2223,6 +2223,11 @@
 
     el.innerHTML = `
       <div class="hero">
+        <svg class="hero-bg-waves" viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 150 C 80 110, 160 190, 250 150 S 360 110, 400 140 V300 H0 Z"/>
+          <path d="M0 200 C 100 165, 190 235, 280 195 S 370 170, 400 190 V300 H0 Z"/>
+          <path d="M0 250 C 90 225, 200 280, 300 245 S 380 235, 400 245 V300 H0 Z"/>
+        </svg>
         <div class="hero-head">
           <span class="hero-head-label">${iconSvg('calendar')}<span>${esc(monthLabel(mk))}</span></span>
           <span class="hero-head-nav">
@@ -2237,7 +2242,7 @@
         ${mk === curMonth() ? '' : '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>'}
         <div class="hero-main">
           <div class="hero-main-left">
-            <div class="hero-label">Balance del mes</div>
+            <div class="hero-label">Saldo</div>
             <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
             <div class="hero-legend">
               <span><span class="dot dot-accent"></span><b>${pctLeft}%</b> balance</span>
