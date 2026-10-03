@@ -419,29 +419,6 @@
       ${arc(rI, strokeI, pctInner, '--warn')}
     </svg>`;
   }
-  // Curva suave (monótona: no inventa picos ni valles entre dos meses)
-  // que pasa por todos los puntos. pts: [{x, y}] ordenados por x.
-  function smoothLinePath(pts) {
-    if (pts.length < 2) return pts.length ? `M${pts[0].x},${pts[0].y}` : '';
-    const n = pts.length;
-    const m = [];
-    for (let i = 0; i < n - 1; i++) m.push((pts[i + 1].y - pts[i].y) / (pts[i + 1].x - pts[i].x));
-    const t = [m[0]];
-    for (let i = 1; i < n - 1; i++) t.push(m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2);
-    t.push(m[n - 2]);
-    for (let i = 0; i < n - 1; i++) {
-      if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
-      const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
-      if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
-    }
-    let d = `M${pts[0].x},${pts[0].y}`;
-    for (let i = 0; i < n - 1; i++) {
-      const p = pts[i], q = pts[i + 1], dx = (q.x - p.x) / 3;
-      d += ` C${p.x + dx},${p.y + t[i] * dx} ${q.x - dx},${q.y - t[i + 1] * dx} ${q.x},${q.y}`;
-    }
-    return d;
-  }
-
   // Tendencia de la tasa de ahorro (media tarjeta del Resumen): curva suave
   // con marcador en cada mes y relleno en degradé debajo. Sin eje numérico:
   // los valores los dan las etiquetas. rows: [{label, rate}] (rate en %,
@@ -469,7 +446,7 @@
     const gradId = 'savRateGrad' + Math.round(Math.random() * 1e6);
 
     const pts = rows.map((r, i) => ({ x: x(i), y: y(r.rate), rate: r.rate, label: r.label }));
-    const linePath = smoothLinePath(pts);
+    const linePath = Charts.smoothPathD(pts);
     const areaPath = `${linePath} L${pts[pts.length - 1].x},${plotBottom} L${pts[0].x},${plotBottom} Z`;
 
     const gridLines = pts.map((p) => `<line x1="${p.x}" y1="${p.y}" x2="${p.x}" y2="${plotBottom}"
@@ -4129,8 +4106,11 @@
 
   // Agrupa las cuotas activas (compras en cuotas) por groupId: junta todas
   // las cuotas de una misma compra para saber en cuál va y cuánto falta.
-  // Los grupos que ya terminaron de pagarse (todas las cuotas con fecha
-  // pasada) no se muestran.
+  // Se cuenta por MES, igual que el Gantt: la cuota del mes en curso es la
+  // "actual" aunque su fecha sea hoy o ya haya pasado (antes, una compra
+  // cargada hoy figuraba en la cuota 2 porque la 1 no era "futura"). Los
+  // grupos sin cuotas del mes actual en adelante ya terminaron y no se
+  // muestran.
   function activeInstallmentGroups() {
     const groups = new Map();
     for (const t of S().transactions) {
@@ -4138,14 +4118,17 @@
       if (!groups.has(t.groupId)) groups.set(t.groupId, []);
       groups.get(t.groupId).push(t);
     }
-    const today = todayStr();
+    const cm = curMonth();
     const rows = [];
     for (const txs of groups.values()) {
       txs.sort((a, b) => a.installment.k - b.installment.k);
-      const pending = txs.filter((t) => t.date > today);
+      const pending = txs.filter((t) => monthKeyOf(t.date) >= cm);
       if (!pending.length) continue;
       const next = pending[0];
-      const totalPending = pending.reduce((a, t) => a + t.amount, 0);
+      // "Restan" = lo que todavía no venció (fecha posterior a hoy): la
+      // cuota de este mes que ya pasó cuenta como actual pero no como deuda.
+      const today = todayStr();
+      const totalPending = pending.filter((t) => t.date > today).reduce((a, t) => a + t.amount, 0);
       rows.push({
         groupId: txs[0].groupId, note: txs[0].note, categoryId: txs[0].categoryId,
         methodId: txs[0].methodId, currency: txs[0].currency,
@@ -4171,17 +4154,12 @@
     }
     const months = [];
     for (let mk = today, guard = 0; mk <= maxMk && guard < 60; mk = addMonthsKey(mk, 1), guard++) months.push(mk);
-    // Ojo: acá se suma sobre TODAS las cuotas de la compra (r.all), no solo
-    // las pendientes (r.pending, fecha > hoy) — el mes actual puede tener
-    // una cuota que ya pasó (ej. hoy es el 19 y la cuota fue el 5), y esa
-    // sigue siendo parte de "cuánto tengo de cuotas este mes". Usar solo
-    // r.pending hacía que esa cuota ya transcurrida desapareciera del total
-    // del mes en curso, aunque su compra siguiera activa (con cuotas
-    // pendientes en meses futuros). Los meses anteriores al actual igual
-    // quedan afuera solos, porque totals solo tiene claves desde "hoy".
+    // r.pending ya incluye la cuota del mes en curso aunque su fecha haya
+    // pasado (ver activeInstallmentGroups), así que el mes actual suma todo
+    // lo que se paga de cuotas en él.
     const totals = new Map(months.map((m) => [m, 0]));
     for (const r of rows) {
-      for (const t of r.all) {
+      for (const t of r.pending) {
         const mo = monthKeyOf(t.date);
         if (!totals.has(mo)) continue;
         const v = txDispAmount(t);
@@ -4259,7 +4237,7 @@
             <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(r.categoryId))}</div>
             <div class="inst-row-main">
               <div class="inst-row-title">${esc(r.note || catName(r.categoryId))}</div>
-              <div class="inst-row-sub">${esc(methodName(r.methodId))} · cuota ${r.nextK}/${r.n} · próx. ${esc(fmtDateShort(r.next.date))}</div>
+              <div class="inst-row-sub">${esc(methodName(r.methodId))} · cuota ${r.nextK}/${r.n} · ${r.next.date > todayStr() ? 'próx. ' + esc(fmtDateShort(r.next.date)) : 'este mes'}</div>
             </div>
             <div class="inst-row-amounts">
               <div class="inst-row-amount">${fmtMoney(r.next.amount, r.currency)} <span class="inst-row-amount-label">cuota</span></div>
@@ -4283,6 +4261,20 @@
       (t) => t.type === 'gasto' && monthKeyOf(t.date) === mk);
     const instRows = activeInstallmentGroups();
     const monthTotals = installmentMonthTotals(instRows);
+    // Peso de las cuotas del mes sobre el total de gastos y de ingresos del
+    // mismo mes (por fecha real, igual que el gráfico de cuotas).
+    const cuotasMonth = monthTotals.length ? monthTotals[0].total : 0;
+    const calMonthTx = S().transactions.filter((t) => monthKeyOf(t.date) === mk);
+    const expMonthCal = sumDisp(calMonthTx.filter((t) => t.type === 'gasto'));
+    const incMonthCal = sumDisp(calMonthTx.filter((t) => t.type === 'ingreso'));
+    const shareRow = (label, base, cls) => {
+      const pct = base > 0 ? Math.round((cuotasMonth / base) * 100) : null;
+      return `<div class="inst-share-row">
+        <span class="inst-share-label">${label}</span>
+        <span class="inst-share-bar ${cls}"><span style="width:${pct == null ? 0 : Math.min(100, pct)}%"></span></span>
+        <b class="inst-share-pct">${pct == null ? '—' : pct + '%'}</b>
+      </div>`;
+    };
 
     const budgetRows = S().budgets.map((b) => {
       const spent = sumDisp(monthTx.filter((t) => txMatchesBudgetCategory(t, b.categoryId)));
@@ -4295,6 +4287,11 @@
       <div class="card">
         <h2 class="card-title">Compras en cuotas</h2>
         ${instRows.length ? `
+        <div class="inst-share">
+          <div class="inst-share-head"><span>Cuotas de ${esc(monthLabel(mk))}</span><b>${fmtDisp(cuotasMonth)}</b></div>
+          ${shareRow('De tus gastos', expMonthCal, 'exp')}
+          ${shareRow('De tus ingresos', incMonthCal, 'inc')}
+        </div>
         ${monthTotals.length ? `
         <div class="hint" style="margin-bottom:6px">Cuánto pagás de cuotas cada mes.</div>
         <div id="chart-inst-months"></div>` : ''}
@@ -4364,7 +4361,7 @@
       Charts.lines(instMonthsEl, monthTotals.map((m) => m.label), [
         { label: 'Cuotas', color: Charts.COLORS.expense, values: monthTotals.map((m) => m.total) },
       ], {
-        smooth: true, pointLabels: true, pointLabelSize: 20, topPad: 30,
+        smooth: true, pointLabels: 'changes', pointLabelSize: 20, topPad: 30, leftPad: 52,
         fmtAxis: (v) => Charts.compact(v),
         ariaLabel: 'Total de cuotas por mes',
       });

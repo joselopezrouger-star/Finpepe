@@ -259,18 +259,27 @@ const Charts = (() => {
   // Curva suave (Catmull-Rom → Bézier cúbica) a través de una lista de
   // puntos, en vez del trazo recto punto-a-punto de siempre — opcional
   // (opts.smooth), así los gráficos que ya la usan sin pedirla no cambian.
+  // Curva suave monótona (Fritsch–Carlson): pasa por todos los puntos sin
+  // inventar picos ni valles entre dos valores (una serie que baja de 100
+  // a 50 no "sube" a 105 antes de bajar, como pasaba con Catmull-Rom).
   function smoothPathD(pts) {
-    if (pts.length < 2) return '';
-    if (pts.length === 2) return `M${pts[0].x},${pts[0].y} L${pts[1].x},${pts[1].y}`;
+    if (!pts.length) return '';
+    if (pts.length === 1) return `M${pts[0].x},${pts[0].y}`;
+    const n = pts.length;
+    const m = [];
+    for (let i = 0; i < n - 1; i++) m.push((pts[i + 1].y - pts[i].y) / (pts[i + 1].x - pts[i].x));
+    const t = [m[0]];
+    for (let i = 1; i < n - 1; i++) t.push(m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2);
+    t.push(m[n - 2]);
+    for (let i = 0; i < n - 1; i++) {
+      if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+      const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
+      if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+    }
     let d = `M${pts[0].x},${pts[0].y}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[i - 1] || pts[i];
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const p3 = pts[i + 2] || p2;
-      const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
-      const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
-      d += ` C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+    for (let i = 0; i < n - 1; i++) {
+      const p = pts[i], q = pts[i + 1], dx = (q.x - p.x) / 3;
+      d += ` C${p.x + dx},${p.y + t[i] * dx} ${q.x - dx},${q.y - t[i + 1] * dx} ${q.x},${q.y}`;
     }
     return d;
   }
@@ -283,7 +292,7 @@ const Charts = (() => {
     el.replaceChildren();
     if (!months.length) return;
     const W = 640, H = 220;
-    const m = { t: opts.topPad || 10, r: 8, b: 26, l: 34 };
+    const m = { t: opts.topPad || 10, r: 8, b: 26, l: opts.leftPad || 34 };
     const iw = W - m.l - m.r;
     const ih = H - m.t - m.b;
 
@@ -354,9 +363,16 @@ const Charts = (() => {
         d, fill: 'none', stroke: s.color, 'stroke-width': 2,
         'stroke-linecap': 'round', 'stroke-linejoin': 'round',
       });
+      // pointLabels: 'changes' → sólo se etiqueta el primer punto y los que
+      // cambian de valor respecto del anterior (una serie plana mes a mes
+      // muestra el número una sola vez en vez de repetirlo en cada punto).
+      let prevLabel = null;
       pts.forEach((p) => {
         add(svg, 'circle', { cx: p.x, cy: p.y, r: markerR, fill: s.color });
-        if (opts.pointLabels) {
+        const label = opts.fmtAxis ? opts.fmtAxis(p.v) : String(Math.round(p.v));
+        const skipLabel = opts.pointLabels === 'changes' && label === prevLabel;
+        prevLabel = label;
+        if (opts.pointLabels && !skipLabel) {
           const attrs = {
             x: p.x, y: p.y + (si === 0 ? -8 : 14), 'text-anchor': 'middle',
             class: 'point-label', fill: s.color,
@@ -365,7 +381,7 @@ const Charts = (() => {
           // CSS ".point-label" (shorthand "font"); hace falta "style" inline
           // para poder pisarlo.
           if (opts.pointLabelSize) attrs.style = `font-size:${opts.pointLabelSize}px`;
-          add(svg, 'text', attrs, opts.fmtAxis ? opts.fmtAxis(p.v) : Math.round(p.v));
+          add(svg, 'text', attrs, label);
         }
       });
     });
@@ -715,5 +731,5 @@ const Charts = (() => {
     }
   }
 
-  return { COLORS, hBars, trend, lines, singleBars, dailyBalance, pieCylinder, stacked100, compact };
+  return { COLORS, hBars, trend, lines, singleBars, dailyBalance, pieCylinder, stacked100, compact, smoothPathD };
 })();
