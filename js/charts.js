@@ -374,7 +374,7 @@ const Charts = (() => {
         prevLabel = label;
         if (opts.pointLabels && !skipLabel) {
           const attrs = {
-            x: p.x, y: p.y + (si === 0 ? -8 : 14), 'text-anchor': 'middle',
+            x: p.x, y: p.y + (si === 0 ? -8 : (opts.pointLabelSize || 8) + 6), 'text-anchor': 'middle',
             class: 'point-label', fill: s.color,
           };
           // font-size como atributo de presentación pierde contra la regla

@@ -1874,7 +1874,13 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 }
 
 /* ---------- Cuotas: peso sobre gastos e ingresos del mes ---------- */
-.inst-share { display: grid; gap: 8px; padding: 10px 12px; margin-bottom: 14px; border-radius: 12px; background: var(--surface-2); }
+.inst-share { display: grid; gap: 8px; padding: 10px 12px; margin-bottom: 14px; border-radius: 12px; background: var(--surface-2); cursor: pointer; }
+.inst-share:hover { background: color-mix(in srgb, var(--ink) 7%, var(--surface-2)); }
+.inst-share:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.inst-share-table { min-width: 0; }
+.inst-share-table table.data th { padding: 6px 6px; letter-spacing: 0.02em; }
+.inst-share-table table.data td { padding: 7px 6px; }
+.inst-share-more { justify-self: end; font-size: 11.5px; font-weight: 600; color: var(--accent); }
 .inst-share-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
 .inst-share-head b { font: 700 18px var(--font-heading); color: var(--ink); white-space: nowrap; }
 .inst-share-row { display: grid; grid-template-columns: 96px 1fr 40px; align-items: center; gap: 10px; }

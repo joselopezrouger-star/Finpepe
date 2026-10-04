@@ -4253,6 +4253,53 @@
     }));
   }
 
+  // Evolución mensual del peso de las cuotas: qué % de los gastos y de los
+  // ingresos de cada mes se fue en cuotas (por fecha real, mismo criterio
+  // que el bloque del mes actual). Arranca en el primer mes con alguna
+  // cuota dentro del último año, para no llenar el gráfico de ceros.
+  function installmentShareHistoryDialog() {
+    const cm = curMonth();
+    const months = [];
+    for (let i = 11; i >= 0; i--) months.push(addMonthsKey(cm, -i));
+    const rows = months.map((mo) => {
+      const txs = S().transactions.filter((t) => monthKeyOf(t.date) === mo);
+      const cuotas = sumDisp(txs.filter((t) => t.type === 'gasto' && t.installment));
+      const exp = sumDisp(txs.filter((t) => t.type === 'gasto'));
+      const inc = sumDisp(txs.filter((t) => t.type === 'ingreso'));
+      return {
+        mo, cuotas,
+        pctExp: exp > 0 ? Math.round((cuotas / exp) * 100) : null,
+        pctInc: inc > 0 ? Math.round((cuotas / inc) * 100) : null,
+      };
+    });
+    const first = rows.findIndex((r) => r.cuotas > 0);
+    const shown = first < 0 ? rows.slice(-1) : rows.slice(first);
+    const dlg = openDialog('Peso de las cuotas por mes', `
+      <div class="chart-legend">
+        <span><span class="key" style="background:var(--crit)"></span>% de tus gastos</span>
+        <span><span class="key" style="background:var(--income)"></span>% de tus ingresos</span>
+      </div>
+      <div id="chart-inst-share"></div>
+      <div class="table-scroll inst-share-table"><table class="data">
+        <thead><tr><th>Mes</th><th class="num">Cuotas</th><th class="num">% gastos</th><th class="num">% ingr.</th></tr></thead>
+        <tbody>${shown.slice().reverse().map((r) => `<tr>
+          <td>${esc(monthShortLabel(r.mo))}</td>
+          <td class="num">${fmtDisp(r.cuotas)}</td>
+          <td class="num">${r.pctExp == null ? '—' : r.pctExp + '%'}</td>
+          <td class="num">${r.pctInc == null ? '—' : r.pctInc + '%'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    `, { submitLabel: 'Cerrar', viewOnly: true });
+    Charts.lines($('#chart-inst-share', dlg), shown.map((r) => monthShortLabel(r.mo)), [
+      { label: '% de tus gastos', color: 'var(--crit)', values: shown.map((r) => r.pctExp) },
+      { label: '% de tus ingresos', color: 'var(--income)', values: shown.map((r) => r.pctInc) },
+    ], {
+      smooth: true, pointLabels: true, pointLabelSize: 18, markerRadius: 4, topPad: 30,
+      fmtAxis: (v) => Math.round(v) + '%',
+      ariaLabel: 'Porcentaje de gastos e ingresos que se fue en cuotas, por mes',
+    });
+  }
+
   function vPlan(el) {
     const mk = curMonth();
     // Presupuestos por fecha real de carga, no de vencimiento — mismo
@@ -4287,10 +4334,11 @@
       <div class="card">
         <h2 class="card-title">Compras en cuotas</h2>
         ${instRows.length ? `
-        <div class="inst-share">
+        <div class="inst-share rowlink" id="btn-inst-share" role="button" tabindex="0" aria-label="Ver evolución por mes">
           <div class="inst-share-head"><span>Cuotas de ${esc(monthLabel(mk))}</span><b>${fmtDisp(cuotasMonth)}</b></div>
           ${shareRow('De tus gastos', expMonthCal, 'exp')}
           ${shareRow('De tus ingresos', incMonthCal, 'inc')}
+          <span class="inst-share-more">Ver evolución por mes ›</span>
         </div>
         ${monthTotals.length ? `
         <div class="hint" style="margin-bottom:6px">Cuánto pagás de cuotas cada mes.</div>
@@ -4365,6 +4413,11 @@
         fmtAxis: (v) => Charts.compact(v),
         ariaLabel: 'Total de cuotas por mes',
       });
+    }
+    const instShareBtn = $('#btn-inst-share', el);
+    if (instShareBtn) {
+      instShareBtn.addEventListener('click', installmentShareHistoryDialog);
+      instShareBtn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); installmentShareHistoryDialog(); } });
     }
     const instDetailBtn = $('#btn-inst-detail', el);
     if (instDetailBtn) instDetailBtn.addEventListener('click', () => installmentListDialog(instRows));
