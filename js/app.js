@@ -2069,9 +2069,9 @@
     })();
 
     // Tendencia: últimos 6 meses hasta el mes elegido, salvo los que no
-    // tengan ningún movimiento (no tiene sentido mostrar un mes vacío en
-    // el eje si nunca se cargó nada ese mes). Por fecha real de carga, no
-    // de vencimiento (ver comentario al principio de la función).
+    // tengan ingresos (un mes con sólo algún gasto suelto no es un mes
+    // "real" para comparar). Por fecha real de carga, no de vencimiento
+    // (ver comentario al principio de la función).
     const months = [];
     for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
     const trendRows = months.map((m) => {
@@ -2082,7 +2082,7 @@
         income: sumDisp(list.filter((t) => t.type === 'ingreso')),
         expense: sumDisp(list.filter((t) => t.type === 'gasto')),
       };
-    }).filter((r) => r.income > 0 || r.expense > 0);
+    }).filter((r) => r.income > 0);
 
     // Misma ventana de meses, pero para la tasa de ahorro (ahorro/ingresos):
     // se omiten los meses sin ningún ingreso (dividir por cero no tiene
@@ -2748,10 +2748,10 @@
     const selIsSub = !!(selCat && selCat.parentId);
     const selName = selId === '__sin' ? 'Sin categoría' : (selCat ? selCat.name : '');
 
-    // Meses con algún movimiento (ingreso o gasto), para los gráficos de
-    // evolución de abajo — un mes sin nada todavía no tiene "peso" que
-    // mostrar, así que no tiene sentido dejarlo como un hueco en el eje.
-    const activeMonths = months.filter((m) => txs.some((t) => monthKeyOf(t.date) === m));
+    // Meses con ingresos, para los gráficos de evolución de abajo — un mes
+    // sin ingresos (ej. sólo un gasto suelto) no es comparable con el
+    // resto, así que no entra al eje.
+    const activeMonths = months.filter((m) => txs.some((t) => t.type === 'ingreso' && monthKeyOf(t.date) === m));
     const monthLabels = activeMonths.map((m) => {
       const [y, mo] = m.split('-').map(Number);
       return monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', '');
@@ -3778,6 +3778,9 @@
       let m = savAllMonths[0];
       const cm = curMonth();
       while (m <= cm) { savMonths.push(m); m = addMonthsKey(m, 1); }
+      // Los meses sin ingresos no entran a ningún gráfico (tampoco al
+      // nominal ni al acumulado), igual que en el resto de la app.
+      savMonths = savMonths.filter((m) => S().transactions.some((t) => t.type === 'ingreso' && effectiveMonthOf(t) === m));
       if (savMonths.length > 12) savMonths = savMonths.slice(-12);
     }
     const savDeltaOf = (m) => savingsAtEndOf(m, { excludeOpening: true }) - savingsAtEndOf(addMonthsKey(m, -1), { excludeOpening: true });
@@ -4256,7 +4259,8 @@
   // Evolución mensual del peso de las cuotas: qué % de los gastos y de los
   // ingresos de cada mes se fue en cuotas (por fecha real, mismo criterio
   // que el bloque del mes actual). Arranca en el primer mes con alguna
-  // cuota dentro del último año, para no llenar el gráfico de ceros.
+  // cuota dentro del último año, para no llenar el gráfico de ceros, y
+  // salta los meses sin ingresos.
   function installmentShareHistoryDialog() {
     const cm = curMonth();
     const months = [];
@@ -4272,8 +4276,11 @@
         pctInc: inc > 0 ? Math.round((cuotas / inc) * 100) : null,
       };
     });
-    const first = rows.findIndex((r) => r.cuotas > 0);
-    const shown = first < 0 ? rows.slice(-1) : rows.slice(first);
+    // Sólo meses con ingresos (sin ingresos no hay % sobre ingresos, y un
+    // mes con un gasto suelto no es comparable con el resto).
+    const withIncome = rows.filter((r) => r.pctInc != null);
+    const first = withIncome.findIndex((r) => r.cuotas > 0);
+    const shown = first < 0 ? withIncome.slice(-1) : withIncome.slice(first);
     const dlg = openDialog('Peso de las cuotas por mes', `
       <div class="chart-legend">
         <span><span class="key" style="background:var(--crit)"></span>% de tus gastos</span>
