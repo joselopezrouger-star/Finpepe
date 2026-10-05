@@ -96,80 +96,10 @@ const Charts = (() => {
     }
   }
 
-  /* ---------- Columnas agrupadas: ingresos vs gastos por mes ----------
-     rows: [{label, income, expense}] · opts: {ariaLabel} */
-  function trend(el, rows, opts) {
-    el.replaceChildren();
-    if (!rows.length) return;
-    const W = 640, H = 236;
-    const m = { t: 10, r: 8, b: 26, l: 56 };
-    const iw = W - m.l - m.r;
-    const ih = H - m.t - m.b;
-
-    const maxVal = Math.max(1, ...rows.map((r) => Math.max(r.income, r.expense)));
-    const { top, ticks } = niceTicks(maxVal, 4);
-    const y = (v) => m.t + ih - (v / top) * ih;
-
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.setAttribute('class', 'trend-svg');
-    svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', opts.ariaLabel || 'Ingresos y gastos por mes');
-
-    const NS = 'http://www.w3.org/2000/svg';
-    const add = (parent, tag, attrs, text) => {
-      const n = document.createElementNS(NS, tag);
-      for (const k in attrs) n.setAttribute(k, attrs[k]);
-      if (text !== undefined) n.textContent = text;
-      parent.appendChild(n);
-      return n;
-    };
-
-    // Grilla + ticks del eje Y (hairline, recesiva)
-    for (const t of ticks) {
-      const yy = y(t);
-      add(svg, 'line', {
-        x1: m.l, x2: W - m.r, y1: yy, y2: yy,
-        stroke: t === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1,
-        'shape-rendering': 'crispEdges',
-      });
-      add(svg, 'text', {
-        x: m.l - 8, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label',
-      }, compact(t));
-    }
-
-    // Columna con extremo superior redondeado 4px, base recta
-    const colPath = (x, v, w) => {
-      const yy = y(v);
-      const h = m.t + ih - yy;
-      const r = Math.min(4, h, w / 2);
-      return `M${x},${m.t + ih} L${x},${yy + r} Q${x},${yy} ${x + r},${yy}` +
-             ` L${x + w - r},${yy} Q${x + w},${yy} ${x + w},${yy + r}` +
-             ` L${x + w},${m.t + ih} Z`;
-    };
-
-    const band = iw / rows.length;
-    const colW = Math.min(20, band * 0.28);
-    const gap = 2; // separación en color de superficie entre columnas vecinas
-
-    rows.forEach((r, i) => {
-      const cx = m.l + band * i + band / 2;
-      const x1 = cx - colW - gap / 2;
-      const x2 = cx + gap / 2;
-      if (r.income > 0) add(svg, 'path', { d: colPath(x1, r.income, colW), fill: COLORS.income });
-      if (r.expense > 0) add(svg, 'path', { d: colPath(x2, r.expense, colW), fill: COLORS.expense });
-      add(svg, 'text', {
-        x: cx, y: H - 8, 'text-anchor': 'middle', class: 'tick-label',
-      }, r.label);
-    });
-
-    el.appendChild(svg);
-  }
-
   /* ---------- Barras de una sola serie, con signo ----------
      Para valores que pueden ser negativos (ej. ahorro nominal por mes: un
      mes de retiro neto queda por debajo de la línea de cero) — mismo
-     estilo de columna redondeada que trend(), pero con eje que baja de
+     estilo de columna redondeada de siempre, pero con eje que baja de
      cero sólo si hace falta, igual que dailyBalance().
      rows: [{label, value}] · opts: {ariaLabel} */
   function singleBars(el, rows, opts) {
@@ -731,5 +661,5 @@ const Charts = (() => {
     }
   }
 
-  return { COLORS, hBars, trend, lines, singleBars, dailyBalance, pieCylinder, stacked100, compact, smoothPathD };
+  return { COLORS, hBars, lines, singleBars, dailyBalance, pieCylinder, stacked100, compact, smoothPathD };
 })();

@@ -264,6 +264,24 @@
     return arsSnapshotFor(amount, currency);
   }
 
+  // Encabezado verde con el mes (a la izquierda), flechas redondas (a la
+  // derecha) y borde de ola: el mismo en Inicio y arriba de Movimientos /
+  // Categorías / Calendario. Los botones usan data-mnav (cada vista los
+  // conecta a su propio cambio de mes).
+  function heroHeadHTML(mk) {
+    return `<div class="hero-head">
+          <span class="hero-head-label">${iconSvg('calendar')}<span>${esc(monthLabel(mk))}</span></span>
+          <span class="hero-head-nav">
+            <button class="hero-head-btn" data-mnav="-1" aria-label="Mes anterior">${iconSvg('chevLeft')}</button>
+            <button class="hero-head-btn" data-mnav="1" aria-label="Mes siguiente">${iconSvg('chevRight')}</button>
+          </span>
+          <svg class="hero-wave" viewBox="0 0 400 36" preserveAspectRatio="none" aria-hidden="true">
+            <path class="hero-wave-back" d="M0 24 C 70 8, 150 8, 230 20 S 350 30, 400 10 V36 H0 Z"/>
+            <path class="hero-wave-front" d="M0 30 C 90 12, 170 34, 260 26 S 360 14, 400 22 V36 H0 Z"/>
+          </svg>
+        </div>`;
+  }
+
   // Número protagonista (ej. Patrimonio neto): sin decimales, como el resto
   // de los montos de la app.
   function heroMoneyHTML(n, cur) {
@@ -2205,17 +2223,7 @@
           <path d="M0 200 C 100 165, 190 235, 280 195 S 370 170, 400 190 V300 H0 Z"/>
           <path d="M0 250 C 90 225, 200 280, 300 245 S 380 235, 400 245 V300 H0 Z"/>
         </svg>
-        <div class="hero-head">
-          <span class="hero-head-label">${iconSvg('calendar')}<span>${esc(monthLabel(mk))}</span></span>
-          <span class="hero-head-nav">
-            <button class="hero-head-btn" data-mnav="-1" aria-label="Mes anterior">${iconSvg('chevLeft')}</button>
-            <button class="hero-head-btn" data-mnav="1" aria-label="Mes siguiente">${iconSvg('chevRight')}</button>
-          </span>
-          <svg class="hero-wave" viewBox="0 0 400 36" preserveAspectRatio="none" aria-hidden="true">
-            <path class="hero-wave-back" d="M0 24 C 70 8, 150 8, 230 20 S 350 30, 400 10 V36 H0 Z"/>
-            <path class="hero-wave-front" d="M0 30 C 90 12, 170 34, 260 26 S 360 14, 400 22 V36 H0 Z"/>
-          </svg>
-        </div>
+        ${heroHeadHTML(mk)}
         ${mk === curMonth() ? '' : '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>'}
         <div class="hero-main">
           <div class="hero-main-left">
@@ -2289,7 +2297,7 @@
 
       <div class="card">
         <h2 class="card-title">
-          <span>Ingresos vs. gastos · últimos 6 meses</span>
+          <span>Ingresos vs. gastos</span>
           <button class="link-btn" data-trendtable>${ui.trendTable ? 'Ver gráfico' : 'Ver tabla'}</button>
         </h2>
         <div class="chart-legend">
@@ -2361,7 +2369,14 @@
           </tbody>
         </table></div>`;
     } else {
-      Charts.trend(trendEl, trendRows, {});
+      Charts.lines(trendEl, trendRows.map((r) => r.label), [
+        { label: 'Ingresos', color: Charts.COLORS.income, values: trendRows.map((r) => r.income) },
+        { label: 'Gastos', color: Charts.COLORS.expense, values: trendRows.map((r) => r.expense) },
+      ], {
+        smooth: true, markerRadius: 5, leftPad: 52, topPad: 14,
+        fmtAxis: (v) => Charts.compact(v),
+        ariaLabel: 'Ingresos y gastos por mes',
+      });
     }
     Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {
       prevPoints: dailyBalancePrev,
@@ -4307,7 +4322,10 @@
     });
   }
 
-  function vPlan(el) {
+  // Más → Cuotas / Presupuestos / Fijos: antes era una sola hoja
+  // "Planificar" con las tres tarjetas una debajo de la otra; ahora cada
+  // una es su propia sub-pestaña (section) y sólo se arma esa.
+  function vPlan(el, section) {
     const mk = curMonth();
     // Presupuestos por fecha real de carga, no de vencimiento — mismo
     // criterio que el aviso de presupuesto superado en Inicio.
@@ -4337,7 +4355,8 @@
       return { b, spent, limit, pct };
     }).sort((a, x) => (x.pct || 0) - (a.pct || 0));
 
-    el.innerHTML = `
+    const cards = {};
+    cards.cuotas = `
       <div class="card">
         <h2 class="card-title">Compras en cuotas</h2>
         ${instRows.length ? `
@@ -4354,8 +4373,8 @@
         ${installmentGanttHTML(instRows)}
         <button class="link-btn" id="btn-inst-detail" style="margin-top:14px">Ver el detalle de cada compra ›</button>`
         : '<div class="empty">Cuando cargues una compra en cuotas desde "+ Movimiento", la vas a ver acá con cuántas cuotas faltan.</div>'}
-      </div>
-
+      </div>`;
+    cards.presupuestos = `
       <div class="card">
         <h2 class="card-title">
           <span>Presupuestos por categoría · ${esc(monthLabel(mk))}</span>
@@ -4380,8 +4399,8 @@
           }).join('')}
         </div>`
         : '<div class="empty">Definí cuánto querés gastar por mes en cada categoría y controlá el avance acá.</div>'}
-      </div>
-
+      </div>`;
+    cards.fijos = `
       <div class="card">
         <h2 class="card-title">
           <span>Movimientos fijos</span>
@@ -4410,6 +4429,7 @@
         <div class="hint" style="margin-top:8px">Se cargan solos según su frecuencia (mensual, semanal o quincenal). Los ya generados se pueden editar o borrar como cualquier movimiento.</div>`
         : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos, mensual, semanal o quincenalmente.</div>'}
       </div>`;
+    el.innerHTML = cards[section];
 
     const instMonthsEl = $('#chart-inst-months', el);
     if (instMonthsEl) {
@@ -4428,8 +4448,10 @@
     }
     const instDetailBtn = $('#btn-inst-detail', el);
     if (instDetailBtn) instDetailBtn.addEventListener('click', () => installmentListDialog(instRows));
-    $('#btn-add-budget', el).addEventListener('click', () => budgetForm(null));
-    $('#btn-add-rec', el).addEventListener('click', () => recurringForm(null));
+    const addBudgetBtn = $('#btn-add-budget', el);
+    if (addBudgetBtn) addBudgetBtn.addEventListener('click', () => budgetForm(null));
+    const addRecBtn = $('#btn-add-rec', el);
+    if (addRecBtn) addRecBtn.addEventListener('click', () => recurringForm(null));
     $$('.budget-row[data-bid]', el).forEach((row) => row.addEventListener('click', (e) => {
       if (e.target.closest('[data-bdel]')) return;
       budgetForm(S().budgets.find((b) => b.id === row.dataset.bid));
@@ -5923,7 +5945,9 @@
     compartido: vCompartido,
     tarjetas: vTarjetas,
     ahorros: vAhorros,
-    plan: vPlan,
+    cuotas: (el) => vPlan(el, 'cuotas'),
+    presupuestos: (el) => vPlan(el, 'presupuestos'),
+    fijos: (el) => vPlan(el, 'fijos'),
     ajustes: vAjustes,
   };
 
@@ -5933,12 +5957,12 @@
     { key: 'inicio', views: ['resumen'] },
     { key: 'movimientos', views: ['movimientos', 'categorias', 'calendario'] },
     { key: 'cuentas', views: ['tarjetas', 'ahorros'] },
-    { key: 'mas', views: ['plan', 'compartido'] },
+    { key: 'mas', views: ['cuotas', 'presupuestos', 'fijos', 'compartido'] },
   ];
   const VIEW_LABELS = {
     resumen: 'Resumen', movimientos: 'Movimientos', calendario: 'Calendario',
     categorias: 'Categorías', tarjetas: 'Tarjetas y medios', ahorros: 'Ahorros',
-    plan: 'Planificar', compartido: 'Compartido', ajustes: 'Ajustes',
+    cuotas: 'Cuotas', presupuestos: 'Presupuestos', fijos: 'Fijos', compartido: 'Compartido', ajustes: 'Ajustes',
   };
   // Ajustes ya no vive dentro de ningún grupo de la nav inferior — se abre
   // directo con el botón del encabezado, así que groupOf() puede no
@@ -5950,6 +5974,7 @@
   // arriba) se vuelve al principio: si quedaste scrolleado abajo del todo
   // en una hoja, la siguiente no debería abrir en ese mismo nivel.
   let lastRenderedView = null;
+  const lastSubIdx = {};
   function render() {
     const changingView = ui.view !== lastRenderedView;
     lastRenderedView = ui.view;
@@ -5976,17 +6001,44 @@
     // Inicio — así no parece "pertenecer" a una sola de las tres vistas.
     const showMonthBar = grp && grp.key === 'movimientos';
     const monthBarHTML = showMonthBar ? `
-      <div class="card month-bar-card">
-        <div class="hero-month-bar">
-          <button class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
-          <span class="hero-month-bar-label">${iconSvg('calendar')}${esc(monthLabel(ui.month))}</span>
-          <button class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
-        </div>
-      </div>
+      <div class="month-head-card">${heroHeadHTML(ui.month)}</div>
       ${ui.month !== curMonth() ? '<button class="link-btn hero-mtoday shared-month-today" data-mtoday>volver al mes actual</button>' : ''}` : '';
-    el.innerHTML = monthBarHTML + ((grp && grp.views.length > 1)
-      ? `<div class="subtabs">${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}</div><div class="view-content"></div>`
-      : '<div class="view-content"></div>');
+    // Sub-pestañas con el mismo look que el selector de moneda: una píldora
+    // que se desliza atrás de la activa. Se dibuja primero en la posición
+    // de la pestaña anterior del mismo grupo y en el próximo frame se mueve
+    // a la nueva, así el cambio se ve animado aunque se re-arme todo el HTML.
+    let subtabsHTML = '';
+    let subIdx = -1, fromIdx = -1;
+    if (grp && grp.views.length > 1) {
+      subIdx = grp.views.indexOf(ui.view);
+      fromIdx = lastSubIdx[grp.key] != null ? lastSubIdx[grp.key] : subIdx;
+      lastSubIdx[grp.key] = subIdx;
+      subtabsHTML = `<div class="subtabs${grp.views.length > 3 ? ' subtabs-dense' : ''}">
+        <span class="subtabs-thumb" aria-hidden="true"></span>
+        ${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}
+      </div>`;
+    }
+    el.innerHTML = monthBarHTML + subtabsHTML + '<div class="view-content"></div>';
+    if (subIdx >= 0) {
+      // Las pestañas miden según su texto (no todas iguales), así que la
+      // píldora toma la posición y el ancho reales del botón.
+      const thumbEl = $('.subtabs-thumb', el);
+      const btns = $$('.subtabs button', el);
+      const placeOn = (b) => {
+        thumbEl.style.width = `${b.offsetWidth}px`;
+        thumbEl.style.transform = `translateX(${b.offsetLeft - 2}px)`;
+      };
+      thumbEl.style.transition = 'none';
+      placeOn(btns[fromIdx] || btns[subIdx]);
+      if (fromIdx !== subIdx) {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          thumbEl.style.transition = '';
+          placeOn(btns[subIdx]);
+        }));
+      } else {
+        requestAnimationFrame(() => { thumbEl.style.transition = ''; });
+      }
+    }
     if (showMonthBar) {
       $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
         ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
@@ -6065,6 +6117,16 @@
     $('#btn-open-settings').addEventListener('click', () => {
       ui.view = ui.view === 'ajustes' ? 'resumen' : 'ajustes';
       render();
+    });
+    // La píldora de las sub-pestañas está en px (ver render()): si cambia el
+    // ancho de pantalla (ej. girar el celular) se reacomoda sobre la activa.
+    window.addEventListener('resize', () => {
+      const t = $('.subtabs-thumb');
+      const a = $('.subtabs button.active');
+      if (!t || !a) return;
+      t.style.transition = 'none';
+      t.style.width = `${a.offsetWidth}px`;
+      t.style.transform = `translateX(${a.offsetLeft - 2}px)`;
     });
     // Restaura el scroll de la página al cerrar el diálogo, sin importar
     // cómo se cerró (botón, Escape, o dlg.close() desde código): ver openModal().
