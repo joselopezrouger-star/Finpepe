@@ -3196,6 +3196,13 @@
         const closeDate = parseDate(d.closeDate);
         const newKey = periodKey(closeDate.getFullYear(), closeDate.getMonth());
         const dueDate = d.dueDate ? parseDate(d.dueDate) : null;
+        // Un resumen vence siempre DESPUÉS de cerrar: con las fechas al
+        // revés (ej. cierre 01/10 → vence 30/09) todo el ciclo de la
+        // tarjeta y la proyección de los próximos resúmenes quedaban mal.
+        if (dueDate && dueDate <= closeDate) {
+          alert('El vencimiento tiene que ser posterior al cierre del resumen.');
+          return false;
+        }
         card.overrides = card.overrides || {};
         // Si cambió de mes de cierre, mover la entrada a la clave nueva
         // en vez de dejar una copia vieja huérfana.
