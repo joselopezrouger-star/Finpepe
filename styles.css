@@ -1924,3 +1924,41 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .method-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 12.5px; color: var(--ink-2); }
 .method-total b { font: 700 15px var(--font-heading); color: var(--ink); }
 .rec-times { font-size: 11px; color: var(--muted); white-space: nowrap; text-align: right; margin-top: 1px; }
+
+/* Cuotas: Gantt tocable y detalle de una compra */
+.gantt-link { cursor: pointer; }
+.gantt-label.gantt-link:hover { color: var(--accent); }
+.inst-cuotas-table { margin-top: 12px; }
+.inst-cuotas-table table.data th, .inst-cuotas-table table.data td { padding: 6px 6px; }
+.inst-cuotas-table tr.is-next td { background: var(--accent-wash); font-weight: 600; }
+.inst-st { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.inst-st.paid { color: var(--income); }
+.inst-st.now { color: var(--accent); }
+
+/* Movimientos: lista compacta — un bloque por día con filas separadas por
+   una línea fina, en vez de una tarjeta con borde (y ✕) por movimiento. */
+.tx-list-compact {
+  gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.tx-list-compact .tx-card-row {
+  border: 0; border-radius: 0; background: transparent;
+  padding: 6px 10px; gap: 9px;
+}
+.tx-list-compact .tx-card-row + .tx-card-row { border-top: 1px solid var(--border); }
+.tx-list-compact .tx-card-row:hover { background: var(--surface-2); }
+.tx-list-compact .row-icon { width: 26px; height: 26px; }
+.tx-list-compact .row-icon svg { width: 14px; height: 14px; }
+.tx-list-compact .tx-card-title { font-size: 12.5px; line-height: 1.25; }
+.tx-list-compact .tx-card-sub { font-size: 10.5px; line-height: 1.25; margin-top: 0; }
+.tx-list-compact .tx-card-amount .v { font-size: 13px; line-height: 1.25; }
+.tx-list-compact .tx-card-amount .usd { font-size: 10px; line-height: 1.2; margin-top: 0; }
+.tx-day-group:has(.tx-list-compact) + .tx-day-group { margin-top: 10px; }
+.tx-day-group:has(.tx-list-compact) .tx-day-label { margin: 2px 2px 4px; }
+.inst-detail-rows { margin-top: 8px; }
+.inst-detail-rows .tx-detail-row { padding: 7px 2px; min-height: 0; }
+.inst-detail-rows .tx-row-label { width: auto; font-size: 12.5px; white-space: nowrap; }
+.inst-detail-rows .tx-row-value { font-size: 13px; }

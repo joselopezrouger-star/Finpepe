@@ -27,6 +27,15 @@
   }
 
   const pad = (n) => String(n).padStart(2, '0');
+  // Variación porcentual para mostrar (sin signo): con decimal si es menos
+  // de 1% — antes se redondeaba a entero y una suba real chica (ej. +0,5%,
+  // $17.000 más) aparecía como "=", como si no hubiera cambiado nada.
+  // Devuelve null si la variación es prácticamente cero (< 0,05%).
+  const fmtVarPct = (pct) => {
+    const a = Math.abs(pct);
+    if (!(a >= 0.05)) return null;
+    return a < 0.95 ? a.toFixed(1).replace('.', ',') : String(Math.round(a));
+  };
   const dateToStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const todayStr = () => dateToStr(new Date());
   const parseDate = (str) => {
@@ -1976,11 +1985,11 @@
     const delta = (cur, prev, upIsGood) => {
       if (!(prev > 0)) return '';
       const diff = cur - prev;
-      const pct = Math.round((diff / prev) * 100);
-      if (pct === 0) return `<div class="tile-delta">= MoM</div>`;
-      const up = pct > 0;
+      const pctLabel = fmtVarPct((diff / prev) * 100);
+      if (pctLabel == null) return `<div class="tile-delta">= MoM</div>`;
+      const up = diff > 0;
       const cls = (up === upIsGood) ? 'up-good' : 'down-bad';
-      return `<div class="tile-delta"><span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(pct)}% MoM</span></div>`;
+      return `<div class="tile-delta"><span class="${cls}">${up ? '▲' : '▼'} ${pctLabel}% MoM</span></div>`;
     };
     // Variación de Ahorros: el aporte mensual puede ser $0 o negativo (un
     // retiro), así que si no hay un aporte previo positivo contra el cual
@@ -1992,7 +2001,7 @@
       const up = diff > 0;
       const cls = up ? 'up-good' : 'down-bad';
       const pctLabel = savingsMonthPrev > 0
-        ? `${up ? '▲' : '▼'} ${Math.abs(Math.round((diff / savingsMonthPrev) * 100))}% MoM`
+        ? `${up ? '▲' : '▼'} ${fmtVarPct((diff / savingsMonthPrev) * 100) || '0'}% MoM`
         : `${up ? '▲' : '▼'} nuevo`;
       return `<div class="tile-delta"><span class="${cls}">${pctLabel}</span></div>`;
     })();
@@ -2636,7 +2645,7 @@
         ${dayGroups(list).map(({ dateStr, items }) => `
           <div class="tx-day-group">
             <div class="tx-day-label">${esc(dayGroupLabel(dateStr))}</div>
-            <div class="tx-card-list">
+            <div class="tx-card-list tx-list-compact">
               ${items.map((t) => {
                 if (t.type === 'transferencia') {
                   const usdLineT = (t.currency === 'ARS' && t.usdSnapshot != null)
@@ -2651,7 +2660,6 @@
                       <div class="v">${fmtMoney(t.amount, t.currency)}</div>
                       ${usdLineT}
                     </div>
-                    <button class="tx-card-del" data-del="${esc(t.id)}" aria-label="Eliminar">✕</button>
                   </div>`;
                 }
                 const inst = t.installment ? ` · cuota ${t.installment.k}/${t.installment.n}` : '';
@@ -2677,7 +2685,6 @@
                     <div class="v ${isIncome ? 'pos' : 'neg'}${bigClass(t)}">${sign} ${fmtMoney(t.amount, t.currency)}</div>
                     ${usdLine}
                   </div>
-                  <button class="tx-card-del" data-del="${esc(t.id)}" aria-label="Eliminar">✕</button>
                 </div>`;
               }).join('')}
             </div>
@@ -2691,18 +2698,14 @@
     $('#fil-method', el).addEventListener('change', (e) => { ui.fMethod = e.target.value; render(); });
     $('#btn-add-tx', el).addEventListener('click', () => txForm(null));
 
+    // Sin ✕ en cada fila (ocupaba lugar en una lista larga): se elimina
+    // desde el detalle que se abre al tocar el movimiento.
     $$('.tx-card-row', el).forEach((row) => {
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('[data-del]')) return;
+      row.addEventListener('click', () => {
         const tx = S().transactions.find((t) => t.id === row.dataset.tx);
         if (tx) txDetailDialog(tx);
       });
     });
-    $$('[data-del]', el).forEach((b) => b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const tx = S().transactions.find((t) => t.id === b.dataset.del);
-      if (tx) deleteTx(tx);
-    }));
   }
 
   /* ================= Vista: Categorías (análisis) ================= */
@@ -2817,12 +2820,12 @@
         return `<span class="cat-mom-cell"><span class="cat-mom-pct new">nuevo</span><span class="cat-mom-amt">${fmtDisp(cur)}</span></span>`;
       }
       const diff = cur - prevVal;
-      const pctVar = Math.round((diff / prevVal) * 100);
-      if (pctVar === 0) return '<span class="cat-mom-cell"><span class="cat-mom-pct flat">=</span><span class="cat-mom-amt">&nbsp;</span></span>';
+      const pctVar = fmtVarPct((diff / prevVal) * 100);
+      if (pctVar == null) return '<span class="cat-mom-cell"><span class="cat-mom-pct flat">=</span><span class="cat-mom-amt">&nbsp;</span></span>';
       const up = diff > 0;
       const bad = badWhenUp ? up : !up;
       return `<span class="cat-mom-cell">
-        <span class="cat-mom-pct ${bad ? 'up' : 'down'}">${up ? '▲' : '▼'}${Math.abs(pctVar)}%</span>
+        <span class="cat-mom-pct ${bad ? 'up' : 'down'}">${up ? '▲' : '▼'}${pctVar}%</span>
         <span class="cat-mom-amt">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))}</span>
       </span>`;
     };
@@ -3045,13 +3048,6 @@
       </div>
 
       <div class="card">
-        <h2 class="card-title"><span>Gastos por medio de pago · ${esc(monthLabel(mk))}</span></h2>
-        ${methodItems.length ? `
-        <div id="chart-cat-methods" class="cats-bars method-bars"></div>
-        <div class="method-total"><span>Total gastado</span><b>${fmtDisp(exp)}</b></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>
-
-      <div class="card">
         <h2 class="card-title"><span>Gastos por categoría</span></h2>
         ${breakdown.length ? `
         <div class="table-scroll"><table class="data cat-breakdown-table">
@@ -3093,6 +3089,13 @@
         <div id="chart-cat-stack"></div>
         <div class="hint" style="margin-top:6px">Cada barra es el 100% de lo gastado ese mes: si una franja crece o se achica, cambió el peso de esa categoría.</div>` :
           '<div class="empty">Todavía no hay suficientes movimientos para ver la participación mes a mes.</div>'}
+      </div>
+
+      <div class="card">
+        <h2 class="card-title"><span>Gastos por medio de pago · ${esc(monthLabel(mk))}</span></h2>
+        ${methodItems.length ? `
+        <div id="chart-cat-methods" class="cats-bars method-bars"></div>
+        <div class="method-total"><span>Total gastado</span><b>${fmtDisp(exp)}</b></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
       </div>`;
 
     if (windowBreakdown.length) {
@@ -4291,7 +4294,10 @@
         n: next.installment.n, nextK: next.installment.k, next, totalPending, pending, all: txs,
       });
     }
-    return rows.sort((a, b) => paymentDateOf(a.next).localeCompare(paymentDateOf(b.next)));
+    // Primero la compra que arrancó antes (por la fecha de pago de su
+    // primera cuota, y si empatan, por la fecha de compra).
+    return rows.sort((a, b) => paymentDateOf(a.all[0]).localeCompare(paymentDateOf(b.all[0]))
+      || a.all[0].date.localeCompare(b.all[0].date));
   }
 
   // Cuánto se paga en total de cuotas cada mes, desde el actual en
@@ -4345,6 +4351,7 @@
     const todayIdx = months.indexOf(today);
 
     const barRows = rows.map((r, i) => ({
+      groupId: r.groupId,
       label: r.note || catName(r.categoryId),
       color: CAT_PALETTE[i % CAT_PALETTE.length],
       startIdx: months.indexOf(effectiveMonthOf(r.all[0])),
@@ -4369,9 +4376,11 @@
     });
     barRows.forEach((r, ri) => {
       const gr = ri + 2;
-      cells.push(`<div class="gantt-cell gantt-label" style="grid-row:${gr};grid-column:1" title="${esc(r.label)}">${esc(r.label)}</div>`);
-      cells.push(`<div class="gantt-track" style="grid-row:${gr};grid-column:2 / -1"></div>`);
-      cells.push(`<div class="gantt-bar" style="grid-row:${gr};grid-column:${r.startIdx + 2} / ${r.endIdx + 3};background:${r.color}"></div>`);
+      // Toda la fila (nombre, fondo y barra) abre el detalle de la compra.
+      const g = `data-instgroup="${esc(r.groupId)}"`;
+      cells.push(`<div class="gantt-cell gantt-label gantt-link" ${g} role="button" tabindex="0" style="grid-row:${gr};grid-column:1" title="${esc(r.label)}">${esc(r.label)}</div>`);
+      cells.push(`<div class="gantt-track gantt-link" ${g} style="grid-row:${gr};grid-column:2 / -1"></div>`);
+      cells.push(`<div class="gantt-bar gantt-link" ${g} style="grid-row:${gr};grid-column:${r.startIdx + 2} / ${r.endIdx + 3};background:${r.color}"></div>`);
     });
 
     return `<div class="gantt-wrap"><div class="gantt" style="grid-template-columns:${cols};grid-template-rows:${gridRows}">${cells.join('')}</div></div>`;
@@ -4381,15 +4390,12 @@
   // debajo del Gantt) ahora es un pop-up: el Gantt ya responde "cuándo",
   // y este detalle es para cuando hace falta el "cuánto/con qué medio" de
   // una compra puntual — no hace falta tenerlo abierto de entrada.
-  function installmentListDialog(rows) {
-    const bodyHTML = `
-      <div class="inst-row-list">
-        ${rows.map((r) => {
-          // Progreso de la compra: cuánto de las cuotas ya vas pagando —
-          // 1 de 3 = un tercio coloreado, la última cuota = toda coloreada.
-          const prog = Math.round((r.nextK / r.n) * 100);
-          return `
-          <div class="inst-row rowlink" data-instgroup="${esc(r.groupId)}" style="--prog:${prog}%">
+  function installmentRowHTML(r, link = true) {
+    // Progreso de la compra: cuánto de las cuotas ya vas pagando —
+    // 1 de 3 = un tercio coloreado, la última cuota = toda coloreada.
+    const prog = Math.round((r.nextK / r.n) * 100);
+    return `
+          <div class="inst-row ${link ? 'rowlink' : ''}" ${link ? `data-instgroup="${esc(r.groupId)}"` : ''} style="--prog:${prog}%">
             <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(r.categoryId))}</div>
             <div class="inst-row-main">
               <div class="inst-row-title">${esc(r.note || catName(r.categoryId))}</div>
@@ -4400,13 +4406,51 @@
               <div class="inst-row-total">${fmtMoney(r.totalPending, r.currency)} <span class="inst-row-amount-label">restan</span></div>
             </div>
           </div>`;
-        }).join('')}
-      </div>`;
+  }
+  function installmentListDialog(rows) {
+    const bodyHTML = `<div class="inst-row-list">${rows.map((r) => installmentRowHTML(r)).join('')}</div>`;
     const dlg = openDialog('Compras en cuotas', bodyHTML, { submitLabel: 'Cerrar', viewOnly: true });
     $$('[data-instgroup]', dlg).forEach((row) => row.addEventListener('click', () => {
       const g = rows.find((r) => r.groupId === row.dataset.instgroup);
-      if (g) { dlg.close(); txForm(g.next); }
+      if (g) { dlg.close(); installmentPurchaseDialog(g); }
     }));
+  }
+
+  // Detalle de UNA compra en cuotas (al tocarla en el Gantt o en la
+  // lista): la misma fila resumen de "Ver el detalle de cada compra" y,
+  // abajo, todas sus cuotas con cuándo se paga cada una y si ya se pagó.
+  function installmentPurchaseDialog(r) {
+    const today = todayStr();
+    const cm = curMonth();
+    const total = r.all.reduce((a, t) => a + t.amount, 0);
+    const first = r.all[0], last = r.all[r.all.length - 1];
+    const status = (t) => {
+      const pay = paymentDateOf(t);
+      if (pay <= today) return '<span class="inst-st paid">Pagada</span>';
+      if (effectiveMonthOf(t) === cm) return '<span class="inst-st now">Este mes</span>';
+      return '<span class="inst-st">Pendiente</span>';
+    };
+    const bodyHTML = `
+      ${installmentRowHTML(r, false)}
+      <div class="inst-detail-rows">
+      <div class="tx-detail-row"><span class="tx-row-label">Total de la compra</span><span class="tx-row-value">${fmtMoney(total, r.currency)}</span></div>
+      <div class="tx-detail-row"><span class="tx-row-label">Fecha de compra</span><span class="tx-row-value">${esc(fmtDateFull(first.date))}</span></div>
+      <div class="tx-detail-row"><span class="tx-row-label">Categoría</span><span class="tx-row-value">${esc(catName(r.categoryId))}</span></div>
+      <div class="tx-detail-row"><span class="tx-row-label">Termina</span><span class="tx-row-value">${esc(monthLabel(effectiveMonthOf(last)))}</span></div>
+      </div>
+      <div class="table-scroll inst-cuotas-table"><table class="data">
+        <thead><tr><th>Cuota</th><th>Se paga</th><th class="num">Monto</th><th class="num">Estado</th></tr></thead>
+        <tbody>${r.all.map((t) => `<tr class="${t === r.next ? 'is-next' : ''}">
+          <td>${t.installment.k}/${t.installment.n}</td>
+          <td>${esc(fmtDateShort(paymentDateOf(t)))}</td>
+          <td class="num">${fmtMoney(t.amount, t.currency)}</td>
+          <td class="num">${status(t)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    openDialog(r.note || catName(r.categoryId), bodyHTML, {
+      submitLabel: 'Editar compra',
+      onSubmit: (data, d) => { d.close(); txForm(r.next); return false; },
+    });
   }
 
   // Evolución mensual del peso de las cuotas: qué % de los gastos y de los
@@ -4628,6 +4672,14 @@
     }
     const instDetailBtn = $('#btn-inst-detail', el);
     if (instDetailBtn) instDetailBtn.addEventListener('click', () => installmentListDialog(instRows));
+    $$('.gantt-link[data-instgroup]', el).forEach((cell) => {
+      const open = () => {
+        const g = instRows.find((r) => r.groupId === cell.dataset.instgroup);
+        if (g) installmentPurchaseDialog(g);
+      };
+      cell.addEventListener('click', open);
+      cell.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    });
     const addBudgetBtn = $('#btn-add-budget', el);
     if (addBudgetBtn) addBudgetBtn.addEventListener('click', () => budgetForm(null));
     const addRecBtn = $('#btn-add-rec', el);
