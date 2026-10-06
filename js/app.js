@@ -3204,17 +3204,19 @@
       if (e.target.closest('[data-resumedel]')) return;
       const row = rows[Number(rowEl.dataset.resumeidx)];
       dlg.close();
-      cardResumeEditForm(card, row);
+      cardResumeEditForm(card.id, row);
     }));
     $$('[data-resumedel]', dlg).forEach((b) => b.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!confirm('¿Quitar este resumen?')) return;
-      delete card.overrides[b.dataset.resumedel];
+      const c = methodById(card.id);
+      if (!c) { dlg.close(); return; }
+      delete (c.overrides || {})[b.dataset.resumedel];
       realignCardInstallments();
       Store.save();
       dlg.close();
       render();
-      cardResumesDialog(card);
+      cardResumesDialog(c);
     }));
     const upcomingBox = $('#ov-upcoming', dlg);
     $('#ov-toggle-upcoming', dlg).addEventListener('click', (ev) => {
@@ -3241,7 +3243,7 @@
   /* Carga o corrige el cierre y vencimiento REALES de UN resumen puntual
      ya identificado (row viene de cardResumeRows/cardResumesDialog, así
      que no hay que adivinar a qué período corresponde el formulario). */
-  function cardResumeEditForm(card, row) {
+  function cardResumeEditForm(cardId, row) {
     const body = `
       <div class="field">
         <label for="ov-close">Fecha real de cierre de este resumen</label>
@@ -3269,6 +3271,12 @@
           alert('El vencimiento tiene que ser posterior al cierre del resumen.');
           return false;
         }
+        // La tarjeta se busca recién ACÁ (no se guarda el objeto al abrir
+        // el formulario): si mientras tanto la app se sincronizó con la
+        // nube, el estado en memoria es otro y editar el objeto viejo no
+        // guardaba nada.
+        const card = methodById(cardId);
+        if (!card) { dlg.close(); return false; }
         card.overrides = card.overrides || {};
         // Si cambió la fecha de cierre, mover la entrada a la clave nueva
         // en vez de dejar una copia vieja huérfana.
@@ -5463,8 +5471,18 @@
           // pero de todos modos sincroniza (ver Store.saveLocal). Preferimos
           // no perder datos en vez de confiar ciegamente en el reloj.
           const remoteLooksStale = !localEmpty && remote.data.transactions.length < S().transactions.length;
+          // Si la nube tiene exactamente lo mismo que ya está acá (lo que
+          // este mismo dispositivo subió), no se reemplaza nada. Supabase
+          // dispara este chequeo cada vez que la app vuelve a primer plano,
+          // y reemplazar el estado en memoria dejaba "desenganchado" el
+          // objeto que tenía abierto un diálogo (ej. editar un resumen de
+          // tarjeta después de ir a mirar el PDF del banco): lo que se
+          // guardaba ahí no llegaba a los datos reales y "no cambiaba nada".
+          const sameAsLocal = !localEmpty && remote.data._updatedAt != null && remote.data._updatedAt === S()._updatedAt;
           // La nube manda salvo que lo local sea más nuevo y la nube esté vacía de cambios.
-          if (localEmpty || (remoteTs >= localTs && !remoteLooksStale)) {
+          if (sameAsLocal) {
+            // nada que hacer
+          } else if (localEmpty || (remoteTs >= localTs && !remoteLooksStale)) {
             Store.applyRemote(remote.data);
           } else {
             await Cloud.push(S());
