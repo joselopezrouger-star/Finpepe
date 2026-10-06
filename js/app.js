@@ -982,13 +982,18 @@
   function generateRecurring() {
     const cm = curMonth();
     const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+    const monthEnd = new Date(todayD.getFullYear(), todayD.getMonth() + 1, 0);
     let changed = false;
     for (const r of S().recurring) {
       if (r.freq === 'weekly' || r.freq === 'biweekly') {
         if (!r.startDate) continue;
         const step = r.freq === 'weekly' ? 7 : 14;
         let cursor = r.lastGenDate ? addDays(parseDate(r.lastGenDate), step) : parseDate(r.startDate);
-        while (cursor <= todayD) {
+        // Hasta el fin del mes en curso (no solo hasta hoy), igual que un
+        // fijo mensual, que se genera apenas arranca el mes aunque su día
+        // todavía no haya llegado: antes uno semanal que arrancaba mañana
+        // no aparecía en Movimientos ni en el balance hasta ese día.
+        while (cursor <= monthEnd) {
           const dateStr = dateToStr(cursor);
           pushRecurringTx(r, dateStr);
           r.lastGenDate = dateStr;
