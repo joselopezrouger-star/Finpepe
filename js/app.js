@@ -569,68 +569,75 @@
   };
 
   /* ================= Ciclo de tarjetas de crédito ================= */
-  /* Cada resumen (cierre + vencimiento) se carga a mano desde "Cargar
-     resumen", con su fecha real — no hay un "día habitual" fijo que se
-     define una sola vez al crear la tarjeta. card.overrides guarda, por
-     mes de cierre ('YYYY-MM'), el resumen que cargaste para ese mes.
-     Para un mes sin resumen cargado (por ejemplo, uno futuro con una
-     cuota pendiente), se asume el día del ÚLTIMO resumen cargado antes
-     de ese mes — así no hace falta cargar seis meses para adelante para
-     que el Gantt de cuotas tenga algo que mostrar, y ese valor se
-     autocorrige solo apenas cargás el resumen real de ese mes. */
-  function periodKey(y, m0) {
-    const d = new Date(y, m0, 1);
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
-  }
-  function cardDayFor(card, kind, y, m0) {
-    const key = periodKey(y, m0);
+  /* Cada resumen (cierre + vencimiento) se carga a mano desde "Resúmenes",
+     con su fecha real — no hay un "día habitual" fijo que se define una
+     sola vez al crear la tarjeta. card.overrides guarda cada resumen
+     cargado, con clave = su fecha de cierre ('YYYY-MM-DD'; los cargados
+     antes de este cambio quedaron con clave 'YYYY-MM', y se siguen leyendo
+     igual). Al ser por fecha y no por mes, un mes puede tener dos cierres
+     (ej. un banco que cierra el 01/10 y de nuevo el 29/10) — antes el
+     segundo pisaba al primero.
+     Fechas que no se cargaron:
+       - después del último resumen cargado, se proyectan mes a mes con el
+         mismo día que ese último (así no hace falta cargar seis meses para
+         adelante para que el Gantt de cuotas tenga algo que mostrar);
+       - entre el primero y el último cargado, valen sólo los reales (un
+         ciclo largo, sin cierre en algún mes, no inventa uno en el medio);
+       - antes del primero, el día fijo de compatibilidad de tarjetas
+         viejas, si lo tiene. */
+  function cardResumes(card) {
     const overrides = card.overrides || {};
-    let day = null;
-    for (const k of Object.keys(overrides).sort()) {
-      if (k > key) break;
-      if (overrides[k][kind] != null) day = overrides[k][kind];
-    }
-    // Compatibilidad con tarjetas creadas antes de este cambio, que
-    // traían un día de cierre/vencimiento fijo puesto al crearlas (a las
-    // tarjetas nuevas ya no se les pide eso: arrancan sin resúmenes
-    // cargados). Solo se usa como último recurso, para meses sin ningún
-    // resumen cargado todavía ni antes ni en ese período.
-    if (day == null && card[kind] != null) day = card[kind];
-    return day;
-  }
-  function cardDate(card, kind, y, m0) {
-    const day = cardDayFor(card, kind, y, m0);
-    if (day == null) return null;
-    return clampDate(y, m0, day);
+    return Object.keys(overrides).map((key) => {
+      const ov = overrides[key];
+      let close = ov.closeDateStr ? parseDate(ov.closeDateStr) : null;
+      if (!close && ov.closingDay != null && /^\d{4}-\d{2}/.test(key)) {
+        close = clampDate(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, ov.closingDay);
+      }
+      if (!close) return null;
+      let due = ov.dueDateStr ? parseDate(ov.dueDateStr) : null;
+      if (!due && ov.dueDay != null) {
+        due = clampDate(close.getFullYear(), close.getMonth(), ov.dueDay);
+        if (due <= close) due = clampDate(close.getFullYear(), close.getMonth() + 1, ov.dueDay);
+      }
+      return { key, close, due, dueAssumed: !ov.dueDateStr };
+    }).filter(Boolean).sort((x, y) => x.close - y.close);
   }
   function cardDateCandidates(card, kind, y, m0) {
-    const eff = cardDate(card, kind, y, m0);
-    return eff ? [eff] : [];
+    const field = kind === 'closingDay' ? 'close' : 'due';
+    const mk = monthKeyOf(dateToStr(new Date(y, m0, 1)));
+    const dates = cardResumes(card).map((r) => r[field]).filter(Boolean).sort((a, b) => a - b);
+    const inMonth = dates.filter((d) => monthKeyOf(dateToStr(d)) === mk);
+    if (inMonth.length) return inMonth;
+    if (dates.length) {
+      const last = dates[dates.length - 1];
+      if (mk > monthKeyOf(dateToStr(last))) return [clampDate(y, m0, last.getDate())];
+      if (mk >= monthKeyOf(dateToStr(dates[0]))) return [];
+    }
+    return card[kind] != null ? [clampDate(y, m0, card[kind])] : [];
   }
   /* Próxima fecha de 'kind' a partir de 'from' (inclusive, o estrictamente
-     posterior si strict=true), revisando primero los candidatos del
-     propio mes de 'from', y si no encuentra ninguno, mes por mes hacia
-     adelante. */
+     posterior si strict=true), mes por mes hacia adelante (alcanza para un
+     ciclo largo sin cierre en algún mes). */
   function nextCardDate(card, kind, from, strict) {
-    for (let dm = 0; dm < 3; dm++) {
+    for (let dm = 0; dm < 4; dm++) {
       const d = new Date(from.getFullYear(), from.getMonth() + dm, 1);
       for (const c of cardDateCandidates(card, kind, d.getFullYear(), d.getMonth())) {
         if (strict ? c > from : c >= from) return c;
       }
     }
-    return cardDate(card, kind, from.getFullYear(), from.getMonth() + 3);
+    return null;
   }
   /* Misma idea que nextCardDate pero hacia atrás: la fecha de 'kind' más
      reciente estrictamente ANTERIOR a 'before'. */
   function prevCardDate(card, kind, before) {
-    for (let dm = 0; dm < 3; dm++) {
+    for (let dm = 0; dm < 4; dm++) {
       const d = new Date(before.getFullYear(), before.getMonth() - dm, 1);
       const cands = cardDateCandidates(card, kind, d.getFullYear(), d.getMonth());
       for (let i = cands.length - 1; i >= 0; i--) {
         if (cands[i] < before) return cands[i];
       }
     }
-    return cardDate(card, kind, before.getFullYear(), before.getMonth() - 3);
+    return null;
   }
   // Devuelve null si la tarjeta todavía no tiene ningún resumen cargado
   // (ni uno propio ni el día fijo de compatibilidad de tarjetas viejas):
@@ -3065,14 +3072,9 @@
      para poder cargarlo con un toque en vez de adivinar a qué mes
      corresponde un formulario suelto. */
   function cardResumeRows(card) {
-    const overrides = card.overrides || {};
-    const rows = Object.keys(overrides).sort().map((key) => {
-      const ov = overrides[key];
-      const close = ov.closeDateStr ? parseDate(ov.closeDateStr) : null;
-      const due = ov.dueDateStr ? parseDate(ov.dueDateStr)
-        : (close ? nextCardDate(card, 'dueDay', close, true) : null);
-      return { key, close, due, dueAssumed: !ov.dueDateStr, real: true };
-    }).filter((r) => r.close);
+    const rows = cardResumes(card).map((r) => ({
+      ...r, due: r.due || nextCardDate(card, 'dueDay', r.close, true), real: true,
+    }));
 
     const lastClose = rows.length ? rows[rows.length - 1].close : null;
     let nextClose = lastClose
@@ -3088,7 +3090,7 @@
     }
     if (nextClose) {
       rows.push({
-        key: periodKey(nextClose.getFullYear(), nextClose.getMonth()),
+        key: dateToStr(nextClose),
         close: nextClose, due: nextCardDate(card, 'dueDay', nextClose, true),
         dueAssumed: true, real: false,
       });
@@ -3194,7 +3196,7 @@
       onSubmit(d, dlg) {
         if (!d.closeDate) return false;
         const closeDate = parseDate(d.closeDate);
-        const newKey = periodKey(closeDate.getFullYear(), closeDate.getMonth());
+        const newKey = d.closeDate;
         const dueDate = d.dueDate ? parseDate(d.dueDate) : null;
         // Un resumen vence siempre DESPUÉS de cerrar: con las fechas al
         // revés (ej. cierre 01/10 → vence 30/09) todo el ciclo de la
@@ -3204,7 +3206,7 @@
           return false;
         }
         card.overrides = card.overrides || {};
-        // Si cambió de mes de cierre, mover la entrada a la clave nueva
+        // Si cambió la fecha de cierre, mover la entrada a la clave nueva
         // en vez de dejar una copia vieja huérfana.
         if (row.real && row.key !== newKey) delete card.overrides[row.key];
         card.overrides[newKey] = {
@@ -3484,19 +3486,18 @@
     }
 
     for (const c of S().methods.filter((m) => m.kind === 'credito')) {
-      const due = cardDate(c, 'dueDay', y, mo - 1);
-      if (!due) continue; // todavía no cargó ningún resumen con vencimiento en este mes
-      // Resumen que vence en esa fecha: el que cerró justo antes del vencimiento.
-      let close = cardDate(c, 'closingDay', due.getFullYear(), due.getMonth());
-      if (!close || close >= due) close = cardDate(c, 'closingDay', due.getFullYear(), due.getMonth() - 1);
-      if (!close) continue;
-      const prevClose = cardDate(c, 'closingDay', close.getFullYear(), close.getMonth() - 1);
-      const amount = cardPeriodTotal(c.id, prevClose || new Date(0), close); // ya en moneda visible
-      events.push({
-        date: dateToStr(due), kind: 'card', icon: '💳',
-        title: c.name, sub: 'Vencimiento tarjeta · día ' + due.getDate(),
-        amountDisp: amount,
-      });
+      for (const due of cardDateCandidates(c, 'dueDay', y, mo - 1)) {
+        // Resumen que vence en esa fecha: el que cerró justo antes del vencimiento.
+        const close = prevCardDate(c, 'closingDay', due);
+        if (!close) continue;
+        const prevClose = prevCardDate(c, 'closingDay', close);
+        const amount = cardPeriodTotal(c.id, prevClose || new Date(0), close); // ya en moneda visible
+        events.push({
+          date: dateToStr(due), kind: 'card', icon: '💳',
+          title: c.name, sub: 'Vencimiento tarjeta · día ' + due.getDate(),
+          amountDisp: amount,
+        });
+      }
     }
     return events;
   }
