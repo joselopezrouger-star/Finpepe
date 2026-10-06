@@ -1956,8 +1956,16 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .tx-list-compact .tx-card-sub { font-size: 10.5px; line-height: 1.25; margin-top: 0; }
 .tx-list-compact .tx-card-amount .v { font-size: 13px; line-height: 1.25; }
 .tx-list-compact .tx-card-amount .usd { font-size: 10px; line-height: 1.2; margin-top: 0; }
-.tx-day-group:has(.tx-list-compact) + .tx-day-group { margin-top: 10px; }
-.tx-day-group:has(.tx-list-compact) .tx-day-label { margin: 2px 2px 4px; }
+.tx-day-blocks { display: grid; gap: 8px; }
+.tx-day-head {
+  padding: 5px 10px 4px;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.dialog .tx-day-blocks { margin-top: 8px; }
+.dialog .tx-list-compact { margin-top: 8px; }
 .inst-detail-rows { margin-top: 8px; }
 .inst-detail-rows .tx-detail-row { padding: 7px 2px; min-height: 0; }
 .inst-detail-rows .tx-row-label { width: auto; font-size: 12.5px; white-space: nowrap; }

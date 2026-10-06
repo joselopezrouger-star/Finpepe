@@ -2642,53 +2642,7 @@
         <button class="btn btn-primary btn-sm mov-add" id="btn-add-tx">+ Movimiento</button>
 
         ${list.length ? `
-        ${dayGroups(list).map(({ dateStr, items }) => `
-          <div class="tx-day-group">
-            <div class="tx-day-label">${esc(dayGroupLabel(dateStr))}</div>
-            <div class="tx-card-list tx-list-compact">
-              ${items.map((t) => {
-                if (t.type === 'transferencia') {
-                  const usdLineT = (t.currency === 'ARS' && t.usdSnapshot != null)
-                    ? `<div class="usd">≈ ${esc(fmtMoney(t.usdSnapshot, 'USD'))}</div>` : '';
-                  return `<div class="tx-card-row" data-tx="${esc(t.id)}">
-                    <div class="row-icon row-icon-transfer">${iconSvg('swap')}</div>
-                    <div class="tx-card-main">
-                      <div class="tx-card-title">${esc(t.note || 'Transferencia')}</div>
-                      <div class="tx-card-sub">${esc(methodName(t.methodId))} → ${esc(methodName(t.toMethodId))}</div>
-                    </div>
-                    <div class="tx-card-amount">
-                      <div class="v">${fmtMoney(t.amount, t.currency)}</div>
-                      ${usdLineT}
-                    </div>
-                  </div>`;
-                }
-                const inst = t.installment ? ` · cuota ${t.installment.k}/${t.installment.n}` : '';
-                const rec = t.recurringId ? ' · fijo' : (t.leftoverGen ? ' · sobrante' : '');
-                const cur = t.currency === 'USD' ? ' · USD' : '';
-                const isIncome = t.type === 'ingreso';
-                const sign = isIncome ? '+' : '−';
-                const usdLine = (t.currency === 'ARS' && t.usdSnapshot != null)
-                  ? `<div class="usd">≈ ${esc(fmtMoney(t.usdSnapshot, 'USD'))}</div>` : '';
-                // El título ya es el nombre de la categoría cuando no hay nota
-                // propia: repetirlo abajo en el subtítulo era redundante.
-                const title = t.note || catName(t.categoryId);
-                const subParts = [];
-                if (t.note) subParts.push(catName(t.categoryId));
-                subParts.push(methodName(t.methodId));
-                return `<div class="tx-card-row" data-tx="${esc(t.id)}">
-                  <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(categoryIconName(t.categoryId))}</div>
-                  <div class="tx-card-main">
-                    <div class="tx-card-title">${esc(title)}</div>
-                    <div class="tx-card-sub">${esc(subParts.join(' · '))}${inst}${rec}${cur}</div>
-                  </div>
-                  <div class="tx-card-amount">
-                    <div class="v ${isIncome ? 'pos' : 'neg'}${bigClass(t)}">${sign} ${fmtMoney(t.amount, t.currency)}</div>
-                    ${usdLine}
-                  </div>
-                </div>`;
-              }).join('')}
-            </div>
-          </div>`).join('')}`
+        ${txDayGroupsHTML(list, '', { presorted: true, amountClass: bigClass })}`
         : '<div class="empty">No hay movimientos con estos filtros. Cargá el primero con “+ Movimiento”.</div>'}
       </div>`;
 
@@ -3448,44 +3402,71 @@
     }));
   }
 
-  // Lista de movimientos agrupada por día (fecha, monto, descripción), para
-  // el cuerpo de los diálogos de detalle de abajo — factorizado porque
-  // methodPeriodDetailDialog() y categoryCompareDialog() arman básicamente
-  // la misma lista, solo que el segundo la repite dos veces (mes actual +
-  // mes anterior) en vez de una.
-  function txDayGroupsHTML(txs, emptyMsg) {
-    const sorted = txs.slice().sort((a, b) => b.date.localeCompare(a.date));
-    if (!sorted.length) return `<div class="empty">${esc(emptyMsg)}</div>`;
-    return dayGroups(sorted).map(({ dateStr, items }) => `
-      <div class="tx-day-group">
-        <div class="tx-day-label">${esc(dayGroupLabel(dateStr))}</div>
-        <div class="tx-card-list">
-          ${items.map((t) => {
-            const rowTitle = t.note || catName(t.categoryId);
-            const subParts = [];
-            if (t.note) subParts.push(catName(t.categoryId));
-            const inst = t.installment ? ` · cuota ${t.installment.k}/${t.installment.n}` : '';
-            return `<div class="tx-card-row" data-tx="${esc(t.id)}">
-              <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(t.categoryId))}</div>
-              <div class="tx-card-main">
-                <div class="tx-card-title">${esc(rowTitle)}</div>
-                <div class="tx-card-sub">${esc(subParts.join(' · '))}${inst}</div>
-              </div>
-              <div class="tx-card-amount">
-                <div class="v">${fmtMoney(t.amount, t.currency)}</div>
-              </div>
-            </div>`;
-          }).join('')}
+  /* Una fila de movimiento, igual en Movimientos y en todos los pop-ups
+     que listan movimientos: ícono, título (nota o categoría), categoría ·
+     medio abajo, y el monto con signo y color (+ el equivalente en USD).
+     amountClass(t) permite sumar una clase al monto (ej. resaltar los
+     gastos grandes en Movimientos). */
+  function txRowHTML(t, amountClass) {
+    const usdLine = (t.currency === 'ARS' && t.usdSnapshot != null)
+      ? `<div class="usd">≈ ${esc(fmtMoney(t.usdSnapshot, 'USD'))}</div>` : '';
+    if (t.type === 'transferencia') {
+      return `<div class="tx-card-row" data-tx="${esc(t.id)}">
+        <div class="row-icon row-icon-transfer">${iconSvg('swap')}</div>
+        <div class="tx-card-main">
+          <div class="tx-card-title">${esc(t.note || 'Transferencia')}</div>
+          <div class="tx-card-sub">${esc(methodName(t.methodId))} → ${esc(methodName(t.toMethodId))}</div>
         </div>
-      </div>`).join('');
+        <div class="tx-card-amount">
+          <div class="v">${fmtMoney(t.amount, t.currency)}</div>
+          ${usdLine}
+        </div>
+      </div>`;
+    }
+    const inst = t.installment ? ` · cuota ${t.installment.k}/${t.installment.n}` : '';
+    const rec = t.recurringId ? ' · fijo' : (t.leftoverGen ? ' · sobrante' : '');
+    const cur = t.currency === 'USD' ? ' · USD' : '';
+    const isIncome = t.type === 'ingreso';
+    const sign = isIncome ? '+' : '−';
+    // El título ya es el nombre de la categoría cuando no hay nota
+    // propia: repetirlo abajo en el subtítulo era redundante.
+    const title = t.note || catName(t.categoryId);
+    const subParts = [];
+    if (t.note) subParts.push(catName(t.categoryId));
+    subParts.push(methodName(t.methodId));
+    return `<div class="tx-card-row" data-tx="${esc(t.id)}">
+      <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(categoryIconName(t.categoryId))}</div>
+      <div class="tx-card-main">
+        <div class="tx-card-title">${esc(title)}</div>
+        <div class="tx-card-sub">${esc(subParts.join(' · '))}${inst}${rec}${cur}</div>
+      </div>
+      <div class="tx-card-amount">
+        <div class="v ${isIncome ? 'pos' : 'neg'}${amountClass ? amountClass(t) : ''}">${sign} ${fmtMoney(t.amount, t.currency)}</div>
+        ${usdLine}
+      </div>
+    </div>`;
+  }
+
+  // Lista de movimientos agrupada por día: un bloque por día con la fecha
+  // como encabezado ADENTRO del bloque (no suelta arriba) y las filas
+  // separadas por una línea fina. La usan Movimientos y los pop-ups de
+  // detalle (resumen de tarjeta, cuenta por mes, categoría vs. mes
+  // anterior), así todos se ven igual.
+  function txDayGroupsHTML(txs, emptyMsg, opts = {}) {
+    const sorted = opts.presorted ? txs : txs.slice().sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    if (!sorted.length) return emptyMsg ? `<div class="empty">${esc(emptyMsg)}</div>` : '';
+    return `<div class="tx-day-blocks">${dayGroups(sorted).map(({ dateStr, items }) => `
+      <div class="tx-card-list tx-list-compact">
+        <div class="tx-day-head">${esc(dayGroupLabel(dateStr))}</div>
+        ${items.map((t) => txRowHTML(t, opts.amountClass)).join('')}
+      </div>`).join('')}</div>`;
   }
   // Los diálogos de detalle de abajo son de solo lectura (no modifican
-  // nada), pero tocar un movimiento puntual igual lo abre para editarlo —
-  // mismo comportamiento en los dos.
+  // nada); tocar un movimiento abre su detalle, igual que en Movimientos.
   function wireTxDetailRows(dlg) {
     $$('.tx-card-row', dlg).forEach((row) => row.addEventListener('click', () => {
       const tx = S().transactions.find((t) => t.id === row.dataset.tx);
-      if (tx) { dlg.close(); txForm(tx); }
+      if (tx) { dlg.close(); txDetailDialog(tx); }
     }));
   }
 
@@ -3645,30 +3626,13 @@
     const gastoTotal = sumDisp(dayTxs.filter((t) => t.type === 'gasto'));
     const incomeTotal = sumDisp(dayTxs.filter((t) => t.type === 'ingreso'));
     const sorted = dayTxs.slice().sort((a, b) => b.id.localeCompare(a.id));
-    const rowsHTML = sorted.length ? sorted.map((t) => {
-      const isIncome = t.type === 'ingreso';
-      const sign = isIncome ? '+ ' : '− ';
-      const title = t.note || catName(t.categoryId);
-      const subParts = [];
-      if (t.note) subParts.push(catName(t.categoryId));
-      subParts.push(methodName(t.methodId));
-      const inst = t.installment ? ` · cuota ${t.installment.k}/${t.installment.n}` : '';
-      const rec = t.recurringId ? ' · fijo' : (t.leftoverGen ? ' · sobrante' : '');
-      return `<div class="tx-card-row" data-tx="${esc(t.id)}">
-        <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(categoryIconName(t.categoryId))}</div>
-        <div class="tx-card-main">
-          <div class="tx-card-title">${esc(title)}</div>
-          <div class="tx-card-sub">${esc(subParts.join(' · '))}${inst}${rec}</div>
-        </div>
-        <div class="tx-card-amount">
-          <div class="v ${isIncome ? 'pos' : 'neg'}">${sign}${fmtMoney(t.amount, t.currency)}</div>
-        </div>
-      </div>`;
-    }).join('') : '<div class="empty">No cargaste gastos ni ingresos este día.</div>';
+    const rowsHTML = sorted.length
+      ? `<div class="tx-card-list tx-list-compact">${sorted.map((t) => txRowHTML(t)).join('')}</div>`
+      : '<div class="empty">No cargaste gastos ni ingresos este día.</div>';
 
     const bodyHTML = `
       <div class="dialog-total">Gastos: ${fmtDisp(gastoTotal)} · Ingresos: ${fmtDisp(incomeTotal)}</div>
-      <div class="tx-card-list">${rowsHTML}</div>`;
+      ${rowsHTML}`;
     const dlg = openDialog(fmtDateFull(dateStr), bodyHTML, { submitLabel: 'Cerrar', viewOnly: true });
     $$('.tx-card-row', dlg).forEach((row) => row.addEventListener('click', () => {
       const tx = S().transactions.find((t) => t.id === row.dataset.tx);
