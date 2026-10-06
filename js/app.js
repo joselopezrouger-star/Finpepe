@@ -883,7 +883,7 @@
       // HOY — así un aporte viejo no queda mal valuado en la otra moneda.
       for (const e of entries) {
         if (e.date >= cutoff) continue;
-        const v = savingEntryAmountIn(s, e, disp());
+        const v = savingEntryAmountIn(s, e, opts.cur || disp());
         if (v != null) total += v;
       }
     }
@@ -2050,6 +2050,28 @@
     // uno futuro todavía no tiene datos que analizar.
     let insights = mk !== curMonth() ? [] : (() => {
       const out = [];
+      // QUÉ comentarios aparecen se decide siempre en PESOS, sin importar
+      // la moneda elegida arriba: antes todo se calculaba en la moneda de
+      // visualización, así que al pasar a USD cambiaban los avisos — un
+      // umbral fijo ($3.000) pensado en pesos era inalcanzable en dólares,
+      // y cada moneda valúa los movimientos a la cotización de su fecha,
+      // así que una comparación contra el mes pasado podía inclinarse para
+      // un lado en pesos y para el otro en dólares. Los montos del texto sí
+      // se muestran en la moneda elegida (sumDisp / fmtDisp).
+      const BASE = 'ARS';
+      const amtA = (t) => amountInCurrency(t, BASE);
+      const sumA = (list) => list.reduce((acc, t) => { const v = amtA(t); return v == null ? acc : acc + v; }, 0);
+      const incA = sumA(inMonth.filter((t) => t.type === 'ingreso'));
+      const expA = sumA(inMonth.filter((t) => t.type === 'gasto'));
+      const incPrevA = sumA(inPrev.filter((t) => t.type === 'ingreso'));
+      const expPrevA = sumA(inPrev.filter((t) => t.type === 'gasto'));
+      const savA = (m) => savingsAtEndOf(m, { excludeOpening: true, cur: BASE });
+      const savMonthA = savA(mk) - savA(prevMk);
+      const savMonthPrevA = savA(prevMk) - savA(addMonthsKey(mk, -2));
+      const balanceA = incA - expA - savMonthA;
+      const srA = incA > 0 ? Math.round((savMonthA / incA) * 100) : null;
+      const srPrevA = incPrevA > 0 ? Math.round((savMonthPrevA / incPrevA) * 100) : null;
+
       // El aviso de ritmo de gasto (más abajo) compara contra la fecha REAL
       // de cada movimiento (inMonthCal/inPrevCal, definidas arriba), no el
       // "mes efectivo" que puede correr una compra con tarjeta al mes de
@@ -2058,38 +2080,45 @@
       // proyección aunque esas compras se hayan hecho en calendario el mes
       // pasado — y el aviso queda contradiciendo lo que se ve en "Balance
       // por día", que también usa la fecha real.
-      const expCal = sumDisp(inMonthCal.filter((t) => t.type === 'gasto'));
-      const expPrevCal = sumDisp(inPrevCal.filter((t) => t.type === 'gasto'));
+      const gastoCal = inMonthCal.filter((t) => t.type === 'gasto');
+      const gastoPrevCal = inPrevCal.filter((t) => t.type === 'gasto');
       // Mismo criterio de fecha real (no efectiva) para las dos, así el
       // aviso de categoría de abajo tampoco lo dispara un resumen de
-      // tarjeta que vence este mes pero es de compras de otro mes.
-      const byCatCal = new Map();
-      const byCatPrev = new Map();
-      for (const t of inMonthCal.filter((x) => x.type === 'gasto')) {
-        const v = txDispAmount(t);
-        if (v == null) continue;
-        const topId = topCategoryOf(t.categoryId);
-        byCatCal.set(topId, (byCatCal.get(topId) || 0) + v);
-      }
-      for (const t of inPrevCal.filter((x) => x.type === 'gasto')) {
-        const v = txDispAmount(t);
-        if (v == null) continue;
-        const topId = topCategoryOf(t.categoryId);
-        byCatPrev.set(topId, (byCatPrev.get(topId) || 0) + v);
-      }
+      // tarjeta que vence este mes pero es de compras de otro mes. Cada
+      // categoría se acumula en pesos (para decidir) y en la moneda
+      // elegida (para mostrar).
+      const byCat = (list) => {
+        const m = new Map();
+        for (const t of list) {
+          const topId = topCategoryOf(t.categoryId);
+          const cur = m.get(topId) || { a: 0, d: 0 };
+          cur.a += amtA(t) || 0;
+          cur.d += txDispAmount(t) || 0;
+          m.set(topId, cur);
+        }
+        return m;
+      };
+      const byCatCal = byCat(gastoCal);
+      const byCatPrev = byCat(gastoPrevCal);
 
-      if (balance < 0) {
+      if (balanceA < 0) {
         out.push({ tone: 'warn', severity: 5, icon: '🔴',
-          text: `Este mes vas en rojo: el balance es de ${fmtDisp(balance)}.` });
+          text: balance < 0
+            ? `Este mes vas en rojo: el balance es de ${fmtDisp(balance)}.`
+            : 'Este mes vas en rojo: gastaste más de lo que ingresó.' });
       }
 
       // Fecha real, no efectiva: tiene que coincidir con lo que se ve en
-      // Planificar > Presupuestos, que usa el mismo criterio.
+      // Planificar > Presupuestos, que usa el mismo criterio. Se decide en
+      // la moneda del propio presupuesto (no depende de la elegida arriba).
       const budgetHits = S().budgets.map((b) => {
-        const spent = sumDisp(inMonthCal.filter((t) => t.type === 'gasto' && txMatchesBudgetCategory(t, b.categoryId)));
-        const limit = convOrNull(b.amount, b.currency);
-        return { name: catName(b.categoryId), spent, limit, over: (limit > 0) ? spent - limit : 0 };
-      }).filter((x) => x.over > 0).sort((a, b) => b.over - a.over);
+        const list = gastoCal.filter((t) => txMatchesBudgetCategory(t, b.categoryId));
+        const spentOwn = list.reduce((acc, t) => acc + (amountInCurrency(t, b.currency) || 0), 0);
+        return {
+          name: catName(b.categoryId), spent: sumDisp(list), limit: convOrNull(b.amount, b.currency),
+          overRatio: b.amount > 0 ? spentOwn / b.amount - 1 : 0,
+        };
+      }).filter((x) => x.overRatio > 0).sort((a, b) => b.overRatio - a.overRatio);
       if (budgetHits.length) {
         const w = budgetHits[0];
         out.push({ tone: 'warn', severity: 4, icon: '⚠️',
@@ -2102,16 +2131,16 @@
       // pasado?" la infla o desinfla nada más según en qué día del
       // calendario cayó, sin decir nada de tu ritmo real. Estos dos avisos
       // comparan sólo lo variable.
-      const fixedCal = sumDisp(inMonthCal.filter((t) => t.type === 'gasto' && (t.recurringId || t.installment)));
-      const fixedPrevCal = sumDisp(inPrevCal.filter((t) => t.type === 'gasto' && (t.recurringId || t.installment)));
-      const varExpCal = expCal - fixedCal;
-      const varExpPrevCal = expPrevCal - fixedPrevCal;
+      const isVar = (t) => !t.recurringId && !t.installment;
+      const varCal = gastoCal.filter(isVar);
+      const varPrevCal = gastoPrevCal.filter(isVar);
+      const varExpA = sumA(varCal), varExpPrevA = sumA(varPrevCal);
 
-      if (varExpPrevCal > 0) {
-        if (varExpCal > varExpPrevCal) {
+      if (varExpPrevA > 0) {
+        if (varExpA > varExpPrevA) {
           const daysLeftMk = daysLeftInMonth(mk);
           out.push({ tone: 'warn', severity: 4, icon: '🚨',
-            text: `Sin contar gastos fijos, ya gastaste más que todo el mes pasado (${fmtDisp(varExpCal)} vs ${fmtDisp(varExpPrevCal)}), y todavía quedan ${daysLeftMk} día${daysLeftMk === 1 ? '' : 's'}.` });
+            text: `Sin contar gastos fijos, ya gastaste más que todo el mes pasado (${fmtDisp(sumDisp(varCal))} vs ${fmtDisp(sumDisp(varPrevCal))}), y todavía quedan ${daysLeftMk} día${daysLeftMk === 1 ? '' : 's'}.` });
         } else {
           const [ky, kmo] = mk.split('-').map(Number);
           const daysInMk = new Date(ky, kmo, 0).getDate();
@@ -2132,16 +2161,16 @@
             const RECENT_WINDOW = 7;
             const windowStartDay = Math.max(1, daysElapsed - RECENT_WINDOW + 1);
             const recentDaysCount = daysElapsed - windowStartDay + 1;
-            const recentVariableGasto = sumDisp(inMonthCal.filter((t) => {
-              if (t.type !== 'gasto' || t.recurringId || t.installment) return false;
+            const recent = varCal.filter((t) => {
               const day = Number(t.date.slice(8, 10));
               return day >= windowStartDay && day <= daysElapsed;
-            }));
+            });
             const remainingDays = daysInMk - daysElapsed;
-            const projectedVar = varExpCal + (recentVariableGasto / recentDaysCount) * remainingDays;
-            if (projectedVar > varExpPrevCal * 1.15) {
+            const projA = varExpA + (sumA(recent) / recentDaysCount) * remainingDays;
+            const projD = sumDisp(varCal) + (sumDisp(recent) / recentDaysCount) * remainingDays;
+            if (projA > varExpPrevA * 1.15) {
               out.push({ tone: 'warn', severity: 3, icon: '📈',
-                text: `Al ritmo actual (sin contar gastos fijos) vas a terminar gastando más en gastos variables que el mes pasado (proyectado ${fmtDisp(projectedVar)}).` });
+                text: `Al ritmo actual (sin contar gastos fijos) vas a terminar gastando más en gastos variables que el mes pasado (proyectado ${fmtDisp(projD)}).` });
             }
           }
         }
@@ -2149,40 +2178,40 @@
 
       let worstCat = null;
       for (const [id, val] of byCatCal.entries()) {
-        const prevVal = byCatPrev.get(id) || 0;
-        const diffAmt = val - prevVal;
-        if (prevVal <= 0 || diffAmt <= 0) continue;
-        const pct = diffAmt / prevVal;
-        // Umbral doble (% Y monto mínimo) para no alertar por una categoría
-        // chica que se duplicó de $500 a $1.000.
-        if (pct >= 0.3 && diffAmt >= Math.max(3000, inc * 0.02)) {
-          if (!worstCat || diffAmt > worstCat.diffAmt) worstCat = { id, diffAmt, pct };
+        const prevVal = byCatPrev.get(id) || { a: 0, d: 0 };
+        const diffA = val.a - prevVal.a;
+        if (prevVal.a <= 0 || diffA <= 0) continue;
+        const pct = diffA / prevVal.a;
+        // Umbral doble (% Y monto mínimo, en pesos) para no alertar por
+        // una categoría chica que se duplicó de $500 a $1.000.
+        if (pct >= 0.3 && diffA >= Math.max(3000, incA * 0.02)) {
+          if (!worstCat || diffA > worstCat.diffA) worstCat = { id, diffA, diffD: val.d - prevVal.d, pct };
         }
       }
       if (worstCat) {
         out.push({ tone: 'warn', severity: 2, icon: '👀',
-          text: `Cuidado con ${catName(worstCat.id)}: gastaste ${fmtDisp(worstCat.diffAmt)} más que el mes pasado (+${Math.round(worstCat.pct * 100)}%).` });
+          text: `Cuidado con ${catName(worstCat.id)}: gastaste ${fmtDisp(Math.max(0, worstCat.diffD))} más que el mes pasado (+${Math.round(worstCat.pct * 100)}%).` });
       }
 
-      if (savingsRatePct != null && savingsRatePctPrev != null && savingsRatePct < savingsRatePctPrev - 10) {
+      if (srA != null && srPrevA != null && srA < srPrevA - 10) {
         out.push({ tone: 'warn', severity: 1, icon: '💸',
-          text: `Tu tasa de ahorro bajó de ${savingsRatePctPrev}% a ${savingsRatePct}% respecto al mes pasado.` });
+          text: `Tu tasa de ahorro bajó de ${srPrevA}% a ${srA}% respecto al mes pasado.` });
       }
 
       out.sort((a, b) => b.severity - a.severity);
 
       if (!out.length) {
-        if (expPrev > 0 && exp < expPrev * 0.9) {
+        if (expPrevA > 0 && expA < expPrevA * 0.9) {
           out.push({ tone: 'good', icon: '🎉',
-            text: `Vas bien: gastaste ${Math.round((1 - exp / expPrev) * 100)}% menos que el mes pasado.` });
+            text: `Vas bien: gastaste ${Math.round((1 - expA / expPrevA) * 100)}% menos que el mes pasado.` });
         }
-        if (savingsRatePct != null && savingsRatePctPrev != null && savingsRatePct > savingsRatePctPrev + 5) {
+        if (srA != null && srPrevA != null && srA > srPrevA + 5) {
           out.push({ tone: 'good', icon: '📈',
-            text: `Tu tasa de ahorro mejoró: ${savingsRatePctPrev}% → ${savingsRatePct}%.` });
+            text: `Tu tasa de ahorro mejoró: ${srPrevA}% → ${srA}%.` });
         }
         if (!out.length) {
           out.push({ tone: 'neutral', icon: '🙂',
-            text: (incPrev > 0 || expPrev > 0)
+            text: (incPrevA > 0 || expPrevA > 0)
               ? 'Vas en línea con el mes pasado, sin sobresaltos.'
               : 'Todavía no hay un mes anterior con qué comparar.' });
         }
