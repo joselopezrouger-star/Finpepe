@@ -746,6 +746,69 @@
     return { close, due };
   }
 
+  /* Fecha de la cuota k (1 = la compra) de una compra en cuotas. El banco
+     cobra UNA cuota por resumen: la k cae en el resumen número k contando
+     desde el de la compra — no necesariamente "el mismo día, k-1 meses
+     después" (si un ciclo dura 7 semanas, como cuando el banco cambia la
+     fecha de cierre, dos fechas mensuales caerían en el mismo resumen).
+     Se mantiene la fecha mensual natural si ya cae en el resumen correcto;
+     si no, el mismo día del mes dentro de ese resumen (el más cercano a la
+     natural) y, si ningún día así entra, la fecha de cierre del resumen.
+     Sin resúmenes cargados (o con otro medio de pago): fecha mensual. */
+  function installmentDate(methodId, purchase, k) {
+    const natural = clampDate(purchase.getFullYear(), purchase.getMonth() + (k - 1), purchase.getDate());
+    if (k <= 1) return natural;
+    const m = methodById(methodId);
+    if (!m || m.kind !== 'credito') return natural;
+    const first = cardCycleFor(m, purchase);
+    if (!first) return natural;
+    let close = first.close, prevClose = null;
+    for (let i = 1; i < k; i++) {
+      prevClose = close;
+      close = nextCardDate(m, 'closingDay', close, true);
+      if (!close) return natural;
+    }
+    if (natural > prevClose && natural <= close) return natural;
+    let best = null;
+    for (let d = new Date(prevClose.getFullYear(), prevClose.getMonth(), 1); d <= close; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+      const c = clampDate(d.getFullYear(), d.getMonth(), purchase.getDate());
+      if (c > prevClose && c <= close && (!best || Math.abs(c - natural) < Math.abs(best - natural))) best = c;
+    }
+    return best || close;
+  }
+  /* Reacomoda las cuotas ya cargadas de compras con tarjeta de crédito
+     según los resúmenes actuales (ver installmentDate). Se corre al abrir
+     la app y cada vez que se carga, corrige o borra un resumen, así una
+     cuota no queda en el resumen equivocado porque el banco cambió las
+     fechas de cierre después de cargar la compra. */
+  function realignCardInstallments() {
+    const groups = new Map();
+    for (const t of S().transactions) {
+      if (!t.groupId || !t.installment || t.type !== 'gasto') continue;
+      const m = methodById(t.methodId);
+      if (!m || m.kind !== 'credito') continue;
+      if (!groups.has(t.groupId)) groups.set(t.groupId, []);
+      groups.get(t.groupId).push(t);
+    }
+    let changed = false;
+    for (const txs of groups.values()) {
+      const first = txs.find((t) => t.installment.k === 1);
+      if (!first) continue;
+      const purchase = parseDate(first.date);
+      for (const t of txs) {
+        if (t.installment.k === 1) continue;
+        const target = dateToStr(installmentDate(t.methodId, purchase, t.installment.k));
+        if (target !== t.date) {
+          t.date = target;
+          refineSnapshotLater(t);
+          changed = true;
+        }
+      }
+    }
+    if (changed) Store.save();
+    return changed;
+  }
+
   /* Mes en el que un gasto "pega" para "Balance del mes" (y el sobrante
      automático del mes anterior, que es el mismo cálculo — ver
      monthBalance()). Por defecto es el mes de la fecha de compra; si en
@@ -1741,7 +1804,7 @@
           const start = parseDate(draft.date);
           for (let k = 1; k <= n; k++) {
             const cuota = (k === n) ? Math.round((amount - per * (n - 1)) * 100) / 100 : per;
-            const dk = clampDate(start.getFullYear(), start.getMonth() + (k - 1), start.getDate());
+            const dk = installmentDate(base.methodId, start, k);
             const dkStr = dateToStr(dk);
             S().transactions.push({
               id: Store.uid(), ...base, amount: cuota, date: dkStr,
@@ -3147,6 +3210,7 @@
       e.stopPropagation();
       if (!confirm('¿Quitar este resumen?')) return;
       delete card.overrides[b.dataset.resumedel];
+      realignCardInstallments();
       Store.save();
       dlg.close();
       render();
@@ -3213,6 +3277,7 @@
           closingDay: closeDate.getDate(), closeDateStr: d.closeDate,
           ...(dueDate ? { dueDay: dueDate.getDate(), dueDateStr: d.dueDate } : {}),
         };
+        realignCardInstallments();
         Store.save();
         render();
         // Hay que cerrar ESTE diálogo antes de reabrir la lista: son el
@@ -5421,6 +5486,7 @@
     // datos reales de la otra persona con una copia vieja + el duplicado.
     generateRecurring();
     generateLeftoverIncome();
+    realignCardInstallments();
     render();
   }
 
@@ -5442,6 +5508,7 @@
       // esta sesión.
       generateRecurring();
       generateLeftoverIncome();
+      realignCardInstallments();
       render();
     }
   }
@@ -6098,6 +6165,7 @@
     if (!Cloud.available() || !Cloud.isConfigured()) {
       generateRecurring();
       generateLeftoverIncome();
+      realignCardInstallments();
     }
     sortMethodsOnce();
 
