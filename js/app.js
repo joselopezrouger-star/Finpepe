@@ -703,20 +703,32 @@
         </div>`;
     }
 
-    const segTotal = cy.close - cy.prevDue;
-    const segDone = Math.min(Math.max(today - cy.prevDue, 0), Math.max(segTotal, 1));
-    const pct2 = segTotal > 0 ? Math.round((segDone / segTotal) * 100) : 100;
+    // Progreso real de hoy sobre cada tramo: antes del vencimiento el
+    // primer tramo (cierre → vencimiento) va llenándose y el punto del
+    // vencimiento queda vacío; recién después avanza el segundo tramo.
+    const segPct = (from, to) => {
+      const total = to - from;
+      if (total <= 0) return today >= to ? 100 : 0;
+      return Math.round(Math.min(Math.max((today - from) / total, 0), 1) * 100);
+    };
+    const pct1 = segPct(cy.prevClose, cy.prevDue);
+    const pct2 = segPct(cy.prevDue, cy.close);
+    const dueReached = today >= cy.prevDue;
+    const daysToDue = Math.round((cy.prevDue - today) / DAY_MS);
+    const cycleDaysLine = dueReached ? daysLine : `<div class="cycle-days">${daysToDue === 0
+      ? 'Vence hoy.'
+      : `Faltan ${daysToDue} día${daysToDue === 1 ? '' : 's'} para el vencimiento y ${daysToClose} para el cierre.`}</div>`;
     return `
       <div class="cycle-card">
-        ${daysLine}
+        ${cycleDaysLine}
         <div class="cycle-track">
           <span class="cd-date" style="grid-column:1;grid-row:1;justify-self:start">${esc(shortDate(cy.prevClose))}</span>
           <span class="cd-date" style="grid-column:3;grid-row:1;justify-self:center">${esc(shortDate(cy.prevDue))}</span>
           <span class="cd-date" style="grid-column:5;grid-row:1;justify-self:end">${esc(shortDate(cy.close))}</span>
 
           <span class="cycle-dot filled" style="grid-column:1;grid-row:2;justify-self:start"></span>
-          <span class="cycle-line" style="grid-column:2;grid-row:2;--p:100%"></span>
-          <span class="cycle-dot filled" style="grid-column:3;grid-row:2;justify-self:center"></span>
+          <span class="cycle-line" style="grid-column:2;grid-row:2;--p:${pct1}%"></span>
+          <span class="cycle-dot ${dueReached ? 'filled' : ''}" style="grid-column:3;grid-row:2;justify-self:center"></span>
           <span class="cycle-line" style="grid-column:4;grid-row:2;--p:${pct2}%"></span>
           <span class="cycle-dot" style="grid-column:5;grid-row:2;justify-self:end"></span>
 
