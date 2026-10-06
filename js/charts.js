@@ -91,6 +91,12 @@ const Charts = (() => {
 
       row.appendChild(top);
       row.appendChild(bottom);
+      if (opts.onClick) {
+        row.setAttribute('role', 'button');
+        row.tabIndex = 0;
+        row.addEventListener('click', () => opts.onClick(it));
+        row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); opts.onClick(it); } });
+      }
 
       el.appendChild(row);
     }

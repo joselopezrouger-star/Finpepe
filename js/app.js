@@ -827,21 +827,29 @@
      Ajustes se eligió "vencimiento", un gasto con tarjeta de crédito cuenta
      en el mes en que vence ese resumen en vez del mes en que se hizo la
      compra (decisión del usuario, ver settings.cardMonthBasis).
-     A propósito NO se usa en ningún otro lado (gastos por categoría,
-     Movimientos, presupuestos, tendencias, cuotas): esas vistas siempre
+     También lo usa la sección Cuotas ("cuánto pagás de cuotas cada mes"),
+     que con ese ajuste tiene que mostrar el mes en que se paga cada cuota.
+     A propósito NO se usa en el resto (gastos por categoría,
+     Movimientos, presupuestos, tendencias): esas vistas siempre
      usan la fecha real de carga (monthKeyOf(t.date)), igual que "Balance
      por día" — así "Balance del mes" puede diferir un poco de la suma de
      "Gastos por categoría" ese mes, a propósito, sin que el resto de la
      app se corra de mes por un ajuste que solo afecta a ese número. */
   function effectiveMonthOf(t) {
+    return monthKeyOf(paymentDateOf(t));
+  }
+  // Fecha en que "se paga" un gasto según ese mismo ajuste: con
+  // "vencimiento", el vencimiento del resumen de la tarjeta; si no, la
+  // fecha del movimiento.
+  function paymentDateOf(t) {
     if (t.type === 'gasto' && S().settings.cardMonthBasis === 'vencimiento') {
       const m = methodById(t.methodId);
       if (m && m.kind === 'credito') {
         const cyc = cardCycleFor(m, parseDate(t.date));
-        if (cyc && cyc.due) return monthKeyOf(dateToStr(cyc.due));
+        if (cyc && cyc.due) return dateToStr(cyc.due);
       }
     }
-    return monthKeyOf(t.date);
+    return t.date;
   }
 
   /* Ahorros acumulados hasta fin de un mes (suma de entries con fecha
@@ -2872,6 +2880,26 @@
 
     const pct = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0) + '%';
 
+    // Gastos del mes por medio de pago (nominal + % del total), de mayor a
+    // menor; tocar uno abre sus movimientos comparados con el mes anterior.
+    const byMethod = new Map();
+    for (const t of inMonth) {
+      if (t.type !== 'gasto') continue;
+      const v = txDispAmount(t);
+      if (v == null) continue;
+      const key = methodById(t.methodId) ? t.methodId : '__sin';
+      byMethod.set(key, (byMethod.get(key) || 0) + v);
+    }
+    const methodItems = [...byMethod.entries()]
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([id, value], i) => ({
+        id, value, label: id === '__sin' ? 'Sin medio de pago' : methodName(id),
+        color: CAT_PALETTE[i % CAT_PALETTE.length],
+      }));
+    const methodTxs = (list, id) => list.filter((t) => t.type === 'gasto' &&
+      (id === '__sin' ? !methodById(t.methodId) : t.methodId === id));
+
     // Un solo color por categoría, asignado según su peso en la ventana de
     // 6 meses (más estable que el ranking de un solo mes) y reutilizado
     // tanto en la torta como en las barras apiladas — así una categoría se
@@ -3017,6 +3045,13 @@
       </div>
 
       <div class="card">
+        <h2 class="card-title"><span>Gastos por medio de pago · ${esc(monthLabel(mk))}</span></h2>
+        ${methodItems.length ? `
+        <div id="chart-cat-methods" class="cats-bars method-bars"></div>
+        <div class="method-total"><span>Total gastado</span><b>${fmtDisp(exp)}</b></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
+      </div>
+
+      <div class="card">
         <h2 class="card-title"><span>Gastos por categoría</span></h2>
         ${breakdown.length ? `
         <div class="table-scroll"><table class="data cat-breakdown-table">
@@ -3073,6 +3108,13 @@
     if (pieItems.length) {
       Charts.pieCylinder($('#chart-cat-pie', el), pieItems, {
         ariaLabel: `Distribución de gastos de ${monthLabel(mk)}`,
+      });
+    }
+    if (methodItems.length) {
+      Charts.hBars($('#chart-cat-methods', el), methodItems, {
+        fmt: fmtDisp,
+        onClick: (it) => categoryCompareDialog(it.label,
+          mk, methodTxs(inMonth, it.id), prevMkCat, methodTxs(inPrevCat, it.id)),
       });
     }
     if (stackRows.some((r) => r.total > 0)) {
@@ -4233,20 +4275,23 @@
     const rows = [];
     for (const txs of groups.values()) {
       txs.sort((a, b) => a.installment.k - b.installment.k);
-      const pending = txs.filter((t) => monthKeyOf(t.date) >= cm);
+      // Por mes de pago (ver paymentDateOf): con "vencimiento" en Ajustes,
+      // una cuota de tarjeta cuenta en el mes en que vence su resumen.
+      const pending = txs.filter((t) => effectiveMonthOf(t) >= cm);
       if (!pending.length) continue;
       const next = pending[0];
-      // "Restan" = lo que todavía no venció (fecha posterior a hoy): la
-      // cuota de este mes que ya pasó cuenta como actual pero no como deuda.
+      // "Restan" = lo que todavía no se pagó (fecha de pago posterior a
+      // hoy): la cuota de este mes que ya pasó cuenta como actual pero no
+      // como deuda.
       const today = todayStr();
-      const totalPending = pending.filter((t) => t.date > today).reduce((a, t) => a + t.amount, 0);
+      const totalPending = pending.filter((t) => paymentDateOf(t) > today).reduce((a, t) => a + t.amount, 0);
       rows.push({
         groupId: txs[0].groupId, note: txs[0].note, categoryId: txs[0].categoryId,
         methodId: txs[0].methodId, currency: txs[0].currency,
         n: next.installment.n, nextK: next.installment.k, next, totalPending, pending, all: txs,
       });
     }
-    return rows.sort((a, b) => a.next.date.localeCompare(b.next.date));
+    return rows.sort((a, b) => paymentDateOf(a.next).localeCompare(paymentDateOf(b.next)));
   }
 
   // Cuánto se paga en total de cuotas cada mes, desde el actual en
@@ -4259,7 +4304,7 @@
     let maxMk = today;
     for (const r of rows) {
       for (const t of r.pending) {
-        const mo = monthKeyOf(t.date);
+        const mo = effectiveMonthOf(t);
         if (mo > maxMk) maxMk = mo;
       }
     }
@@ -4271,7 +4316,7 @@
     const totals = new Map(months.map((m) => [m, 0]));
     for (const r of rows) {
       for (const t of r.pending) {
-        const mo = monthKeyOf(t.date);
+        const mo = effectiveMonthOf(t);
         if (!totals.has(mo)) continue;
         const v = txDispAmount(t);
         if (v != null) totals.set(mo, totals.get(mo) + v);
@@ -4290,8 +4335,8 @@
     const today = curMonth();
     let minMk = today, maxMk = today;
     for (const r of rows) {
-      const start = monthKeyOf(r.all[0].date);
-      const end = monthKeyOf(r.all[r.all.length - 1].date);
+      const start = effectiveMonthOf(r.all[0]);
+      const end = effectiveMonthOf(r.all[r.all.length - 1]);
       if (start < minMk) minMk = start;
       if (end > maxMk) maxMk = end;
     }
@@ -4302,8 +4347,8 @@
     const barRows = rows.map((r, i) => ({
       label: r.note || catName(r.categoryId),
       color: CAT_PALETTE[i % CAT_PALETTE.length],
-      startIdx: months.indexOf(monthKeyOf(r.all[0].date)),
-      endIdx: months.indexOf(monthKeyOf(r.all[r.all.length - 1].date)),
+      startIdx: months.indexOf(effectiveMonthOf(r.all[0])),
+      endIdx: months.indexOf(effectiveMonthOf(r.all[r.all.length - 1])),
     }));
 
     const nRows = barRows.length;
@@ -4348,7 +4393,7 @@
             <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(r.categoryId))}</div>
             <div class="inst-row-main">
               <div class="inst-row-title">${esc(r.note || catName(r.categoryId))}</div>
-              <div class="inst-row-sub">${esc(methodName(r.methodId))} · cuota ${r.nextK}/${r.n} · ${r.next.date > todayStr() ? 'próx. ' + esc(fmtDateShort(r.next.date)) : 'este mes'}</div>
+              <div class="inst-row-sub">${esc(methodName(r.methodId))} · cuota ${r.nextK}/${r.n} · ${paymentDateOf(r.next) > todayStr() ? 'próx. ' + esc(fmtDateShort(paymentDateOf(r.next))) : 'este mes'}</div>
             </div>
             <div class="inst-row-amounts">
               <div class="inst-row-amount">${fmtMoney(r.next.amount, r.currency)} <span class="inst-row-amount-label">cuota</span></div>
@@ -4365,8 +4410,8 @@
   }
 
   // Evolución mensual del peso de las cuotas: qué % de los gastos y de los
-  // ingresos de cada mes se fue en cuotas (por fecha real, mismo criterio
-  // que el bloque del mes actual). Arranca en el primer mes con alguna
+  // ingresos de cada mes se fue en cuotas (por mes de pago, mismo criterio
+  // que el bloque del mes actual y "Gastos" en Inicio). Arranca en el primer mes con alguna
   // cuota dentro del último año, para no llenar el gráfico de ceros, y
   // salta los meses sin ingresos.
   function installmentShareHistoryDialog() {
@@ -4374,7 +4419,7 @@
     const months = [];
     for (let i = 11; i >= 0; i--) months.push(addMonthsKey(cm, -i));
     const rows = months.map((mo) => {
-      const txs = S().transactions.filter((t) => monthKeyOf(t.date) === mo);
+      const txs = S().transactions.filter((t) => effectiveMonthOf(t) === mo);
       const cuotas = sumDisp(txs.filter((t) => t.type === 'gasto' && t.installment));
       const exp = sumDisp(txs.filter((t) => t.type === 'gasto'));
       const inc = sumDisp(txs.filter((t) => t.type === 'ingreso'));
@@ -4415,6 +4460,24 @@
     });
   }
 
+  // Cuántas veces cae un fijo en un mes: uno mensual, una vez; uno
+  // semanal/quincenal, las ocurrencias reales de ese mes desde su fecha de
+  // inicio (4 o 5 si es semanal, 2 o 3 si es quincenal) — mismo criterio
+  // que el calendario (eventsForMonth).
+  function recurringCountInMonth(r, mk) {
+    if (r.freq !== 'weekly' && r.freq !== 'biweekly') return 1;
+    if (!r.startDate) return 0;
+    const [y, mo] = mk.split('-').map(Number);
+    const step = r.freq === 'weekly' ? 7 : 14;
+    const monthStart = new Date(y, mo - 1, 1);
+    const monthEnd = new Date(y, mo, 0);
+    let cursor = parseDate(r.startDate);
+    if (cursor < monthStart) cursor = addDays(cursor, Math.ceil((monthStart - cursor) / DAY_MS / step) * step);
+    let n = 0;
+    for (; cursor <= monthEnd; cursor = addDays(cursor, step)) n++;
+    return n;
+  }
+
   // Más → Cuotas / Presupuestos / Fijos: antes era una sola hoja
   // "Planificar" con las tres tarjetas una debajo de la otra; ahora cada
   // una es su propia sub-pestaña (section) y sólo se arma esa.
@@ -4427,9 +4490,10 @@
     const instRows = activeInstallmentGroups();
     const monthTotals = installmentMonthTotals(instRows);
     // Peso de las cuotas del mes sobre el total de gastos y de ingresos del
-    // mismo mes (por fecha real, igual que el gráfico de cuotas).
+    // mismo mes (por mes de pago, igual que el gráfico de cuotas y que
+    // "Gastos" en Inicio).
     const cuotasMonth = monthTotals.length ? monthTotals[0].total : 0;
-    const calMonthTx = S().transactions.filter((t) => monthKeyOf(t.date) === mk);
+    const calMonthTx = S().transactions.filter((t) => effectiveMonthOf(t) === mk);
     const expMonthCal = sumDisp(calMonthTx.filter((t) => t.type === 'gasto'));
     const incMonthCal = sumDisp(calMonthTx.filter((t) => t.type === 'ingreso'));
     const shareRow = (label, base, cls) => {
@@ -4493,6 +4557,16 @@
         </div>`
         : '<div class="empty">Definí cuánto querés gastar por mes en cada categoría y controlá el avance acá.</div>'}
       </div>`;
+    // Total por mes de los fijos: cada uno multiplicado por las veces que
+    // cae en el mes (un semanal suma 4 o 5 veces), en moneda visible.
+    let recExp = 0, recInc = 0;
+    for (const r of S().recurring) {
+      const v = convOrNull(r.amount, r.currency);
+      if (v == null) continue;
+      const total = v * recurringCountInMonth(r, mk);
+      if (r.type === 'ingreso') recInc += total; else recExp += total;
+    }
+    const recNet = recInc - recExp;
     cards.fijos = `
       <div class="card">
         <h2 class="card-title">
@@ -4500,12 +4574,24 @@
           <button class="link-btn" id="btn-add-rec">+ Fijo</button>
         </h2>
         ${S().recurring.length ? `
+        <div class="rec-total">
+          <div class="rec-total-head">Total por mes · ${esc(monthLabel(mk))}</div>
+          <div class="rec-total-row"><span>Gastos fijos</span><b>− ${fmtDisp(recExp)}</b></div>
+          <div class="rec-total-row"><span>Ingresos fijos</span><b class="pos">+ ${fmtDisp(recInc)}</b></div>
+          ${recInc > 0 && recExp > 0 ? `
+          <div class="rec-total-bar" title="Gastos fijos sobre ingresos fijos"><span style="width:${Math.min(100, Math.round((recExp / recInc) * 100))}%"></span></div>
+          <div class="rec-total-note">Los gastos fijos se llevan el ${Math.round((recExp / recInc) * 100)}% de los ingresos fijos.</div>` : ''}
+          <div class="rec-total-row rec-total-net"><span>Neto</span><b class="${recNet >= 0 ? 'pos' : 'neg'}">${recNet >= 0 ? '+' : '−'} ${fmtDisp(Math.abs(recNet))}</b></div>
+        </div>
         <div class="tx-card-list">
           ${S().recurring.map((r) => {
             const isIncome = r.type === 'ingreso';
+            const times = recurringCountInMonth(r, mk);
+            const multi = r.freq === 'weekly' || r.freq === 'biweekly';
             const freqSub = r.freq === 'weekly' ? 'Semanal'
               : r.freq === 'biweekly' ? 'Quincenal'
               : `Día ${r.day}`;
+            const perOcc = convOrNull(r.amount, r.currency);
             return `<div class="tx-card-row" data-rid="${esc(r.id)}">
               <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(isIncome ? 'trend' : 'cash')}</div>
               <div class="tx-card-main">
@@ -4514,6 +4600,7 @@
               </div>
               <div class="tx-card-amount">
                 <div class="v ${isIncome ? 'pos' : ''}">${isIncome ? '+' : '−'} ${fmtMoney(r.amount, r.currency)}</div>
+                ${multi && perOcc != null ? `<div class="rec-times">× ${times} = ${fmtDisp(perOcc * times)}/mes</div>` : ''}
               </div>
               <button class="tx-card-del" data-rdel="${esc(r.id)}" aria-label="Eliminar">✕</button>
             </div>`;
