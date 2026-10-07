@@ -378,9 +378,19 @@ const Charts = (() => {
         const label = opts.fmtAxis ? opts.fmtAxis(p.v) : String(Math.round(p.v));
         const skipLabel = opts.pointLabels === 'changes' && label === prevLabel;
         prevLabel = label;
-        if (opts.pointLabels && !skipLabel) {
+        // opts.labelAuto (2 series): en cada mes, la etiqueta del valor más
+        // alto va arriba de su punto y la del más bajo abajo, así no se
+        // pisan cuando las líneas pasan cerca. opts.skipZeroLabels: sin
+        // etiqueta en los ceros (tapaba el mes en el eje).
+        let below = si !== 0;
+        if (opts.labelAuto && series.length === 2) {
+          const idx = Math.round((p.x - m.l - band / 2) / band);
+          const ov = series[1 - si].values[idx];
+          below = ov != null && (ov > p.v || (ov === p.v && si === 1));
+        }
+        if (opts.pointLabels && !skipLabel && !(opts.skipZeroLabels && p.v === 0)) {
           const attrs = {
-            x: p.x, y: p.y + (si === 0 ? -8 : (opts.pointLabelSize || 8) + 6), 'text-anchor': 'middle',
+            x: p.x, y: p.y + (below ? (opts.pointLabelSize || 8) + 6 : -8), 'text-anchor': 'middle',
             class: 'point-label', fill: s.color,
           };
           // font-size como atributo de presentación pierde contra la regla

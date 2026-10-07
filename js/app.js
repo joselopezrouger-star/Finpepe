@@ -6644,6 +6644,22 @@
         ${items.map(feedRow).join('')}
       </div>`).join('');
 
+    // Últimos 6 meses (hasta el actual) desde el primero con algún gasto
+    // compartido: cuánto pagó cada uno y el total en común por mes.
+    const cmSh = curMonth();
+    const shMonths = [];
+    if (shared.expenses.length) {
+      const first = shared.expenses.map((e) => monthKeyOf(e.date)).sort()[0];
+      for (let i = 5; i >= 0; i--) { const m = addMonthsKey(cmSh, -i); if (m >= first) shMonths.push(m); }
+    }
+    const paidIn = (m, uid) => shared.expenses.reduce((acc, e) => {
+      if (monthKeyOf(e.date) !== m || e.paid_by !== uid) return acc;
+      const v = convOrNull(Number(e.amount), e.currency);
+      return v == null ? acc : acc + v;
+    }, 0);
+    const shMine = shMonths.map((m) => paidIn(m, me.id));
+    const shTheirs = partner ? shMonths.map((m) => paidIn(m, partner.user_id)) : [];
+
     el.innerHTML = `
       <div class="card sh-hero">
         <div class="sh-hero-top">
@@ -6671,17 +6687,59 @@
       </div>
       <div id="invite-box"></div>
 
+      ${partner && shMonths.length ? `
       <div class="card">
-        <h2 class="card-title"><span>Movimientos compartidos</span></h2>
-        ${feed.length ? `<div class="tx-day-blocks">${feedHTML}</div>
-        <div class="hint" style="margin-top:8px">Tocá un movimiento para ver el detalle o eliminarlo.</div>`
-          : '<div class="empty">Todavía no cargaron ningún gasto compartido.</div>'}
+        <h2 class="card-title"><span>Gastos de cada uno por mes</span></h2>
+        <div class="chart-legend">
+          <span><span class="key" style="background:var(--accent)"></span>${esc(myName)}</span>
+          <span><span class="key" style="background:var(--warn)"></span>${esc(partnerName)}</span>
+        </div>
+        <div id="chart-sh-people"></div>
       </div>
+      <div class="card">
+        <h2 class="card-title"><span>Total gastado en común por mes</span></h2>
+        <div id="chart-sh-total"></div>
+      </div>` : ''}
+
+      <button type="button" class="card sh-feed-btn" id="btn-sh-feed">
+        <span>${iconSvg('swap')}Movimientos compartidos</span>
+        <span class="sh-feed-count">${feed.length} ›</span>
+      </button>
       <button class="link-btn shared-leave" id="btn-leave-house">Salir del hogar</button>`;
 
+    if ($('#chart-sh-people', el)) {
+      const labels = shMonths.map((m) => monthShortLabel(m));
+      Charts.lines($('#chart-sh-people', el), labels, [
+        { label: myName, color: 'var(--accent)', values: shMine },
+        { label: partnerName, color: 'var(--warn)', values: shTheirs },
+      ], {
+        smooth: true, markerRadius: 5, pointLabels: true, pointLabelSize: 16, topPad: 30, leftPad: 52,
+        labelAuto: true, skipZeroLabels: true,
+        fmtAxis: (v) => Charts.compact(v),
+        ariaLabel: 'Gastos compartidos pagados por cada uno, por mes',
+      });
+      Charts.singleBars($('#chart-sh-total', el), shMonths.map((m, i) => ({ label: labels[i], value: shMine[i] + shTheirs[i] })), {
+        valueLabels: true, valueLabelSize: 18, topPad: 30, bottomPad: 30,
+        fmt: (v) => Charts.compact(v),
+        ariaLabel: 'Total gastado en común por mes',
+      });
+    }
+
+    // Movimientos compartidos en un pop-up (antes siempre desplegados).
+    $('#btn-sh-feed', el).addEventListener('click', () => {
+      const dlg = openDialog('Movimientos compartidos', feed.length
+        ? `<div class="tx-day-blocks">${feedHTML}</div><div class="hint">Tocá un movimiento para ver el detalle o eliminarlo.</div>`
+        : '<div class="empty">Todavía no cargaron ningún gasto compartido.</div>', { submitLabel: 'Cerrar', viewOnly: true });
+      $$('[data-shared-item]', dlg).forEach((row) => row.addEventListener('click', () => {
+        dlg.close();
+        openSharedItem(row.dataset.sharedItem);
+      }));
+    });
+
     // Detalle de un gasto o pago compartido (antes: una ✕ en cada fila).
-    $$('[data-shared-item]', el).forEach((row) => row.addEventListener('click', () => {
-      const [kind, id] = row.dataset.sharedItem.split(':');
+    function openSharedItem(key) {
+      {
+      const [kind, id] = key.split(':');
       const item = kind === 'expense' ? shared.expenses.find((x) => x.id === id) : shared.settlements.find((x) => x.id === id);
       if (!item) return;
       const r = (label, value) => `<div class="tx-detail-row"><span class="tx-row-label">${label}</span><span class="tx-row-value">${value}</span></div>`;
@@ -6720,7 +6778,8 @@
           render();
         } catch (e) { alert('No se pudo eliminar: ' + friendlyCloudError(e)); }
       });
-    }));
+      }
+    }
 
     $('#btn-add-se', el).addEventListener('click', sharedExpenseForm);
     const settleDebt = $('#btn-settle-debt', el);
