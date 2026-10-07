@@ -6592,99 +6592,135 @@
     const partnerName = partner ? partnerLabel(partner) : null;
     const meIsDebtor = bal < -0.01;
     const totals = partner ? sharedTotals() : { mine: 0, theirs: 0 };
+    const hasDebt = partner && balAbs >= 0.01;
+    const me = sharedMe();
+    const totalCommon = totals.mine + totals.theirs;
 
-    // Hoja de balance con números concretos en vez de una visualización
-    // aproximada: cuánto puso cada uno y el total en común. El neto (quién
-    // le debe a quién) NO se repite acá — ya lo muestra debt-row más abajo;
-    // solo se agrega una fila de cierre cuando están a mano, porque ese
-    // estado no tiene ningún otro lugar donde aparecer.
-    const ledgerHTML = partner ? `
-      <div class="shared-ledger">
-        <div class="shared-ledger-row"><span><i class="ledger-dot me"></i>Pagado por ${esc(myName)}</span><b>${fmtDisp(totals.mine)}</b></div>
-        <div class="shared-ledger-row"><span><i class="ledger-dot partner"></i>Pagado por ${esc(partnerName)}</span><b>${fmtDisp(totals.theirs)}</b></div>
-        <div class="shared-ledger-row"><span>Total gastado en común</span><b>${fmtDisp(totals.mine + totals.theirs)}</b></div>
-        ${balAbs < 0.01 ? '<div class="shared-ledger-row total"><span>Balance</span><b>Están a mano</b></div>' : ''}
-      </div>` : '';
+    // Frase principal del balance (quién le debe a quién), en el bloque de
+    // arriba con el mismo degradé que Inicio y Ahorros.
+    const headline = !partner
+      ? 'Esperando a que tu pareja se una'
+      : !hasDebt ? 'Están a mano'
+        : meIsDebtor ? `Le debés a ${partnerName}` : `${partnerName} te debe`;
 
-    // Combina gastos y pagos en una sola lista cronológica.
+    // Tu parte de un gasto compartido (lo que te toca pagar a vos).
+    const myPart = (e) => {
+      const amt = Number(e.amount);
+      return e.paid_by === me.id ? amt * Number(e.payer_share) : amt * (1 - Number(e.payer_share));
+    };
+
+    // Combina gastos y pagos en una sola lista cronológica, agrupada por
+    // día con el mismo formato que Movimientos.
     const feed = [
       ...shared.expenses.map((e) => ({ kind: 'expense', ...e })),
-      ...shared.settlements.map((s) => ({ kind: 'settlement', ...s })),
-    ].sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at));
-
-    const me = sharedMe();
-    const rowHTML = (item) => {
+      ...shared.settlements.map((x) => ({ kind: 'settlement', ...x })),
+    ].sort((x, y) => y.date.localeCompare(x.date) || y.created_at.localeCompare(x.created_at));
+    const feedRow = (item) => {
       if (item.kind === 'settlement') {
         const fromMe = item.from_user === me.id;
-        const title = fromMe ? `Le pagaste a ${esc(partnerLabel(partner))}` : `${esc(partnerLabel(partner))} te pagó`;
-        return `<div class="agenda-item">
-          <div class="agenda-icon">✅</div>
-          <div class="agenda-body">
-            <div class="agenda-name">${title}</div>
-            <div class="agenda-sub">${esc(timeAgo(item.date))}${item.note ? ' · ' + esc(item.note) : ''}</div>
+        return `<div class="tx-card-row" data-shared-item="settlement:${esc(item.id)}">
+          <div class="row-icon row-icon-income">${iconSvg('swap')}</div>
+          <div class="tx-card-main">
+            <div class="tx-card-title">${fromMe ? `Le pagaste a ${esc(partnerName)}` : `${esc(partnerName)} te pagó`}</div>
+            <div class="tx-card-sub">Pago${item.note ? ' · ' + esc(item.note) : ''}</div>
           </div>
-          <div class="agenda-amount">${fmtMoney(item.amount, item.currency)}</div>
-          <button class="row-del" data-delset="${esc(item.id)}" aria-label="Eliminar">✕</button>
+          <div class="tx-card-amount"><div class="v pos">${fmtMoney(item.amount, item.currency)}</div></div>
         </div>`;
       }
       const paidByMe = item.paid_by === me.id;
-      const who = paidByMe ? esc(myName) : esc(partnerLabel(partner));
-      return `<div class="agenda-item">
+      const who = paidByMe ? myName : partnerName;
+      return `<div class="tx-card-row" data-shared-item="expense:${esc(item.id)}">
         <div class="shared-avatar ${paidByMe ? 'me' : 'partner'}">${esc(initials(who))}</div>
-        <div class="agenda-body">
-          <div class="agenda-name">${esc(item.note || 'Gasto compartido')}</div>
-          <div class="agenda-sub">${esc(timeAgo(item.date))}</div>
-          <div class="agenda-sub"><b>${who}</b> pagó por</div>
+        <div class="tx-card-main">
+          <div class="tx-card-title">${esc(item.note || 'Gasto compartido')}</div>
+          <div class="tx-card-sub">Pagó ${esc(paidByMe ? 'vos' : who)} · tu parte ${fmtMoney(myPart(item), item.currency)}</div>
         </div>
-        <div class="agenda-trailing">
-          <div class="agenda-amount">${fmtMoney(item.amount, item.currency)}</div>
-          <div class="shared-participants">
-            <span class="shared-mini-avatar me">${esc(initials(myName))}</span>
-            <span class="shared-mini-avatar partner">${esc(initials(partnerLabel(partner)))}</span>
-          </div>
-        </div>
-        <button class="row-del" data-delexp="${esc(item.id)}" aria-label="Eliminar">✕</button>
+        <div class="tx-card-amount"><div class="v">${fmtMoney(item.amount, item.currency)}</div></div>
       </div>`;
     };
-
-    // Un solo título y una sola tarjeta para "cuánto se debe" (antes eran
-    // dos: "Deudas" arriba y "Balance con X" abajo, con estilos de título
-    // distintos entre sí y con el resto de la hoja). El resumen de deuda
-    // (si hay) va primero, adentro de la misma tarjeta que el detalle.
-    const hasDebt = partner && balAbs >= 0.01;
-    const debtRowHTML = hasDebt ? `
-      <div class="debt-row">
-        <div class="debt-row-who">
-          <span class="shared-avatar ${meIsDebtor ? 'me' : 'partner'}">${esc(initials(meIsDebtor ? myName : partnerName))}</span>
-          <div class="debt-row-text"><b>${esc(meIsDebtor ? myName : partnerName)}</b> le debe a <b>${esc(meIsDebtor ? partnerName : myName)}</b></div>
-        </div>
-        <div class="debt-row-amount ${meIsDebtor ? 'neg' : 'pos'}">${fmtDisp(balAbs)}</div>
-      </div>` : '';
+    const feedHTML = dayGroups(feed).map(({ dateStr, items }) => `
+      <div class="tx-card-list tx-list-compact">
+        <div class="tx-day-head">${esc(dayGroupLabel(dateStr))}</div>
+        ${items.map(feedRow).join('')}
+      </div>`).join('');
 
     el.innerHTML = `
-      <div class="card">
-        <h2 class="card-title">
-          <span class="hero-label-text">${iconSvg('heart')}${partner ? `Balance con ${esc(partnerName)}` : 'Balance'}</span>
-          ${partner ? '<button class="link-btn" id="btn-edit-name">✎ Tu nombre</button>' : ''}
-        </h2>
-        ${debtRowHTML}
-        ${ledgerHTML}
-        ${!partner ? '<div class="empty">Esperando a que tu pareja se una con el código de invitación.</div>' : ''}
-      </div>
-
-      <div class="toolbar">
-        <button class="btn btn-primary btn-sm" id="btn-add-se">+ Gasto compartido</button>
-        ${hasDebt ? '<button class="btn btn-sm" id="btn-settle-debt">Registrar pago</button>' : ''}
-        <button class="link-btn" id="btn-refresh-shared">↻ Actualizar</button>
-        ${!partner ? '<button class="link-btn" id="btn-invite">Generar código para tu pareja</button>' : ''}
+      <div class="card sh-hero">
+        <div class="sh-hero-top">
+          <span class="sh-hero-label">${iconSvg('heart')}${esc(shared.household.name || 'Hogar compartido')}</span>
+          <span class="sh-hero-tools">
+            ${partner ? '<button type="button" class="sh-icon-btn" id="btn-edit-name" aria-label="Cambiar tu nombre" title="Tu nombre">✎</button>' : ''}
+            <button type="button" class="sh-icon-btn" id="btn-refresh-shared" aria-label="Actualizar" title="Actualizar">↻</button>
+          </span>
+        </div>
+        <div class="sh-hero-head">${esc(headline)}</div>
+        ${hasDebt ? `<div class="sh-hero-amount">${fmtDisp(balAbs)}</div>` : ''}
+        ${partner ? `
+        <div class="sh-people">
+          <div class="sh-person"><span class="shared-avatar me">${esc(initials(myName))}</span><div><span>Pagó ${esc(myName)}</span><b>${fmtDisp(totals.mine)}</b></div></div>
+          <div class="sh-person"><span class="shared-avatar partner">${esc(initials(partnerName))}</span><div><span>Pagó ${esc(partnerName)}</span><b>${fmtDisp(totals.theirs)}</b></div></div>
+        </div>
+        ${totalCommon > 0 ? `
+        <div class="sh-split"><span class="me" style="width:${(totals.mine / totalCommon) * 100}%"></span><span class="partner" style="width:${(totals.theirs / totalCommon) * 100}%"></span></div>
+        <div class="sh-split-txt"><span>Total en común</span><b>${fmtDisp(totalCommon)}</b></div>` : ''}` : ''}
+        <div class="sh-hero-actions">
+          <button type="button" class="btn btn-sm sh-btn-primary" id="btn-add-se">+ Gasto compartido</button>
+          ${hasDebt ? '<button type="button" class="btn btn-sm sh-btn-ghost" id="btn-settle-debt">Registrar pago</button>' : ''}
+          ${!partner ? '<button type="button" class="btn btn-sm sh-btn-ghost" id="btn-invite">Generar código para tu pareja</button>' : ''}
+        </div>
       </div>
       <div id="invite-box"></div>
 
       <div class="card">
-        <h2 class="card-title">Transacciones</h2>
-        <div class="agenda">${feed.length ? feed.map(rowHTML).join('') : '<div class="empty">Todavía no cargaron ningún gasto compartido.</div>'}</div>
+        <h2 class="card-title"><span>Movimientos compartidos</span></h2>
+        ${feed.length ? `<div class="tx-day-blocks">${feedHTML}</div>
+        <div class="hint" style="margin-top:8px">Tocá un movimiento para ver el detalle o eliminarlo.</div>`
+          : '<div class="empty">Todavía no cargaron ningún gasto compartido.</div>'}
       </div>
       <button class="link-btn shared-leave" id="btn-leave-house">Salir del hogar</button>`;
+
+    // Detalle de un gasto o pago compartido (antes: una ✕ en cada fila).
+    $$('[data-shared-item]', el).forEach((row) => row.addEventListener('click', () => {
+      const [kind, id] = row.dataset.sharedItem.split(':');
+      const item = kind === 'expense' ? shared.expenses.find((x) => x.id === id) : shared.settlements.find((x) => x.id === id);
+      if (!item) return;
+      const r = (label, value) => `<div class="tx-detail-row"><span class="tx-row-label">${label}</span><span class="tx-row-value">${value}</span></div>`;
+      let body;
+      if (kind === 'expense') {
+        const paidByMe = item.paid_by === me.id;
+        const payerPct = Math.round(Number(item.payer_share) * 100);
+        body = `<div class="tx-detail-amount"><div class="v">${fmtMoney(item.amount, item.currency)}</div></div>
+          ${r('Fecha', esc(fmtDateFull(item.date)))}
+          ${r('Pagó', esc(paidByMe ? myName : partnerName))}
+          ${r(`Parte de ${esc(myName)}`, `${fmtMoney(myPart(item), item.currency)} (${paidByMe ? payerPct : 100 - payerPct}%)`)}
+          ${r(`Parte de ${esc(partnerName)}`, `${fmtMoney(Number(item.amount) - myPart(item), item.currency)} (${paidByMe ? 100 - payerPct : payerPct}%)`)}`;
+      } else {
+        const fromMe = item.from_user === me.id;
+        body = `<div class="tx-detail-amount"><div class="v pos">${fmtMoney(item.amount, item.currency)}</div></div>
+          ${r('Fecha', esc(fmtDateFull(item.date)))}
+          ${r('De', esc(fromMe ? myName : partnerName))}
+          ${r('Para', esc(fromMe ? partnerName : myName))}
+          ${item.note ? r('Nota', esc(item.note)) : ''}`;
+      }
+      const dlg = openDialog(kind === 'expense' ? (item.note || 'Gasto compartido') : 'Pago', body, {
+        submitLabel: 'Cerrar', viewOnly: true,
+        footExtra: '<button type="button" class="btn btn-danger" data-sh-del style="margin-right:auto">Eliminar</button>',
+      });
+      $('[data-sh-del]', dlg).addEventListener('click', async () => {
+        if (!confirm(kind === 'expense' ? '¿Eliminar este gasto compartido?' : '¿Eliminar este pago?')) return;
+        try {
+          if (kind === 'expense') {
+            await Cloud.deleteSharedExpense(id);
+            shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
+          } else {
+            await Cloud.deleteSettlement(id);
+            shared.settlements = await Cloud.listSettlements(shared.household.id);
+          }
+          dlg.close();
+          render();
+        } catch (e) { alert('No se pudo eliminar: ' + friendlyCloudError(e)); }
+      });
+    }));
 
     $('#btn-add-se', el).addEventListener('click', sharedExpenseForm);
     const settleDebt = $('#btn-settle-debt', el);
@@ -6713,18 +6749,6 @@
         await loadShared();
       } catch (e) { alert('No se pudo salir: ' + friendlyCloudError(e)); }
     });
-    $$('[data-delexp]', el).forEach((b) => b.addEventListener('click', async () => {
-      if (!confirm('¿Eliminar este gasto compartido?')) return;
-      await Cloud.deleteSharedExpense(b.dataset.delexp);
-      shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
-      render();
-    }));
-    $$('[data-delset]', el).forEach((b) => b.addEventListener('click', async () => {
-      if (!confirm('¿Eliminar este pago?')) return;
-      await Cloud.deleteSettlement(b.dataset.delset);
-      shared.settlements = await Cloud.listSettlements(shared.household.id);
-      render();
-    }));
   }
 
   /* ================= Router / render ================= */

@@ -2117,3 +2117,39 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .sav-hist .badge { font-size: 10px; vertical-align: 1px; }
 .sav-lock { font-size: 12px; padding: 0 6px; opacity: 0.7; }
 .sav-det-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* ---------- Compartido ---------- */
+.card.sh-hero {
+  background: linear-gradient(135deg, var(--honey-deep), color-mix(in srgb, var(--honey-deep) 70%, #0b3d2c));
+  border: 0; color: #fff; display: grid; gap: 4px; padding: 14px 18px 16px;
+}
+.sh-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sh-hero-label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.9; min-width: 0; }
+.sh-hero-label svg { width: 16px; height: 16px; flex: none; }
+.sh-hero-tools { display: flex; gap: 6px; }
+.sh-icon-btn {
+  width: 30px; height: 30px; border-radius: 50%; border: 0; cursor: pointer;
+  background: color-mix(in srgb, white 16%, transparent); color: #fff; font: 600 15px/1 var(--font);
+  display: grid; place-items: center; padding: 0;
+}
+.sh-icon-btn:hover { background: color-mix(in srgb, white 26%, transparent); }
+.sh-hero-head { margin-top: 6px; font: 700 17px var(--font-heading); }
+.sh-hero-amount { font: 800 32px/1.1 var(--font-heading); letter-spacing: -0.01em; }
+.sh-people { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.sh-person { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, white 14%, transparent); min-width: 0; }
+.sh-person > div { display: grid; min-width: 0; }
+.sh-person span:not(.shared-avatar) { font-size: 11px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sh-person b { font: 700 14.5px var(--font-heading); white-space: nowrap; }
+.sh-person .shared-avatar { width: 28px; height: 28px; font-size: 12px; flex: none; }
+.sh-split { display: flex; height: 8px; margin-top: 10px; border-radius: 999px; overflow: hidden; gap: 2px; background: color-mix(in srgb, white 20%, transparent); }
+.sh-split > span { display: block; height: 100%; }
+.sh-split .me { background: color-mix(in srgb, var(--accent) 65%, white); }
+.sh-split .partner { background: var(--warn); }
+.sh-split-txt { display: flex; justify-content: space-between; font-size: 12px; opacity: 0.95; }
+.sh-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.sh-btn-primary { background: #fff; color: var(--honey-deep); border-color: #fff; font-weight: 700; }
+.sh-btn-primary:hover { background: color-mix(in srgb, white 90%, var(--honey-deep)); }
+.sh-btn-ghost { background: color-mix(in srgb, white 14%, transparent); color: #fff; border-color: color-mix(in srgb, white 40%, transparent); }
+.sh-btn-ghost:hover { background: color-mix(in srgb, white 24%, transparent); }
+.tx-list-compact .shared-avatar { width: 26px; height: 26px; font-size: 11.5px; flex: none; }
+#invite-box:empty { display: none; }
