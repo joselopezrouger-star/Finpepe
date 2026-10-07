@@ -572,7 +572,7 @@
     fAllMonths: false,        // true = ignora el mes, trae todos (filtro de Movimientos)
     fType: '', fCat: '', fMethod: '',
     trendTable: false,
-    openSavings: {},          // id -> bool (historial expandido)
+    savChart: 'rate',         // Ahorros: gráfico elegido (rate | nominal | cum)
     calSel: null,             // 'YYYY-MM-DD' día seleccionado en el calendario
     catAnalysisId: null,      // categoría elegida para el gráfico de evolución
     catKind: 'gasto',         // Categorías: sección Gastos o Ingresos
@@ -4359,17 +4359,104 @@
     });
   }
 
+  /* Saldo de un ahorro en su moneda y en la otra (cada aporte convertido
+     con su propia cotización, ver savingEntryAmountIn). */
+  function savingBalances(s) {
+    const other = s.currency === 'ARS' ? 'USD' : 'ARS';
+    const bal = s.entries.reduce((a, e) => a + e.amount, 0);
+    const conv = s.entries.reduce((a, e) => {
+      const v = savingEntryAmountIn(s, e, other);
+      return v != null ? a + v : a;
+    }, 0);
+    const inDisp = s.entries.reduce((a, e) => {
+      const v = savingEntryAmountIn(s, e, disp());
+      return v != null ? a + v : a;
+    }, 0);
+    return { bal, conv, other, inDisp };
+  }
+
+  /* Detalle de un ahorro: saldo, meta, acciones e historial de aportes y
+     retiros (antes todo vivía en la tarjeta, con cinco botones y la tabla
+     desplegada adentro). */
+  function savingDetailDialog(id) {
+    const s = S().savings.find((x) => x.id === id);
+    if (!s) return;
+    const { bal, conv, other } = savingBalances(s);
+    const pct = s.target ? Math.min(100, Math.round((bal / s.target) * 100)) : null;
+    const entries = s.entries.slice().sort((a, b) => b.date.localeCompare(a.date));
+    const body = `
+      <div class="sav-det-head">
+        <div class="sav-det-bal">${fmtMoney(bal, s.currency)}</div>
+        ${s.entries.length ? `<div class="sav-det-conv">≈ ${fmtMoney(conv, other)}</div>` : ''}
+        ${s.target ? `
+        <div class="sav-goal">
+          <div class="sav-goal-bar"><span style="width:${pct}%"></span></div>
+          <div class="sav-goal-txt"><span>Meta ${fmtMoney(s.target, s.currency)}</span><b>${pct}%</b></div>
+          ${bal < s.target ? `<div class="sav-goal-left">Te faltan ${fmtMoney(s.target - bal, s.currency)}</div>` : '<div class="sav-goal-left">¡Meta cumplida!</div>'}
+        </div>` : ''}
+      </div>
+      <div class="sav-det-actions">
+        <button type="button" class="btn btn-primary btn-sm" data-sav-act="add">+ Aporte</button>
+        <button type="button" class="btn btn-sm" data-sav-act="sub">− Retiro</button>
+        <button type="button" class="btn btn-sm" data-sav-act="edit">Editar</button>
+      </div>
+      <div class="ca-section-title">Historial</div>
+      ${entries.length ? `<div class="tx-card-list tx-list-compact sav-hist">
+        ${entries.map((e) => `<div class="tx-card-row sav-hist-row">
+          <div class="row-icon ${e.amount >= 0 ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(e.amount >= 0 ? 'trend' : 'cash')}</div>
+          <div class="tx-card-main">
+            <div class="tx-card-title">${esc(e.note || (e.amount >= 0 ? 'Aporte' : 'Retiro'))}${e.opening ? ' <span class="badge">histórico</span>' : ''}${e.linkedTxId ? ' <span class="badge">gasto</span>' : ''}</div>
+            <div class="tx-card-sub">${esc(fmtDateFull(e.date))}</div>
+          </div>
+          <div class="tx-card-amount"><div class="v ${e.amount >= 0 ? 'pos' : 'neg'}">${e.amount >= 0 ? '+' : '−'} ${fmtMoney(Math.abs(e.amount), s.currency)}</div></div>
+          ${e.linkedTxId
+            ? '<span class="sav-lock" title="Se borra junto con el gasto que lo generó">🔒</span>'
+            : `<button type="button" class="tx-card-del" data-edel="${esc(e.id)}" aria-label="Eliminar">✕</button>`}
+        </div>`).join('')}
+      </div>` : '<div class="empty">Todavía no hay aportes ni retiros.</div>'}`;
+    const dlg = openDialog(s.name, body, {
+      submitLabel: 'Cerrar', viewOnly: true,
+      footExtra: '<button type="button" class="btn btn-danger" data-sav-act="del" style="margin-right:auto">Eliminar</button>',
+    });
+    $$('[data-sav-act]', dlg).forEach((b) => b.addEventListener('click', () => {
+      const act = b.dataset.savAct;
+      if (act === 'del') {
+        if (!confirm(`¿Eliminar “${s.name}” y todo su historial?`)) return;
+        S().savings = S().savings.filter((x) => x.id !== s.id);
+        Store.save();
+        dlg.close();
+        render();
+        return;
+      }
+      dlg.close();
+      if (act === 'add') savingEntryForm(s, 1);
+      else if (act === 'sub') savingEntryForm(s, -1);
+      else savingForm(s);
+    }));
+    $$('[data-edel]', dlg).forEach((b) => b.addEventListener('click', () => {
+      if (!confirm('¿Eliminar este movimiento del ahorro?')) return;
+      s.entries = s.entries.filter((e) => e.id !== b.dataset.edel);
+      Store.save();
+      render();
+      dlg.close();
+      savingDetailDialog(id);
+    }));
+  }
+
   function vAhorros(el) {
     const savings = S().savings;
-    let total = 0;
+    const otherCur = disp() === 'ARS' ? 'USD' : 'ARS';
+    let total = 0, totalOther = 0;
     for (const s of savings) {
       for (const e of s.entries) {
         const v = savingEntryAmountIn(s, e, disp());
         if (v != null) total += v;
+        const o = savingEntryAmountIn(s, e, otherCur);
+        if (o != null) totalOther += o;
       }
     }
 
-    // Ventana de meses para los 3 gráficos de abajo: desde el primer mes
+    // Ventana de meses para los gráficos de abajo: desde el primer mes
     // con algún movimiento cargado hasta el actual, sin pasar de 12 meses
     // (para que una cuenta vieja no termine con un gráfico ilegible).
     const savAllMonths = [...new Set(savings.flatMap((s) => s.entries.map((e) => monthKeyOf(e.date))))].sort();
@@ -4397,142 +4484,142 @@
     // salto en el mes en que se cargó un aporte histórico.
     const savCumulativeSeries = savMonths.map((m) => savingsAtEndOf(m));
 
+    // Este mes: aporte neto y tasa sobre los ingresos del mes.
+    const cm = curMonth();
+    const monthDelta = savDeltaOf(cm);
+    const incCm = sumDisp(S().transactions.filter((t) => effectiveMonthOf(t) === cm && t.type === 'ingreso'));
+    const monthRate = incCm > 0 ? Math.round((monthDelta / incCm) * 100) : null;
+
+    // Cada cuenta con su saldo en la moneda elegida, para la barra de
+    // composición del total (mismo color en la barra y en la lista).
+    const accounts = savings.map((s, i) => ({ s, ...savingBalances(s), color: CAT_PALETTE[i % CAT_PALETTE.length] }));
+    const posTotal = accounts.reduce((a, x) => a + Math.max(0, x.inDisp), 0);
+
+    const CHARTS = {
+      rate: { label: 'Tasa', title: 'Tasa de ahorro por mes', hint: 'Qué parte de lo que ingresó cada mes terminó ahorrada.' },
+      nominal: { label: 'Aportes', title: 'Ahorro nominal por mes', hint: 'Cuánto aportaste (o retiraste, si queda por debajo de la línea) cada mes.' },
+      cum: { label: 'Acumulado', title: 'Ahorro total acumulado', hint: 'El saldo real de todas tus cuentas de ahorro a fin de cada mes.' },
+    };
+    const chartKeys = Object.keys(CHARTS);
+    if (!CHARTS[ui.savChart]) ui.savChart = 'rate';
+
     el.innerHTML = `
-      <div class="card tile tile-wide">
-        <div class="tile-label">Total ahorrado</div>
-        <div class="tile-value">${fmtDisp(total)}</div>
+      <div class="card sav-hero">
+        <div class="sav-hero-label">Total ahorrado</div>
+        <div class="sav-hero-total">${fmtDisp(total)}</div>
+        ${savings.length ? `<div class="sav-hero-conv">≈ ${fmtMoney(totalOther, otherCur)}</div>` : ''}
+        <div class="sav-hero-stats">
+          <div><span>Este mes</span><b class="${monthDelta >= 0 ? 'pos' : 'neg'}">${monthDelta >= 0 ? '+' : '−'} ${fmtDisp(Math.abs(monthDelta))}</b></div>
+          <div><span>Tasa del mes</span><b>${monthRate == null ? '—' : monthRate + '%'}</b></div>
+        </div>
+        ${posTotal > 0 && accounts.length > 1 ? `
+        <div class="sav-mix">${accounts.filter((a) => a.inDisp > 0).map((a) => `<span style="width:${(a.inDisp / posTotal) * 100}%;background:${a.color}" title="${esc(a.s.name)}"></span>`).join('')}</div>
+        <div class="sav-mix-legend">${accounts.filter((a) => a.inDisp > 0).map((a) => `<span><i style="background:${a.color}"></i>${esc(a.s.name)} · ${Math.round((a.inDisp / posTotal) * 100)}%</span>`).join('')}</div>` : ''}
       </div>
-      <div class="toolbar">
-        <div class="spacer"></div>
-        <button class="btn btn-primary btn-sm" id="btn-add-saving">+ Nueva cuenta de ahorro</button>
+
+      <div class="card">
+        <h2 class="card-title">
+          <span>Tus cuentas</span>
+          <button type="button" class="link-btn" id="btn-add-saving">+ Nueva</button>
+        </h2>
+        ${savings.length ? `<div class="sav-list">
+          ${accounts.map(({ s, bal, conv, other, color }) => {
+            const pct = s.target ? Math.min(100, Math.round((bal / s.target) * 100)) : null;
+            return `<div class="sav-row" data-sav="${esc(s.id)}" role="button" tabindex="0" style="--sav-color:${color}">
+              <div class="sav-row-top">
+                <div class="sav-row-name"><span>${esc(s.name)}</span><span class="sav-cur">${esc(s.currency)}</span></div>
+                <div class="sav-row-bal">${fmtMoney(bal, s.currency)}</div>
+              </div>
+              <div class="sav-row-mid">
+                <div class="sav-row-sub">${s.entries.length ? '≈ ' + fmtMoney(conv, other) : 'Sin movimientos'}</div>
+                <div class="sav-row-quick">
+                  <button type="button" class="sav-q sav-q-add" data-add="${esc(s.id)}" aria-label="Aporte a ${esc(s.name)}">+</button>
+                  <button type="button" class="sav-q" data-sub="${esc(s.id)}" aria-label="Retiro de ${esc(s.name)}">−</button>
+                </div>
+              </div>
+              ${s.target ? `
+              <div class="sav-goal sav-goal-row">
+                <div class="sav-goal-bar"><span style="width:${pct}%"></span></div>
+                <div class="sav-goal-txt"><span>Meta ${fmtMoney(s.target, s.currency)}</span><b>${pct}%</b></div>
+              </div>` : ''}
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="hint" style="margin-top:8px">Tocá una cuenta para ver su historial, editarla o eliminarla.</div>`
+        : '<div class="empty">Creá tu primer fondo de ahorro: un colchón en dólares, un plazo fijo o una meta puntual (viaje, auto, mudanza).</div>'}
       </div>
-      ${savings.length ? `<div class="entity-grid">
-        ${savings.map((s) => {
-          const bal = s.entries.reduce((a, e) => a + e.amount, 0);
-          const other = s.currency === 'ARS' ? 'USD' : 'ARS';
-          const conv = s.entries.reduce((a, e) => {
-            const v = savingEntryAmountIn(s, e, other);
-            return v != null ? a + v : a;
-          }, 0);
-          const pct = s.target ? Math.min(100, Math.round((bal / s.target) * 100)) : null;
-          const open = !!ui.openSavings[s.id];
-          const entries = s.entries.slice().sort((a, b) => b.date.localeCompare(a.date));
-          return `<div class="entity">
-            <div class="entity-head">
-              <span class="entity-name">${esc(s.name)}</span>
-              <span class="badge badge-cur">${esc(s.currency)}</span>
-            </div>
-            <div class="tile-value" style="font-size:21px">${fmtMoney(bal, s.currency)}</div>
-            <div class="cell-sub">${s.entries.length ? '≈ ' + fmtMoney(conv, other) : ''}</div>
-            ${s.target ? `
-              <div class="meter ${pct >= 100 ? 'meter-ok' : 'meter-ok'}"><span style="width:${pct}%"></span></div>
-              <div class="cell-sub">Meta: ${fmtMoney(s.target, s.currency)} · ${pct}%</div>` : ''}
-            <div class="entity-actions">
-              <button class="btn btn-sm" data-add="${esc(s.id)}">+ Aporte</button>
-              <button class="btn btn-sm" data-sub="${esc(s.id)}">− Retiro</button>
-              <button class="btn btn-sm" data-hist="${esc(s.id)}">${open ? 'Ocultar' : 'Historial'}</button>
-              <button class="btn btn-sm" data-edit="${esc(s.id)}">Editar</button>
-              <button class="btn btn-sm btn-danger" data-del="${esc(s.id)}">Eliminar</button>
-            </div>
-            ${open ? `<div class="table-scroll"><table class="data">
-              <tbody>${entries.length ? entries.map((e) => `
-                <tr>
-                  <td class="cell-sub">${esc(fmtDateShort(e.date))}</td>
-                  <td>${esc(e.note || (e.amount >= 0 ? 'Aporte' : 'Retiro'))}${e.opening ? ' <span class="badge">histórico</span>' : ''}${e.linkedTxId ? ' <span class="badge">gasto</span>' : ''}</td>
-                  <td class="num ${e.amount >= 0 ? 'amount-in' : ''}">${e.amount >= 0 ? '+' : '−'} ${fmtMoney(Math.abs(e.amount), s.currency)}</td>
-                  <td>${e.linkedTxId
-                    ? `<span class="hint" title="Se borra junto con el gasto que lo generó">🔒</span>`
-                    : `<button class="row-del" data-edel="${esc(s.id)}:${esc(e.id)}" aria-label="Eliminar">✕</button>`}</td>
-                </tr>`).join('') : '<tr><td class="empty">Sin movimientos.</td></tr>'}
-              </tbody>
-            </table></div>` : ''}
-          </div>`;
-        }).join('')}
-      </div>`
-      : '<div class="card"><div class="empty">Creá tu primer fondo de ahorro: un colchón en dólares, un plazo fijo o una meta puntual (viaje, auto, mudanza).</div></div>'}
 
       ${savMonths.length ? `
       <div class="card">
         <h2 class="card-title">
-          <span>Tasa de ahorro por mes</span>
-          ${savRateRows.length ? '<button type="button" class="link-btn" id="btn-detail-savrate">Ver detalle</button>' : ''}
+          <span id="sav-chart-title">${CHARTS[ui.savChart].title}</span>
+          <button type="button" class="link-btn" id="btn-sav-detail">Ver detalle</button>
         </h2>
-        ${savRateRows.length ? savingsRateTrendSvg(savRateRows)
-          : '<div class="empty">Ningún mes de esta ventana tuvo ingresos registrados.</div>'}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">
-          <span>Ahorro nominal por mes</span>
-          <button type="button" class="link-btn" id="btn-detail-savnominal">Ver detalle</button>
-        </h2>
-        <div class="hint" style="margin-bottom:10px">Cuánto aportaste (o retiraste, si queda por debajo de la línea) cada mes.</div>
-        <div id="chart-sav-nominal"></div>
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">
-          <span>Ahorro total acumulado</span>
-          <button type="button" class="link-btn" id="btn-detail-savcum">Ver detalle</button>
-        </h2>
-        <div class="hint" style="margin-bottom:10px">El saldo real de todas tus cuentas de ahorro a fin de cada mes.</div>
-        <div id="chart-sav-cumulative"></div>
+        <div class="subtabs kind-tabs sav-tabs" data-pos="${chartKeys.indexOf(ui.savChart)}" role="tablist">
+          <span class="subtabs-thumb" aria-hidden="true"></span>
+          ${chartKeys.map((k) => `<button type="button" data-savchart="${k}" class="${k === ui.savChart ? 'active' : ''}" role="tab">${CHARTS[k].label}</button>`).join('')}
+        </div>
+        <div class="hint" id="sav-chart-hint" style="margin-bottom:8px">${CHARTS[ui.savChart].hint}</div>
+        <div id="sav-chart"></div>
       </div>` : ''}`;
 
-    if (savMonths.length) {
-      Charts.singleBars($('#chart-sav-nominal', el), savNominalRows, {
-        ariaLabel: 'Ahorro nominal por mes',
-        valueLabels: true, valueLabelSize: 11, topPad: 24, bottomPad: 40,
-        fmt: (v) => Charts.compact(v),
-      });
-      Charts.lines($('#chart-sav-cumulative', el), savMonths.map((m) => monthShortLabel(m)), [
-        { label: 'Ahorro acumulado', color: Charts.COLORS.income, values: savCumulativeSeries },
-      ], {
-        fmtAxis: (v) => Charts.compact(v),
-        ariaLabel: 'Ahorro total acumulado por mes',
-        pointLabels: true, pointLabelSize: 11, topPad: 24,
-      });
+    // Un solo gráfico a la vez, con selector: se redibuja sin rearmar la
+    // vista (así no salta el scroll).
+    function drawSavChart() {
+      const box = $('#sav-chart', el);
+      if (!box) return;
+      const k = ui.savChart;
+      $('#sav-chart-title', el).textContent = CHARTS[k].title;
+      $('#sav-chart-hint', el).textContent = CHARTS[k].hint;
+      if (k === 'rate') {
+        box.innerHTML = savRateRows.length ? savingsRateTrendSvg(savRateRows)
+          : '<div class="empty">Ningún mes de esta ventana tuvo ingresos registrados.</div>';
+      } else if (k === 'nominal') {
+        Charts.singleBars(box, savNominalRows, {
+          ariaLabel: 'Ahorro nominal por mes',
+          valueLabels: true, valueLabelSize: 18, topPad: 30, bottomPad: 30,
+          fmt: (v) => Charts.compact(v),
+        });
+      } else {
+        Charts.lines(box, savMonths.map((m) => monthShortLabel(m)), [
+          { label: 'Ahorro acumulado', color: Charts.COLORS.income, values: savCumulativeSeries },
+        ], {
+          fmtAxis: (v) => Charts.compact(v),
+          ariaLabel: 'Ahorro total acumulado por mes',
+          smooth: true, markerRadius: 5, pointLabels: true, pointLabelSize: 18, topPad: 34, leftPad: 52,
+        });
+      }
     }
-
-    const btnDetailRate = $('#btn-detail-savrate', el);
-    if (btnDetailRate) btnDetailRate.addEventListener('click', () => {
-      chartTableDialog('Tasa de ahorro por mes', ['Mes', 'Tasa de ahorro'],
-        savRateRows.map((r) => [r.label, r.rate + '%']));
-    });
-    const btnDetailNominal = $('#btn-detail-savnominal', el);
-    if (btnDetailNominal) btnDetailNominal.addEventListener('click', () => {
-      chartTableDialog('Ahorro nominal por mes', ['Mes', 'Aporte neto'],
-        savNominalRows.map((r) => [r.label, fmtDisp(r.value)]));
-    });
-    const btnDetailCum = $('#btn-detail-savcum', el);
-    if (btnDetailCum) btnDetailCum.addEventListener('click', () => {
-      chartTableDialog('Ahorro total acumulado', ['Mes', 'Total acumulado'],
-        savMonths.map((m, i) => [monthShortLabel(m), fmtDisp(savCumulativeSeries[i])]));
+    drawSavChart();
+    $$('[data-savchart]', el).forEach((b) => b.addEventListener('click', () => {
+      ui.savChart = b.dataset.savchart;
+      $$('[data-savchart]', el).forEach((x) => x.classList.toggle('active', x === b));
+      $('.sav-tabs', el).dataset.pos = String(chartKeys.indexOf(ui.savChart));
+      drawSavChart();
+    }));
+    const btnDetail = $('#btn-sav-detail', el);
+    if (btnDetail) btnDetail.addEventListener('click', () => {
+      if (ui.savChart === 'rate') {
+        chartTableDialog('Tasa de ahorro por mes', ['Mes', 'Tasa de ahorro'],
+          savRateRows.map((r) => [r.label, r.rate + '%']), { numFrom: 1 });
+      } else if (ui.savChart === 'nominal') {
+        chartTableDialog('Ahorro nominal por mes', ['Mes', 'Aporte neto'],
+          savNominalRows.map((r) => [r.label, fmtDisp(r.value)]), { numFrom: 1 });
+      } else {
+        chartTableDialog('Ahorro total acumulado', ['Mes', 'Total acumulado'],
+          savMonths.map((m, i) => [monthShortLabel(m), fmtDisp(savCumulativeSeries[i])]), { numFrom: 1 });
+      }
     });
 
     $('#btn-add-saving', el).addEventListener('click', () => savingForm(null));
-    const byId = (id) => savings.find((s) => s.id === id);
-    $$('[data-add]', el).forEach((b) => b.addEventListener('click', () => savingEntryForm(byId(b.dataset.add), 1)));
-    $$('[data-sub]', el).forEach((b) => b.addEventListener('click', () => savingEntryForm(byId(b.dataset.sub), -1)));
-    $$('[data-hist]', el).forEach((b) => b.addEventListener('click', () => {
-      ui.openSavings[b.dataset.hist] = !ui.openSavings[b.dataset.hist];
-      render();
-    }));
-    $$('[data-edit]', el).forEach((b) => b.addEventListener('click', () => savingForm(byId(b.dataset.edit))));
-    $$('[data-del]', el).forEach((b) => b.addEventListener('click', () => {
-      const s = byId(b.dataset.del);
-      if (!confirm(`¿Eliminar “${s.name}” y todo su historial?`)) return;
-      S().savings = savings.filter((x) => x.id !== s.id);
-      Store.save();
-      render();
-    }));
-    $$('[data-edel]', el).forEach((b) => b.addEventListener('click', () => {
-      const [sid, eid] = b.dataset.edel.split(':');
-      const s = byId(sid);
-      s.entries = s.entries.filter((e) => e.id !== eid);
-      Store.save();
-      render();
-    }));
+    const byId = (id) => savings.find((x) => x.id === id);
+    $$('[data-add]', el).forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); savingEntryForm(byId(b.dataset.add), 1); }));
+    $$('[data-sub]', el).forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); savingEntryForm(byId(b.dataset.sub), -1); }));
+    $$('[data-sav]', el).forEach((row) => {
+      const open = () => savingDetailDialog(row.dataset.sav);
+      row.addEventListener('click', open);
+      row.addEventListener('keydown', (e) => { if (e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); } });
+    });
   }
 
   /* Categoría de un presupuesto: grupo entero O una subcategoría puntual

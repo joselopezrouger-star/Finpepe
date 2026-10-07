@@ -2052,3 +2052,68 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .insight-go { margin-left: auto; padding-left: 6px; color: var(--muted); font-weight: 700; align-self: center; }
 .ca-prev { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink-2); border-radius: 2px; }
 .ca-legend i.ca-prev-key { background: var(--ink-2); width: 3px; }
+
+/* ---------- Ahorros ---------- */
+/* Bloque principal con el mismo degradé verde del encabezado de Inicio. */
+.card.sav-hero {
+  background: linear-gradient(135deg, var(--honey-deep), color-mix(in srgb, var(--honey-deep) 70%, #0b3d2c));
+  border: 0; color: #fff;
+  display: grid; gap: 4px; padding: 16px 18px 14px;
+}
+.sav-hero-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.85; }
+.sav-hero-total { font: 800 32px/1.1 var(--font-heading); letter-spacing: -0.01em; }
+.sav-hero-conv { font-size: 13px; opacity: 0.85; }
+.sav-hero-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.sav-hero-stats > div { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, white 14%, transparent); min-width: 0; }
+.sav-hero-stats span { font-size: 10.5px; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 650; }
+.sav-hero-stats b { font: 700 15px var(--font-heading); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sav-mix { display: flex; height: 10px; margin-top: 12px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, white 20%, transparent); gap: 2px; }
+.sav-mix > span { display: block; height: 100%; }
+.sav-mix-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 11.5px; opacity: 0.95; }
+.sav-mix-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; box-shadow: 0 0 0 1.5px color-mix(in srgb, white 70%, transparent); }
+
+/* Lista de cuentas: una fila por cuenta, con su color, saldo y meta. */
+.sav-list { display: grid; gap: 8px; }
+.sav-row {
+  display: grid; gap: 8px; padding: 10px 12px;
+  border: 1px solid var(--border); border-left: 4px solid var(--sav-color);
+  border-radius: var(--radius); background: var(--surface); cursor: pointer;
+}
+.sav-row:hover { border-color: var(--border-strong); border-left-color: var(--sav-color); }
+.sav-row-top, .sav-row-mid { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.sav-row-mid { margin-top: -4px; }
+.sav-row-name { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 14px; font-weight: 700; color: var(--ink); }
+.sav-row-name > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sav-cur { flex: none; font-size: 10px; font-weight: 700; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px; }
+.sav-row-sub { font-size: 11.5px; color: var(--muted); }
+.sav-row-bal { font: 800 17px var(--font-heading); color: var(--ink); white-space: nowrap; }
+.sav-row-quick { display: flex; gap: 4px; }
+.sav-q {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--ink-2);
+  font: 700 16px/1 var(--font); cursor: pointer; display: grid; place-items: center; padding: 0;
+}
+.sav-q:hover { border-color: var(--border-strong); color: var(--ink); }
+.sav-q-add { background: var(--accent-wash); color: var(--accent); border-color: transparent; }
+.sav-goal { display: grid; gap: 4px; }
+.sav-goal-bar { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.sav-goal-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--sav-color, var(--accent)); }
+.sav-goal-txt { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+.sav-goal-txt b { color: var(--ink-2); }
+.sav-goal-left { font-size: 11.5px; color: var(--muted); }
+
+/* Selector de gráfico de 3 opciones (mismo look que Gastos/Ingresos). */
+.sav-tabs { margin-bottom: 8px; }
+.sav-tabs .subtabs-thumb { width: calc((100% - 4px) / 3); }
+.sav-tabs[data-pos="1"] .subtabs-thumb { transform: translateX(100%); }
+.sav-tabs[data-pos="2"] .subtabs-thumb { transform: translateX(200%); }
+
+/* Detalle de una cuenta (pop-up) */
+.sav-det-head { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
+.sav-det-bal { font: 800 26px var(--font-heading); color: var(--ink); }
+.sav-det-conv { font-size: 12.5px; color: var(--muted); }
+.sav-det-head .sav-goal { margin-top: 8px; }
+.sav-det-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sav-hist .badge { font-size: 10px; vertical-align: 1px; }
+.sav-lock { font-size: 12px; padding: 0 6px; opacity: 0.7; }
+.sav-det-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
