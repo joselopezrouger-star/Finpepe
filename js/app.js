@@ -102,7 +102,18 @@
 
   const nfARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
   const nfUSD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-  const fmtMoney = (n, cur) => (cur === 'USD' ? nfUSD : nfARS).format(n);
+  // Ocultar montos (botón del ojo, al lado del selector de moneda): todos
+  // los importes de la app pasan por fmtMoney/heroMoneyHTML/Charts.compact,
+  // así que alcanza con enmascararlos acá; los % no se tocan. Se guarda
+  // por dispositivo (no viaja a la nube): es para no mostrar los números
+  // en una pantalla puntual.
+  const HIDE_KEY = 'finpepe:hideAmounts';
+  let hideAmounts = false;
+  try { hideAmounts = localStorage.getItem(HIDE_KEY) === '1'; } catch (e) { /* sin storage */ }
+  const MASK = '•••••';
+  const fmtMoney = (n, cur) => (hideAmounts
+    ? `${cur === 'USD' ? 'US$' : '$'} ${MASK}`
+    : (cur === 'USD' ? nfUSD : nfARS).format(n));
   const nfHero = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
 
   /* Puntos de miles en vivo para inputs de monto sueltos (presupuesto,
@@ -298,7 +309,7 @@
     const symbol = cur === 'USD' ? 'US$' : '$';
     const sign = n < 0 ? '−' : '';
     return `<span class="hero-amount">
-      <span class="hero-amount-sym">${symbol}</span>${sign}<span class="hero-amount-int">${esc(nfHero.format(Math.abs(n)))}</span>
+      <span class="hero-amount-sym">${symbol}</span>${hideAmounts ? '' : sign}<span class="hero-amount-int">${hideAmounts ? MASK : esc(nfHero.format(Math.abs(n)))}</span>
     </span>`;
   }
 
@@ -419,6 +430,8 @@
   // con líneas radiales- se confundía con el típico ícono de "sol" para
   // cambiar a modo claro. Este es el clásico ícono de ajustes (viewBox
   // propio de 24x24, no encaja en el sistema de 20x20 de ICON_PATHS).
+  const EYE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_OFF_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.7 17.7 0 0 1-2.6 3.6M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a10 10 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>';
   const SETTINGS_GEAR_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
     <circle cx="12" cy="12" r="3"/>
@@ -3733,7 +3746,7 @@
       rows.push({ label: 'En curso', value: A.spent + A.committed, extra: extra, current: true });
       Charts.statementBars(chartEl, rows, {
         ref: A.ref || 0, refLabel: A.ref ? (A.capOwn != null ? 'Tope' : 'Promedio') : '',
-        fmt: (v) => (Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1).replace('.', ',')} M` : Charts.compact(v)),
+        fmt: (v) => (!hideAmounts && Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1).replace('.', ',')} M` : Charts.compact(v)),
         ariaLabel: `Total de los últimos resúmenes de ${card.name} y proyección del actual`,
       });
     }
@@ -6860,6 +6873,14 @@
     const grp = groupOf(ui.view);
     $$('.bottom-nav button').forEach((b) => b.classList.toggle('active', !!grp && b.dataset.group === grp.key));
     $$('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.cur === disp()));
+    const eye = $('#btn-privacy');
+    if (eye) {
+      eye.innerHTML = hideAmounts ? EYE_OFF_SVG : EYE_SVG;
+      eye.classList.toggle('active', hideAmounts);
+      eye.setAttribute('aria-pressed', String(hideAmounts));
+      eye.setAttribute('aria-label', hideAmounts ? 'Mostrar montos' : 'Ocultar montos');
+      eye.title = hideAmounts ? 'Mostrar montos' : 'Ocultar montos';
+    }
     const thumb = $('.seg-thumb');
     if (thumb) thumb.classList.toggle('pos-usd', disp() === 'USD');
     renderRateChip();
@@ -6995,6 +7016,13 @@
       Store.save();
       render();
     }));
+    Charts.setMasked(hideAmounts);
+    $('#btn-privacy').addEventListener('click', () => {
+      hideAmounts = !hideAmounts;
+      try { localStorage.setItem(HIDE_KEY, hideAmounts ? '1' : '0'); } catch (e) { /* sin storage */ }
+      Charts.setMasked(hideAmounts);
+      render();
+    });
     $('#btn-open-settings').addEventListener('click', () => {
       ui.view = ui.view === 'ajustes' ? 'resumen' : 'ajustes';
       render();

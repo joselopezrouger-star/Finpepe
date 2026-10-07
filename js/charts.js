@@ -577,7 +577,12 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
+  // Modo "ocultar montos" (ojo del encabezado): las etiquetas de monto de
+  // todos los gráficos se reemplazan por puntos; los % no pasan por acá.
+  let masked = false;
+  function setMasked(v) { masked = !!v; }
   function compact(n) {
+    if (masked) return '•••';
     const sign = n < 0 ? '-' : '';
     const a = Math.abs(n);
     if (a >= 1e6) return sign + Math.round(a / 1e6) + ' M';
@@ -780,5 +785,5 @@ const Charts = (() => {
     }
   }
 
-  return { COLORS, hBars, lines, singleBars, statementBars, dailyBalance, pieCylinder, stacked100, compact, smoothPathD };
+  return { COLORS, setMasked, hBars, lines, singleBars, statementBars, dailyBalance, pieCylinder, stacked100, compact, smoothPathD };
 })();

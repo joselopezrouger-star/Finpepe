@@ -2161,3 +2161,7 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .sh-feed-btn svg { color: var(--accent); }
 .sh-feed-count { color: var(--muted); font-weight: 600; }
 .card.sh-feed-btn:hover { border-color: var(--border-strong); }
+/* Ojo para ocultar montos, a la izquierda del selector de moneda. */
+.topbar-eye { color: var(--ink-2); }
+.topbar-eye.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.topbar-eye { width: 32px; height: 32px; border-radius: 50%; flex: none; }
