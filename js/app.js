@@ -930,6 +930,9 @@
     (async () => {
       if (tx.currency === 'ARS') tx.usdSnapshot = await usdSnapshotForDate(tx.amount, 'ARS', tx.date);
       else if (tx.currency === 'USD') tx.arsSnapshot = await arsSnapshotForDate(tx.amount, 'USD', tx.date);
+      // Si se pagó con un ahorro, el retiro se rehace con la cotización
+      // corregida (un ahorro en la otra moneda descuenta el equivalente).
+      if (isSavingMethod(tx.methodId)) syncSavingWithdrawalForTx(tx);
       Store.save();
       render();
     })();
@@ -979,6 +982,9 @@
       usdSnapshot: usdSnapshotFor(r.amount, r.currency), arsSnapshot: arsSnapshotFor(r.amount, r.currency),
     };
     S().transactions.push(tx);
+    // Fijo pagado con un ahorro: retiro automático en ese ahorro, igual que
+    // un gasto cargado a mano con "Pagar con un ahorro".
+    syncSavingWithdrawalForTx(tx);
     if (dateStr !== todayStr()) refineSnapshotLater(tx);
   }
   function generateRecurring() {
@@ -4552,6 +4558,15 @@
     weekly: 'Se genera un movimiento automáticamente cada 7 días, a partir de la fecha elegida.',
     biweekly: 'Se genera un movimiento automáticamente cada 15 días, a partir de la fecha elegida.',
   };
+  // Medios para un fijo: los de siempre y, si es un gasto, también los
+  // ahorros ("Pagar con un ahorro", igual que al cargar un gasto suelto):
+  // cada vez que se genera, se descuenta solo de ese ahorro.
+  function recurringMethodOptionsHTML(type, selId) {
+    const base = selOptions(S().methods, selId);
+    if (type !== 'gasto' || !S().savings.length) return base;
+    return `${base}<optgroup label="Pagar con un ahorro">${selOptions(S().savings, selId)}</optgroup>`;
+  }
+
   function recurringForm(rec) {
     const editing = !!rec;
     const r = rec || {
@@ -4610,7 +4625,7 @@
       </div>
       <div class="field">
         <label for="r-method">Medio de pago</label>
-        <select name="methodId" id="r-method" required>${selOptions(S().methods, r.methodId)}</select>
+        <select name="methodId" id="r-method" required>${recurringMethodOptionsHTML(r.type, r.methodId)}</select>
       </div>
       <span class="hint" id="r-hint">${RECURRING_FREQ_HINT[freq]}</span>`;
     const dlg = openDialog(editing ? 'Editar movimiento fijo' : 'Nuevo movimiento fijo', body, {
@@ -4640,6 +4655,11 @@
     $('#r-type', dlg).addEventListener('change', () => {
       const sel = $('#r-cat', dlg);
       sel.innerHTML = catSelectOptionsHTML($('#r-type', dlg).value, sel.value);
+      // Un ingreso no puede "salir" de un ahorro: se rearman los medios.
+      const ms = $('#r-method', dlg);
+      const prev = ms.value;
+      ms.innerHTML = recurringMethodOptionsHTML($('#r-type', dlg).value, prev);
+      if (!ms.value && S().methods[0]) ms.value = S().methods[0].id;
     });
     // Alterna entre "Día del mes" (mensual) y "Fecha del primer pago"
     // (semanal/quincenal, que no tienen un día de mes fijo) sin dos campos
