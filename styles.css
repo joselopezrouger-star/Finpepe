@@ -999,10 +999,10 @@ table.data.cat-breakdown-table {
    los nombres de categoría/subcategoría realmente ocupa (son cortos), así
    que quedaba un hueco grande entre el nombre y el monto — se achica y el
    ancho sobrante se reparte entre las columnas numéricas. */
-table.data.cat-breakdown-table col.cat-col-name { width: 30%; }
+table.data.cat-breakdown-table col.cat-col-name { width: 32%; }
 table.data.cat-breakdown-table col.cat-col-amount { width: 21%; }
 table.data.cat-breakdown-table col.cat-col-pct { width: 12%; }
-table.data.cat-breakdown-table col.cat-col-mom { width: 25%; }
+table.data.cat-breakdown-table col.cat-col-mom { width: 23%; }
 /* Tabla de ingresos: una sola columna de % (no dos), así que se reparte
    distinto para no dejar aire de más. */
 table.data.cat-breakdown-table.cat-income-table col.cat-col-name { width: 32%; }
@@ -1222,7 +1222,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
    que el chart cede ancho (flex-shrink) antes que dejar que la leyenda
    caiga a una fila nueva incluso en un celular angosto. */
 .pie-cylinder-wrap { display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; }
-.pie-cylinder-wrap #chart-cat-pie { flex: 1 1 140px; min-width: 0; max-width: 220px; }
+.pie-cylinder-wrap #chart-cat-pie, .pie-cylinder-wrap #chart-inc-pie { flex: 1 1 140px; min-width: 0; max-width: 220px; }
 .pie-cylinder-wrap .chart-legend-col { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
 .pie-cylinder-wrap .chart-legend-col span { overflow-wrap: break-word; }
 
@@ -1970,3 +1970,36 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .inst-detail-rows .tx-detail-row { padding: 7px 2px; min-height: 0; }
 .inst-detail-rows .tx-row-label { width: auto; font-size: 12.5px; white-space: nowrap; }
 .inst-detail-rows .tx-row-value { font-size: 13px; }
+
+/* Categorías: selector Gastos / Ingresos (mismo look que las sub-pestañas,
+   dos mitades iguales con la píldora deslizándose). */
+.kind-tabs { margin-bottom: 12px; }
+.kind-tabs button { flex: 1 1 0; }
+.kind-tabs .subtabs-thumb { width: calc(50% - 2px); transform: translateX(0); }
+.kind-tabs.is-ingreso .subtabs-thumb { transform: translateX(100%); }
+
+/* Tabla de categorías plegable: de entrada sólo el nivel categoría; las
+   subcategorías se deslizan debajo al tocar la categoría. El padding
+   vertical de las celdas pasa a un div interno (.cs) para poder animar
+   su alto (una fila de tabla no se puede animar directo). */
+table.data.cat-breakdown-table tr.cat-sub-row td { padding-top: 0; padding-bottom: 0; border-bottom-width: 0; }
+table.data.cat-breakdown-table tr.cat-sub-row.open td { border-bottom-width: 1px; }
+table.data.cat-breakdown-table tr.cat-sub-row .cs {
+  max-height: 0; opacity: 0; overflow: hidden;
+  padding: 0;
+  transition: max-height 0.28s ease, opacity 0.2s ease, padding 0.28s ease;
+}
+table.data.cat-breakdown-table tr.cat-sub-row.open .cs { max-height: 64px; opacity: 1; padding: 7px 0; }
+table.data.cat-breakdown-table tr.cat-sub-all td { color: var(--accent); font-weight: 600; }
+table.data.cat-breakdown-table tr.cat-break-group td:first-child { position: relative; }
+.cat-chev {
+  position: absolute; left: 1px; top: 50%;
+  width: 10px; text-align: center; line-height: 1;
+  color: var(--muted); font-weight: 700;
+  transform: translateY(-50%);
+  transition: transform 0.25s ease;
+}
+tr.cat-break-group.open .cat-chev { transform: translateY(-50%) rotate(90deg); }
+.cat-chev.is-empty { visibility: hidden; }
+table.data.cat-breakdown-table tr.cat-break-group td:first-child { padding-left: 12px; }
+table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 16px; }

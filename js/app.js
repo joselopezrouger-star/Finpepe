@@ -575,6 +575,8 @@
     openSavings: {},          // id -> bool (historial expandido)
     calSel: null,             // 'YYYY-MM-DD' día seleccionado en el calendario
     catAnalysisId: null,      // categoría elegida para el gráfico de evolución
+    catKind: 'gasto',         // Categorías: sección Gastos o Ingresos
+    catOpen: {},              // Categorías: grupo -> true si sus subcategorías están desplegadas
   };
 
   /* ================= Ciclo de tarjetas de crédito ================= */
@@ -2837,12 +2839,6 @@
       ui.catAnalysisId = windowBreakdown[0] ? windowBreakdown[0].id : null;
     }
     const selId = ui.catAnalysisId;
-    // Si el id elegido tiene parentId es una subcategoría (comparar
-    // categoryId directo); si no, es un grupo de arriba (comparar contra
-    // topCatKeyOf, que ya suma las subcategorías propias).
-    const selCat = selId ? catById(selId) : null;
-    const selIsSub = !!(selCat && selCat.parentId);
-    const selName = selId === '__sin' ? 'Sin categoría' : (selCat ? selCat.name : '');
 
     // Meses con ingresos, para los gráficos de evolución de abajo — un mes
     // sin ingresos (ej. sólo un gasto suelto) no es comparable con el
@@ -2852,22 +2848,46 @@
       const [y, mo] = m.split('-').map(Number);
       return monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', '');
     });
-    const pctExpSeries = [];
-    const pctIncSeries = [];
-    activeMonths.forEach((m) => {
-      const listM = txs.filter((t) => monthKeyOf(t.date) === m);
-      const gastoM = listM.filter((t) => t.type === 'gasto');
-      const expM = sumDisp(gastoM);
-      const incM = sumDisp(listM.filter((t) => t.type === 'ingreso'));
-      const catValM = selId
-        ? sumDisp(gastoM.filter((t) => selIsSub ? t.categoryId === selId : topCatKeyOf(t) === selId))
-        : 0;
-      pctExpSeries.push(expM > 0 ? (catValM / expM) * 100 : 0);
-      // null (no 0) si no hubo ingresos ese mes: dividir por cero no tiene
-      // sentido, y mostrar 0% sugeriría que la categoría no pesó nada en
-      // vez de "no hay con qué calcularlo" — Charts.lines() salta el punto.
-      pctIncSeries.push(incM > 0 ? (catValM / incM) * 100 : null);
-    });
+    // Serie del gráfico de evolución para una categoría o subcategoría.
+    // Se recalcula sola al cambiar el selector, sin volver a armar toda la
+    // vista (antes render() rehacía la pantalla y el scroll saltaba).
+    function catEvoSeries(id) {
+      // Si el id elegido tiene parentId es una subcategoría (comparar
+      // categoryId directo); si no, es un grupo de arriba (comparar contra
+      // topCatKeyOf, que ya suma las subcategorías propias).
+      const c = id ? catById(id) : null;
+      const isSub = !!(c && c.parentId);
+      const exp = [];
+      const inc = [];
+      activeMonths.forEach((m) => {
+        const listM = txs.filter((t) => monthKeyOf(t.date) === m);
+        const gastoM = listM.filter((t) => t.type === 'gasto');
+        const expM = sumDisp(gastoM);
+        const incM = sumDisp(listM.filter((t) => t.type === 'ingreso'));
+        const catValM = id
+          ? sumDisp(gastoM.filter((t) => isSub ? t.categoryId === id : topCatKeyOf(t) === id))
+          : 0;
+        exp.push(expM > 0 ? (catValM / expM) * 100 : 0);
+        // null (no 0) si no hubo ingresos ese mes: dividir por cero no tiene
+        // sentido, y mostrar 0% sugeriría que la categoría no pesó nada en
+        // vez de "no hay con qué calcularlo" — Charts.lines() salta el punto.
+        inc.push(incM > 0 ? (catValM / incM) * 100 : null);
+      });
+      return { exp, inc, name: id === '__sin' ? 'Sin categoría' : (c ? c.name : '') };
+    }
+    function drawCatEvo(id) {
+      const evoEl = $('#chart-cat-evo', el);
+      if (!evoEl) return;
+      const sr = catEvoSeries(id);
+      Charts.lines(evoEl, monthLabels, [
+        { label: '% de tus gastos', color: Charts.COLORS.expense, values: sr.exp },
+        { label: '% de tus ingresos', color: Charts.COLORS.income, values: sr.inc },
+      ], {
+        fmtAxis: (v) => Math.round(v) + '%',
+        ariaLabel: `Evolución del peso de ${sr.name} sobre ingresos y gastos`,
+        smooth: true, pointLabels: true, markerRadius: 4,
+      });
+    }
 
     const pct = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0) + '%';
 
@@ -2900,7 +2920,32 @@
     // Mismo criterio para las categorías de ingreso, pero como no comparten
     // gráficos con las de gasto no hace falta que salga de la ventana de 6
     // meses: alcanza con las del mes elegido.
-    const incomeColorOf = new Map(incomeBreakdown.map((g, i) => [g.id, CAT_PALETTE[i % CAT_PALETTE.length]]));
+    // Colores de ingresos sacados de la ventana de 6 meses (como los de
+    // gastos), así una categoría tiene el mismo color en la tabla, la torta
+    // y las líneas de evolución.
+    const incomeWindowBreakdown = categoryBreakdown(txs.filter((t) => t.type === 'ingreso' && months.includes(monthKeyOf(t.date))));
+    const incomeColorOf = new Map(incomeWindowBreakdown.map((g, i) => [g.id, CAT_PALETTE[i % CAT_PALETTE.length]]));
+    for (const g of incomeBreakdown) {
+      if (!incomeColorOf.has(g.id)) incomeColorOf.set(g.id, CAT_PALETTE[incomeColorOf.size % CAT_PALETTE.length]);
+    }
+    // Torta de ingresos del mes: hasta 4 orígenes + "Otros".
+    const incPie = incomeBreakdown.filter((g) => g.total > 0);
+    const incPieItems = incPie.slice(0, 4).map((g) => ({ label: g.name, value: g.total, color: incomeColorOf.get(g.id) }));
+    if (incPie.length > 4) incPieItems.push({ label: 'Otros', value: incPie.slice(4).reduce((a, g) => a + g.total, 0), color: '#64748b' });
+    // Evolución de ingresos: una línea por categoría (las 5 con más peso en
+    // la ventana + "Otros"), sólo en los meses con ingresos.
+    const INC_LINES_MAX = 5;
+    const incLineCats = incomeWindowBreakdown.slice(0, INC_LINES_MAX).map((g) => ({ id: g.id, name: g.name, color: incomeColorOf.get(g.id) }));
+    const incLineIds = new Set(incLineCats.map((c) => c.id));
+    if (incomeWindowBreakdown.length > INC_LINES_MAX) incLineCats.push({ id: '__otros', name: 'Otros', color: '#64748b' });
+    const incLineSeries = incLineCats.map((c) => ({
+      label: c.name, color: c.color,
+      values: activeMonths.map((m) => {
+        const list = txs.filter((t) => t.type === 'ingreso' && monthKeyOf(t.date) === m &&
+          (c.id === '__otros' ? !incLineIds.has(topCatKeyOf(t)) : topCatKeyOf(t) === c.id));
+        return sumDisp(list);
+      }),
+    }));
 
     // Torta cilindro: las 4 categorías con más peso del mes elegido (misma
     // tabla de arriba, que ya viene ordenada de mayor a menor) + "Otros"
@@ -2961,50 +3006,55 @@
       return matching.filter((t) => topCategoryOf(t.categoryId) === gid);
     }
 
-    // Tabla compacta (fuente y padding chicos) para que las 4 columnas
-    // numéricas + el nombre entren sin scroll lateral en un celular. Cada
-    // fila se puede tocar para ver el detalle de movimientos.
-    const rowsHtml = breakdown.map((g) => {
-      const showSubs = g.subs.length && !(g.subs.length === 1 && g.total === g.direct && g.subs[0].name === 'Otros (sin subcategoría)');
-      const subsHtml = showSubs ? g.subs.map((s) => `
-        <tr class="cat-sub-row" data-catid="${esc(g.id)}" data-subid="${esc(s.id)}">
-          <td class="cell-sub">${esc(s.name)}</td>
-          <td class="num cell-sub">${fmtDisp(s.value)}</td>
-          <td class="num cell-sub">${pct(s.value, exp)}</td>
-          <td class="num cell-sub">${pct(s.value, inc)}</td>
-          <td class="num cell-sub">${momHTML(s.value, prevSubTotals.get(s.id) || 0)}</td>
-        </tr>`).join('') : '';
-      const groupColor = catColorOf.get(g.id) || CAT_PALETTE[0];
-      return `<tr class="cat-break-group" data-catid="${esc(g.id)}" style="--row-tint:${hexToRgba(groupColor, 0.12)}">
-        <td>${esc(g.name)}</td>
-        <td class="num amount-out">${fmtDisp(g.total)}</td>
-        <td class="num">${pct(g.total, exp)}</td>
-        <td class="num">${pct(g.total, inc)}</td>
-        <td class="num">${momHTML(g.total, prevGroupTotals.get(g.id) || 0)}</td>
-      </tr>${subsHtml}`;
-    }).join('');
+    // Tabla compacta (fuente y padding chicos) para que las columnas
+    // numéricas + el nombre entren sin scroll lateral en un celular. De
+    // entrada se ve sólo el nivel categoría: tocar una que tenga
+    // subcategorías las despliega (deslizando) debajo; tocar una
+    // subcategoría, o una categoría sin subcategorías, abre el detalle de
+    // movimientos contra el mes anterior.
+    function breakdownRowsHTML(list, kind) {
+      const isInc = kind === 'ingreso';
+      const colorOf = isInc ? incomeColorOf : catColorOf;
+      const prevGroups = isInc ? prevIncomeGroupTotals : prevGroupTotals;
+      const prevSubs = isInc ? prevIncomeSubTotals : prevSubTotals;
+      const pctCells = (v) => isInc
+        ? `<td class="num">${pct(v, inc)}</td>`
+        : `<td class="num">${pct(v, exp)}</td><td class="num">${pct(v, inc)}</td>`;
+      const wrapCells = (html) => html.replace(/<td([^>]*)>([\s\S]*?)<\/td>/g, '<td$1><div class="cs">$2</div></td>');
+      return list.map((g) => {
+        const showSubs = g.subs.length && !(g.subs.length === 1 && g.total === g.direct && g.subs[0].name === 'Otros (sin subcategoría)');
+        const open = showSubs && !!ui.catOpen[kind + ':' + g.id];
+        const kindAttr = isInc ? ' data-kind="ingreso"' : '';
+        const subsHtml = showSubs ? g.subs.map((s) => `
+          <tr class="cat-sub-row${open ? ' open' : ''}" data-catid="${esc(g.id)}" data-subid="${esc(s.id)}" data-parent="${esc(g.id)}"${kindAttr}>
+            ${wrapCells(`<td class="cell-sub">${esc(s.name)}</td>
+            <td class="num cell-sub">${fmtDisp(s.value)}</td>
+            ${pctCells(s.value).replace(/class="num"/g, 'class="num cell-sub"')}
+            <td class="num cell-sub">${momHTML(s.value, prevSubs.get(s.id) || 0, !isInc)}</td>`)}
+          </tr>`).join('') + `
+          <tr class="cat-sub-row cat-sub-all${open ? ' open' : ''}" data-catid="${esc(g.id)}" data-parent="${esc(g.id)}"${kindAttr}>
+            ${wrapCells(`<td colspan="${isInc ? 4 : 5}" class="cell-sub">Ver todos los movimientos de ${esc(g.name)} ›</td>`)}
+          </tr>` : '';
+        const groupColor = colorOf.get(g.id) || CAT_PALETTE[0];
+        return `<tr class="cat-break-group${showSubs ? ' has-subs' : ''}${open ? ' open' : ''}" data-catid="${esc(g.id)}"${showSubs ? ' data-toggle="1"' : ''}${kindAttr} style="--row-tint:${hexToRgba(groupColor, 0.12)}">
+          <td><span class="cat-chev${showSubs ? '' : ' is-empty'}" aria-hidden="true">›</span>${esc(g.name)}</td>
+          <td class="num amount-out">${fmtDisp(g.total)}</td>
+          ${pctCells(g.total)}
+          <td class="num">${momHTML(g.total, prevGroups.get(g.id) || 0, !isInc)}</td>
+        </tr>${subsHtml}`;
+      }).join('');
+    }
+    const rowsHtml = breakdownRowsHTML(breakdown, 'gasto');
+    const incomeRowsHtml = breakdownRowsHTML(incomeBreakdown, 'ingreso');
 
-    // Misma tabla compacta, para el desglose de ingresos: de dónde vino la
-    // plata (sueldo, freelance, etc.), no sólo en qué se gastó.
-    const incomeRowsHtml = incomeBreakdown.map((g) => {
-      const showSubs = g.subs.length && !(g.subs.length === 1 && g.total === g.direct && g.subs[0].name === 'Otros (sin subcategoría)');
-      const subsHtml = showSubs ? g.subs.map((s) => `
-        <tr class="cat-sub-row" data-catid="${esc(g.id)}" data-subid="${esc(s.id)}" data-kind="ingreso">
-          <td class="cell-sub">${esc(s.name)}</td>
-          <td class="num cell-sub">${fmtDisp(s.value)}</td>
-          <td class="num cell-sub">${pct(s.value, inc)}</td>
-          <td class="num cell-sub">${momHTML(s.value, prevIncomeSubTotals.get(s.id) || 0, false)}</td>
-        </tr>`).join('') : '';
-      const groupColor = incomeColorOf.get(g.id) || CAT_PALETTE[0];
-      return `<tr class="cat-break-group" data-catid="${esc(g.id)}" data-kind="ingreso" style="--row-tint:${hexToRgba(groupColor, 0.12)}">
-        <td>${esc(g.name)}</td>
-        <td class="num amount-out">${fmtDisp(g.total)}</td>
-        <td class="num">${pct(g.total, inc)}</td>
-        <td class="num">${momHTML(g.total, prevIncomeGroupTotals.get(g.id) || 0, false)}</td>
-      </tr>${subsHtml}`;
-    }).join('');
-
+    const kindIsInc = ui.catKind === 'ingreso';
     el.innerHTML = `
+      <div class="subtabs kind-tabs${kindIsInc ? ' is-ingreso' : ''}" role="tablist">
+        <span class="subtabs-thumb" aria-hidden="true"></span>
+        <button type="button" data-catkind="gasto" class="${kindIsInc ? '' : 'active'}" role="tab" aria-selected="${!kindIsInc}">Gastos</button>
+        <button type="button" data-catkind="ingreso" class="${kindIsInc ? 'active' : ''}" role="tab" aria-selected="${kindIsInc}">Ingresos</button>
+      </div>
+      ${kindIsInc ? `
       <div class="card">
         <h2 class="card-title"><span>Ingresos por categoría</span></h2>
         ${incomeBreakdown.length ? `
@@ -3024,6 +3074,25 @@
         </table></div>` : `<div class="empty">Sin ingresos registrados en ${esc(monthLabel(mk))}.</div>`}
       </div>
 
+      <div class="card">
+        <h2 class="card-title"><span>Distribución de ingresos · ${esc(monthLabel(mk))}</span></h2>
+        ${incPieItems.length ? `
+        <div class="pie-cylinder-wrap">
+          <div id="chart-inc-pie"></div>
+          <div class="chart-legend chart-legend-col">
+            ${incPieItems.map((it) => `<span><span class="key" style="background:${it.color}"></span>${esc(it.label)} · ${pct(it.value, inc)}</span>`).join('')}
+          </div>
+        </div>` : `<div class="empty">Sin ingresos registrados en ${esc(monthLabel(mk))}.</div>`}
+      </div>
+
+      <div class="card">
+        <h2 class="card-title"><span>Evolución de ingresos por categoría</span></h2>
+        ${incLineSeries.length && activeMonths.length ? `
+        <div class="chart-legend">
+          ${incLineCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
+        </div>
+        <div id="chart-inc-evo"></div>` : '<div class="empty">Todavía no hay suficientes ingresos para ver una evolución.</div>'}
+      </div>` : `
       <div class="card">
         <h2 class="card-title"><span>Distribución de gastos · ${esc(monthLabel(mk))}</span></h2>
         ${pieItems.length ? `
@@ -3084,37 +3153,62 @@
         ${methodItems.length ? `
         <div id="chart-cat-methods" class="cats-bars method-bars"></div>
         <div class="method-total"><span>Total gastado</span><b>${fmtDisp(exp)}</b></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>`;
+      </div>`}`;
 
-    if (windowBreakdown.length) {
-      Charts.lines($('#chart-cat-evo', el), monthLabels, [
-        { label: '% de tus gastos', color: Charts.COLORS.expense, values: pctExpSeries },
-        { label: '% de tus ingresos', color: Charts.COLORS.income, values: pctIncSeries },
-      ], {
-        fmtAxis: (v) => Math.round(v) + '%',
-        ariaLabel: `Evolución del peso de ${selName} sobre ingresos y gastos`,
-        smooth: true, pointLabels: true, markerRadius: 4,
+    if (windowBreakdown.length) drawCatEvo(selId);
+    const incPieEl = $('#chart-inc-pie', el);
+    if (incPieEl) {
+      Charts.pieCylinder(incPieEl, incPieItems, { ariaLabel: `Distribución de ingresos de ${monthLabel(mk)}` });
+    }
+    const incEvoEl = $('#chart-inc-evo', el);
+    if (incEvoEl) {
+      Charts.lines(incEvoEl, monthLabels, incLineSeries, {
+        smooth: true, markerRadius: 4, leftPad: 52,
+        fmtAxis: (v) => Charts.compact(v),
+        ariaLabel: 'Evolución de los ingresos de cada categoría por mes',
       });
     }
-    if (pieItems.length) {
+    if (pieItems.length && $('#chart-cat-pie', el)) {
       Charts.pieCylinder($('#chart-cat-pie', el), pieItems, {
         ariaLabel: `Distribución de gastos de ${monthLabel(mk)}`,
       });
     }
-    if (methodItems.length) {
+    if (methodItems.length && $('#chart-cat-methods', el)) {
       Charts.hBars($('#chart-cat-methods', el), methodItems, {
         fmt: fmtDisp,
         onClick: (it) => categoryCompareDialog(it.label,
           mk, methodTxs(inMonth, it.id), prevMkCat, methodTxs(inPrevCat, it.id)),
       });
     }
-    if (stackRows.some((r) => r.total > 0)) {
+    if (stackRows.some((r) => r.total > 0) && $('#chart-cat-stack', el)) {
       Charts.stacked100($('#chart-cat-stack', el), stackRows, stackCats, {
         ariaLabel: 'Participación de cada categoría por mes',
       });
     }
 
+    // Gastos / Ingresos: la píldora se desliza ya y la vista se rearma
+    // cuando termina la animación.
+    $$('[data-catkind]', el).forEach((b) => b.addEventListener('click', () => {
+      const k = b.dataset.catkind;
+      if (k === ui.catKind) return;
+      const tabs = $('.kind-tabs', el);
+      tabs.classList.toggle('is-ingreso', k === 'ingreso');
+      $$('[data-catkind]', el).forEach((x) => x.classList.toggle('active', x === b));
+      ui.catKind = k;
+      setTimeout(render, 220);
+    }));
+
     $$('tr[data-catid]', el).forEach((row) => row.addEventListener('click', () => {
+      // Categoría con subcategorías: despliega/pliega sin rearmar la vista.
+      if (row.dataset.toggle) {
+        const key = (row.dataset.kind || 'gasto') + ':' + row.dataset.catid;
+        const open = !ui.catOpen[key];
+        ui.catOpen[key] = open;
+        row.classList.toggle('open', open);
+        $$(`tr.cat-sub-row[data-parent="${CSS.escape(row.dataset.catid)}"]`, row.closest('tbody'))
+          .forEach((r) => r.classList.toggle('open', open));
+        return;
+      }
       const gid = row.dataset.catid;
       const subId = row.dataset.subid;
       const isIncome = row.dataset.kind === 'ingreso';
@@ -3131,7 +3225,7 @@
     const sel = $('#cat-analysis-sel', el);
     if (sel) sel.addEventListener('change', (e) => {
       ui.catAnalysisId = e.target.value;
-      render();
+      drawCatEvo(ui.catAnalysisId);
     });
   }
 
