@@ -2047,3 +2047,6 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
    cuerpo le daba una fila de 0 de alto: quedaba "tapada" por lo de
    abajo. Cada fila del grid mide lo que mide su contenido. */
 .dialog-body { grid-auto-rows: max-content; }
+.insight-row.rowlink { cursor: pointer; }
+.insight-row.rowlink:hover .insight-text { color: var(--ink); }
+.insight-go { margin-left: auto; padding-left: 6px; color: var(--muted); font-weight: 700; align-self: center; }

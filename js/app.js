@@ -2224,7 +2224,37 @@
               : 'Todavía no hay un mes anterior con qué comparar.' });
         }
       }
-      return out.slice(0, 2);
+      // Además de los 1-2 avisos generales, una línea por cada tarjeta de
+      // crédito con cómo viene su resumen en curso (mismo análisis que el
+      // pop-up "Cómo vengo" de Cuentas → Tarjetas, que se abre al tocarla).
+      const short = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+      const cardLines = [];
+      for (const card of S().methods.filter((m) => m.kind === 'credito')) {
+        const A = cardAnalysis(card);
+        if (!A || (A.spent + A.committed) <= 0 && !A.ref) continue;
+        const v = A.verdict;
+        const refDe = A.refLabel.startsWith('el ') ? `del ${A.refLabel.slice(3)}` : `de ${A.refLabel}`;
+        const refA = A.refLabel.startsWith('el ') ? `al ${A.refLabel.slice(3)}` : `a ${A.refLabel}`;
+        const closeS = short(A.cy.close);
+        let line;
+        if (!v) {
+          line = { tone: 'neutral', icon: '💳',
+            text: `${card.name}: llevás ${fmtDisp(A.spent + A.committed)} en el resumen que cierra el ${closeS} (proyectado ${fmtDisp(A.projected)}).` };
+        } else if (v.tone === 'crit') {
+          const nextDay = new Date(A.cy.close.getTime() + DAY_MS);
+          line = { tone: 'warn', icon: '🛑',
+            text: `${card.name}: ya superás ${A.refLabel} por ${fmtDisp(-v.room)} en el resumen que cierra el ${closeS}. Conviene dejar de usarla; lo que compres desde el ${short(nextDay)} entra en el siguiente.` };
+        } else if (v.tone === 'warn') {
+          line = { tone: 'warn', icon: '💳',
+            text: `${card.name}: al ritmo actual llegás ${refA} el ${short(v.hit)} y el resumen cierra el ${closeS}. Desde ahí, mejor no usarla (máx. ${fmtDisp(v.perDay)} por día).` };
+        } else {
+          line = { tone: 'good', icon: '💳',
+            text: `${card.name}: vas bien, cerrarías el resumen del ${closeS} en ${fmtDisp(A.projected)}, ${fmtDisp(A.ref - A.projected)} por debajo ${refDe}.` };
+        }
+        line.cardId = card.id;
+        cardLines.push(line);
+      }
+      return out.slice(0, 2).concat(cardLines.slice(0, 2));
     })();
 
     // Tendencia: últimos 6 meses hasta el mes elegido, salvo los que no
@@ -2429,9 +2459,10 @@
         <h2 class="card-title">Cómo vas este mes</h2>
         <div class="insight-list">
           ${insights.map((ins) => `
-            <div class="insight-row insight-${ins.tone}">
+            <div class="insight-row insight-${ins.tone}${ins.cardId ? ' rowlink' : ''}"${ins.cardId ? ` data-insight-card="${esc(ins.cardId)}" role="button" tabindex="0"` : ''}>
               <span class="insight-icon">${ins.icon}</span>
               <span class="insight-text">${esc(ins.text)}</span>
+              ${ins.cardId ? '<span class="insight-go" aria-hidden="true">›</span>' : ''}
             </div>`).join('')}
         </div>
       </div>` : ''}
@@ -2495,6 +2526,11 @@
         fmt: fmtDisp, color: Charts.COLORS.category,
       });
     }
+    $$('[data-insight-card]', el).forEach((row) => {
+      const open = () => cardAnalysisDialog(row.dataset.insightCard);
+      row.addEventListener('click', open);
+      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    });
     const trendEl = $('#chart-trend', el);
     if (!trendRows.length) {
       trendEl.innerHTML = '<div class="empty">Sin movimientos en los últimos 6 meses.</div>';
