@@ -2938,6 +2938,19 @@
     const incLineCats = incomeWindowBreakdown.slice(0, INC_LINES_MAX).map((g) => ({ id: g.id, name: g.name, color: incomeColorOf.get(g.id) }));
     const incLineIds = new Set(incLineCats.map((c) => c.id));
     if (incomeWindowBreakdown.length > INC_LINES_MAX) incLineCats.push({ id: '__otros', name: 'Otros', color: '#64748b' });
+    // Barras apiladas al 100% de ingresos: mismas categorías, colores y
+    // meses que las líneas, pero como participación de cada una en el mes.
+    const incStackRows = activeMonths.map((m, i) => {
+      const [y, mo] = m.split('-').map(Number);
+      const vals = incLineCats.map((c) => sumDisp(txs.filter((t) => t.type === 'ingreso' && monthKeyOf(t.date) === m &&
+        (c.id === '__otros' ? !incLineIds.has(topCatKeyOf(t)) : topCatKeyOf(t) === c.id))));
+      const totalM = vals.reduce((a, v) => a + v, 0);
+      return {
+        label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
+        total: totalM,
+        shares: vals.map((v) => (totalM > 0 ? (v / totalM) * 100 : 0)),
+      };
+    });
     const incLineSeries = incLineCats.map((c) => ({
       label: c.name, color: c.color,
       values: activeMonths.map((m) => {
@@ -3095,6 +3108,17 @@
           ${incLineCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
         </div>
         <div id="chart-inc-evo"></div>` : '<div class="empty">Todavía no hay suficientes ingresos para ver una evolución.</div>'}
+      </div>
+
+      <div class="card">
+        <h2 class="card-title"><span>Participación de ingresos por categoría · últimos 6 meses</span></h2>
+        ${incStackRows.some((r) => r.total > 0) ? `
+        <div class="chart-legend">
+          ${incLineCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
+        </div>
+        <div id="chart-inc-stack"></div>
+        <div class="hint" style="margin-top:6px">Cada barra es el 100% de lo que ingresó ese mes: si una franja crece o se achica, cambió el peso de esa categoría.</div>` :
+          '<div class="empty">Todavía no hay suficientes ingresos para ver la participación mes a mes.</div>'}
       </div>` : `
       <div class="card">
         <h2 class="card-title"><span>Distribución de gastos · ${esc(monthLabel(mk))}</span></h2>
@@ -3169,6 +3193,12 @@
         smooth: true, markerRadius: 4, leftPad: 52,
         fmtAxis: (v) => Charts.compact(v),
         ariaLabel: 'Evolución de los ingresos de cada categoría por mes',
+      });
+    }
+    const incStackEl = $('#chart-inc-stack', el);
+    if (incStackEl) {
+      Charts.stacked100(incStackEl, incStackRows, incLineCats, {
+        ariaLabel: 'Participación de cada categoría de ingreso por mes',
       });
     }
     const btnIncEvo = $('#btn-detail-incevo', el);
