@@ -3086,7 +3086,10 @@
       </div>
 
       <div class="card">
-        <h2 class="card-title"><span>Evolución de ingresos por categoría</span></h2>
+        <h2 class="card-title">
+          <span>Evolución de ingresos por categoría</span>
+          ${incLineSeries.length && activeMonths.length ? '<button type="button" class="link-btn" id="btn-detail-incevo">Ver detalle</button>' : ''}
+        </h2>
         ${incLineSeries.length && activeMonths.length ? `
         <div class="chart-legend">
           ${incLineCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
@@ -3168,6 +3171,27 @@
         ariaLabel: 'Evolución de los ingresos de cada categoría por mes',
       });
     }
+    const btnIncEvo = $('#btn-detail-incevo', el);
+    if (btnIncEvo) btnIncEvo.addEventListener('click', () => {
+      // Lo mismo que el gráfico, en números. Un bloque por mes (el más
+      // reciente arriba) con cada categoría, su monto y su % del mes — una
+      // columna por categoría no entraba a lo ancho en un celular.
+      const blocks = activeMonths.map((m, i) => {
+        const vals = incLineSeries.map((sr) => ({ label: sr.label, color: sr.color, v: sr.values[i] || 0 }));
+        const total = vals.reduce((acc, x) => acc + x.v, 0);
+        return `<tr class="inc-det-month"><td>${esc(monthLabel(m))}</td><td class="num">${fmtDisp(total)}</td><td class="num">100%</td></tr>
+          ${vals.filter((x) => x.v > 0).sort((x, y) => y.v - x.v).map((x) => `<tr>
+            <td><span class="key-dot" style="background:${x.color}"></span>${esc(x.label)}</td>
+            <td class="num">${fmtDisp(x.v)}</td>
+            <td class="num">${pct(x.v, total)}</td>
+          </tr>`).join('')}`;
+      }).reverse().join('');
+      openDialog('Ingresos por categoría y mes', `
+        <div class="table-scroll"><table class="data inc-det-table">
+          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">% del mes</th></tr></thead>
+          <tbody>${blocks}</tbody>
+        </table></div>`, { submitLabel: 'Cerrar', viewOnly: true });
+    });
     if (pieItems.length && $('#chart-cat-pie', el)) {
       Charts.pieCylinder($('#chart-cat-pie', el), pieItems, {
         ariaLabel: `Distribución de gastos de ${monthLabel(mk)}`,
@@ -3612,10 +3636,16 @@
   /* Los mismos datos de un gráfico (Ahorros, por ahora), pero en tabla —
      para cuando "leer la curva" no alcanza y hace falta el número exacto
      de cada punto sin depender de un hover que en el celular no existe. */
-  function chartTableDialog(title, headers, rows) {
+  function chartTableDialog(title, headers, rows, opts = {}) {
+    // opts.numFrom: desde qué columna los valores son números (alineados a
+    // la derecha); opts.boldLast: la última columna resaltada (ej. total).
+    const cls = (i) => [
+      opts.numFrom != null && i >= opts.numFrom ? 'num' : '',
+      opts.boldLast && i === headers.length - 1 ? 'col-strong' : '',
+    ].filter(Boolean).join(' ');
     const bodyHTML = `<div class="table-scroll"><table class="data">
-      <thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
-      <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+      <thead><tr>${headers.map((h, i) => `<th class="${cls(i)}">${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td class="${cls(i)}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
     </table></div>`;
     openDialog(title, bodyHTML, { submitLabel: 'Cerrar', viewOnly: true });
   }
@@ -6313,6 +6343,11 @@
   const lastSubIdx = {};
   function render() {
     const changingView = ui.view !== lastRenderedView;
+    // Re-render en la misma hoja (ej. cambiar de moneda): mientras se arma
+    // de nuevo, la página queda un instante casi vacía y algunas mediciones
+    // (la píldora de las sub-pestañas) fuerzan al navegador a recortar el
+    // scroll a esa altura — volvía arriba de todo. Se guarda y se repone.
+    const prevScrollY = window.scrollY;
     lastRenderedView = ui.view;
     const grp = groupOf(ui.view);
     $$('.bottom-nav button').forEach((b) => b.classList.toggle('active', !!grp && b.dataset.group === grp.key));
@@ -6393,6 +6428,7 @@
     }));
     VIEWS[ui.view]($('.view-content', el));
     if (changingView) window.scrollTo(0, 0);
+    else if (window.scrollY !== prevScrollY) window.scrollTo(0, prevScrollY);
   }
 
   // Ordena las tarjetas de crédito primero en "Tarjetas y medios" — pero

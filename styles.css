@@ -2003,3 +2003,8 @@ tr.cat-break-group.open .cat-chev { transform: translateY(-50%) rotate(90deg); }
 .cat-chev.is-empty { visibility: hidden; }
 table.data.cat-breakdown-table tr.cat-break-group td:first-child { padding-left: 12px; }
 table.data.cat-breakdown-table tr.cat-sub-row td:first-child { padding-left: 16px; }
+table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
+/* Detalle en números de la evolución de ingresos: un bloque por mes. */
+.inc-det-table td, .inc-det-table th { padding: 7px 6px; }
+.inc-det-table tr.inc-det-month td { background: var(--surface-2); font-weight: 700; font-family: var(--font-heading); }
+.inc-det-table .key-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
