@@ -192,6 +192,76 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
+  /* ---------- Resúmenes de tarjeta ----------
+     rows: [{label, value, extra?, current?}] (más viejo primero). value es
+     la parte "firme" de la barra; extra (opcional, sólo el resumen en
+     curso) es lo proyectado hasta el cierre y se dibuja encima, más
+     claro y punteado. opts.ref (número): línea de referencia horizontal
+     (promedio o tope), con su etiqueta. opts.fmt: formato de etiquetas. */
+  function statementBars(el, rows, opts) {
+    el.replaceChildren();
+    if (!rows.length) return;
+    const W = 640, H = 236;
+    const m = { t: 26, r: 8, b: 26, l: 56 };
+    const iw = W - m.l - m.r;
+    const ih = H - m.t - m.b;
+    const maxVal = Math.max(1, opts.ref || 0, ...rows.map((r) => r.value + (r.extra || 0)));
+    const nt = niceTicks(maxVal, 4);
+    const y = (v) => m.t + ih - (v / nt.top) * ih;
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('class', 'trend-svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', opts.ariaLabel || 'Total de cada resumen');
+    const add = (parent, tag, attrs, text) => {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      if (text !== undefined) n.textContent = text;
+      parent.appendChild(n);
+      return n;
+    };
+    const defs = add(svg, 'defs', {});
+    const pat = add(defs, 'pattern', { id: 'stmt-hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' });
+    add(pat, 'rect', { width: 6, height: 6, fill: 'var(--surface-2)' });
+    add(pat, 'line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: COLORS.expense, 'stroke-width': 2.5, 'stroke-opacity': 0.55 });
+
+    for (const t of nt.ticks) {
+      const yy = y(t);
+      add(svg, 'line', { x1: m.l, x2: W - m.r, y1: yy, y2: yy, stroke: t === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1, 'shape-rendering': 'crispEdges' });
+      add(svg, 'text', { x: m.l - 8, y: yy + 3.5, 'text-anchor': 'end', class: 'tick-label' }, compact(t));
+    }
+    const band = iw / rows.length;
+    const colW = Math.min(40, band * 0.55);
+    const fmt = opts.fmt || compact;
+    rows.forEach((r, i) => {
+      const cx = m.l + band * i + band / 2;
+      const x0 = cx - colW / 2;
+      const yv = y(r.value);
+      if (r.value > 0) {
+        add(svg, 'rect', { x: x0, y: yv, width: colW, height: y(0) - yv, rx: 4, fill: r.current ? COLORS.expense : 'var(--muted)', 'fill-opacity': r.current ? 1 : 0.55 });
+      }
+      let topY = yv;
+      if (r.extra > 0) {
+        const ye = y(r.value + r.extra);
+        add(svg, 'rect', { x: x0, y: ye, width: colW, height: yv - ye, rx: 4, fill: 'url(#stmt-hatch)', stroke: COLORS.expense, 'stroke-dasharray': '3 3', 'stroke-width': 1 });
+        topY = ye;
+      }
+      const total = r.value + (r.extra || 0);
+      if (total > 0) {
+        add(svg, 'text', { x: cx, y: topY - 6, 'text-anchor': 'middle', class: 'point-label', fill: r.current ? COLORS.expense : 'var(--ink-2)', style: 'font-size:13px' }, fmt(total));
+      }
+      add(svg, 'text', { x: cx, y: H - 8, 'text-anchor': 'middle', class: 'tick-label' }, r.label);
+    });
+    if (opts.ref > 0) {
+      const yr = y(opts.ref);
+      add(svg, 'line', { x1: m.l, x2: W - m.r, y1: yr, y2: yr, stroke: 'var(--accent)', 'stroke-width': 1.5, 'stroke-dasharray': '6 4' });
+      if (opts.refLabel) add(svg, 'text', { x: W - m.r, y: yr - 5, 'text-anchor': 'end', class: 'tick-label', fill: 'var(--accent)', style: 'font-size:12px;font-weight:600' }, opts.refLabel);
+    }
+    el.appendChild(svg);
+  }
+
   // Curva suave (Catmull-Rom → Bézier cúbica) a través de una lista de
   // puntos, en vez del trazo recto punto-a-punto de siempre — opcional
   // (opts.smooth), así los gráficos que ya la usan sin pedirla no cambian.
@@ -700,5 +770,5 @@ const Charts = (() => {
     }
   }
 
-  return { COLORS, hBars, lines, singleBars, dailyBalance, pieCylinder, stacked100, compact, smoothPathD };
+  return { COLORS, hBars, lines, singleBars, statementBars, dailyBalance, pieCylinder, stacked100, compact, smoothPathD };
 })();

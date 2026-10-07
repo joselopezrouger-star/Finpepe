@@ -3492,6 +3492,249 @@
     });
   }
 
+  /* ================= Tarjeta: cómo venís con el resumen en curso ================= */
+  /* Todo lo que hace falta para el pop-up "Cómo vengo": el resumen en
+     curso (lo gastado, lo ya cargado a futuro dentro del ciclo —cuotas,
+     fijos— y una proyección al cierre al ritmo actual), los últimos
+     resúmenes cerrados y una referencia contra la cual medir (el tope que
+     haya puesto el usuario o, si no, el promedio de los últimos 3). Todo
+     en la moneda de visualización y por fecha real de cada compra. */
+  function cardAnalysis(card) {
+    const cy = cardCycle(card);
+    if (!cy || !cy.prevClose) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const txsIn = (from, to) => {
+      const a = dateToStr(from), b = dateToStr(to);
+      return S().transactions.filter((t) => t.type === 'gasto' && t.methodId === card.id && t.date > a && t.date <= b);
+    };
+    const isVar = (t) => !t.installment && !t.recurringId;
+    const days = (a, b) => Math.max(0, Math.round((b - a) / DAY_MS));
+
+    // Resúmenes cerrados, del más nuevo al más viejo (hasta 6).
+    const history = [];
+    let to = cy.prevClose;
+    for (let i = 0; i < 6; i++) {
+      const from = prevCardDate(card, 'closingDay', to);
+      if (!from) break;
+      const list = txsIn(from, to);
+      history.push({
+        from, to, due: nextCardDate(card, 'dueDay', to, true), txs: list,
+        total: sumDisp(list), variable: sumDisp(list.filter(isVar)), days: days(from, to),
+      });
+      to = from;
+    }
+
+    // Resumen en curso.
+    const curTxs = txsIn(cy.prevClose, cy.close);
+    const todayStrV = dateToStr(today);
+    const done = curTxs.filter((t) => t.date <= todayStrV);
+    const ahead = curTxs.filter((t) => t.date > todayStrV);
+    const spent = sumDisp(done);
+    const committed = sumDisp(ahead);
+    const elapsed = Math.max(1, days(cy.prevClose, today));
+    const remaining = days(today, cy.close);
+    const totalDays = Math.max(1, days(cy.prevClose, cy.close));
+    // Ritmo diario de consumos (sin cuotas ni fijos, que no dependen de
+    // cuánto uses la tarjeta). Con muy pocos días andados, un solo gasto
+    // grande dispara cualquier proyección: hasta el día 5 se usa el ritmo
+    // del resumen anterior.
+    const varSpent = sumDisp(done.filter(isVar));
+    let pace = varSpent / elapsed;
+    let paceFromPrev = false;
+    if (elapsed < 5 && history[0] && history[0].days > 0) {
+      pace = history[0].variable / history[0].days;
+      paceFromPrev = true;
+    }
+    const projected = spent + committed + pace * remaining;
+
+    // Referencia: tope propio o promedio de los últimos 3 resúmenes.
+    const lastN = history.filter((h) => h.total > 0).slice(0, 3);
+    const avg = lastN.length ? lastN.reduce((a, h) => a + h.total, 0) / lastN.length : null;
+    const capOwn = card.cap && card.cap.amount > 0 ? convOrNull(card.cap.amount, card.cap.currency) : null;
+    const ref = capOwn != null ? capOwn : avg;
+    const refLabel = capOwn != null ? 'tu tope' : (lastN.length === 1 ? 'tu último resumen' : `el promedio de tus últimos ${lastN.length} resúmenes`);
+
+    // Cuándo conviene dejar de usarla.
+    let verdict = null;
+    if (ref != null) {
+      const room = ref - spent - committed;
+      if (room <= 0) {
+        verdict = { tone: 'crit', room };
+      } else if (pace > 0) {
+        const hit = new Date(today.getTime() + Math.ceil(room / pace) * DAY_MS);
+        verdict = hit < cy.close ? { tone: 'warn', room, hit } : { tone: 'ok', room };
+      } else {
+        verdict = { tone: 'ok', room };
+      }
+      verdict.perDay = remaining > 0 ? Math.max(0, verdict.room) / remaining : 0;
+    }
+    return {
+      cy, history, curTxs, spent, committed, pace, paceFromPrev, projected, remaining, elapsed, totalDays,
+      ref, refLabel, avg, capOwn, verdict,
+      parts: {
+        consumos: sumDisp(curTxs.filter(isVar)),
+        cuotas: sumDisp(curTxs.filter((t) => t.installment)),
+        fijos: sumDisp(curTxs.filter((t) => !t.installment && t.recurringId)),
+      },
+    };
+  }
+
+  function cardAnalysisDialog(cardId) {
+    const card = methodById(cardId);
+    if (!card) return;
+    const A = cardAnalysis(card);
+    const short = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+    if (!A) {
+      openDialog(`${card.name} · cómo vengo`, '<div class="empty">Cargá al menos el resumen anterior y el actual desde "Resúmenes" para ver cómo venís con esta tarjeta.</div>', { submitLabel: 'Cerrar', viewOnly: true });
+      return;
+    }
+    const { cy, history, verdict } = A;
+    const last = history[0];
+    const varPct = (cur, prev) => {
+      if (!(prev > 0)) return '';
+      const p = ((cur - prev) / prev) * 100;
+      const lbl = fmtVarPct(p);
+      if (lbl == null) return '<span class="cat-mom-pct flat">=</span>';
+      return `<span class="cat-mom-pct ${p > 0 ? 'up' : 'down'}">${p > 0 ? '▲' : '▼'}${lbl}%</span>`;
+    };
+
+    // Barra del resumen en curso: gastado + ya cargado a futuro + proyección, contra la referencia.
+    const scale = Math.max(A.projected, A.ref || 0, 1);
+    const w = (v) => `${Math.max(0, Math.min(100, (v / scale) * 100))}%`;
+    const extra = Math.max(0, A.projected - A.spent - A.committed);
+    const meter = `
+      <div class="ca-meter">
+        <span class="ca-seg ca-spent" style="width:${w(A.spent)}"></span><span class="ca-seg ca-committed" style="width:${w(A.committed)}"></span><span class="ca-seg ca-proj" style="width:${w(extra)}"></span>
+        ${A.ref ? `<span class="ca-ref" style="left:${w(A.ref)}"></span>` : ''}
+      </div>
+      <div class="ca-legend">
+        <span><i class="ca-spent"></i>Gastado ${fmtDisp(A.spent)}</span>
+        ${A.committed > 0 ? `<span><i class="ca-committed"></i>Ya cargado (cuotas/fijos) ${fmtDisp(A.committed)}</span>` : ''}
+        ${extra > 0 ? `<span><i class="ca-proj"></i>Proyectado ${fmtDisp(extra)}</span>` : ''}
+        ${A.ref ? `<span><i class="ca-ref-key"></i>Referencia ${fmtDisp(A.ref)}</span>` : ''}
+      </div>`;
+
+    // "de el promedio" → "del promedio", "a el promedio" → "al promedio".
+    const withPrep = (prep) => (A.refLabel.startsWith('el ') ? `${prep}l ${A.refLabel.slice(3)}` : `${prep} ${A.refLabel}`);
+    let verdictHTML = '';
+    if (verdict) {
+      const nextDay = new Date(cy.close.getTime() + DAY_MS);
+      if (verdict.tone === 'crit') {
+        verdictHTML = `<div class="ca-verdict crit"><b>Conviene dejar de usarla ya.</b> Con lo gastado y lo que ya está cargado superás ${esc(A.refLabel)} por ${fmtDisp(-verdict.room)}. Lo que compres desde el ${esc(short(nextDay))} entra recién en el resumen siguiente.</div>`;
+      } else if (verdict.tone === 'warn') {
+        verdictHTML = `<div class="ca-verdict warn"><b>Dejá de usarla a partir del ${esc(short(verdict.hit))}.</b> Al ritmo actual ese día llegás ${esc(withPrep('a'))}, y el resumen cierra el ${esc(short(cy.close))}. Para no pasarte, gastá como mucho ${fmtDisp(verdict.perDay)} por día.</div>`;
+      } else {
+        verdictHTML = `<div class="ca-verdict ok"><b>Vas bien.</b> Al ritmo actual cerrás en ${fmtDisp(A.projected)}, ${fmtDisp(A.ref - A.projected)} por debajo ${esc(withPrep('de'))}. Te quedan ${fmtDisp(verdict.room)} hasta el cierre (${fmtDisp(verdict.perDay)} por día).</div>`;
+      }
+    } else {
+      verdictHTML = '<div class="ca-verdict">Todavía no hay resúmenes cerrados para comparar. Podés ponerle un tope a la tarjeta para saber cuándo dejar de usarla.</div>';
+    }
+
+    const histRows = history.map((h, i) => {
+      const prev = history[i + 1];
+      return `<tr class="rowlink" data-hist="${i}">
+        <td>${esc(short(h.to))}</td>
+        <td>${h.due ? esc(short(h.due)) : '—'}</td>
+        <td class="num">${fmtDisp(h.total)}</td>
+        <td class="num">${prev ? varPct(h.total, prev.total) : ''}</td>
+      </tr>`;
+    }).join('');
+
+    const body = `
+      <div class="ca-head">
+        <div class="ca-head-top">
+          <span>Resumen en curso · cierra ${esc(short(cy.close))}</span>
+          <span class="ca-days">${A.remaining > 0 ? `faltan ${A.remaining} día${A.remaining === 1 ? '' : 's'}` : 'cierra hoy'}</span>
+        </div>
+        <div class="ca-kpis">
+          <div><span class="ca-k">Llevás</span><b class="ca-v">${fmtDisp(A.spent + A.committed)}</b></div>
+          <div><span class="ca-k">Proyectado al cierre</span><b class="ca-v">${fmtDisp(A.projected)}</b></div>
+          <div><span class="ca-k">vs. último</span><b class="ca-v">${last ? varPct(A.projected, last.total) || '—' : '—'}</b></div>
+        </div>
+        ${meter}
+        <div class="ca-note">Día ${Math.min(A.elapsed, A.totalDays)} de ${A.totalDays} del ciclo. Ritmo de consumos: ${fmtDisp(A.pace)} por día${A.paceFromPrev ? ' (del resumen anterior, recién arranca el ciclo)' : ''}.</div>
+      </div>
+      ${verdictHTML}
+      <div class="ca-ref-row">
+        <span>Referencia: ${A.capOwn != null ? `tu tope de ${fmtMoney(card.cap.amount, card.cap.currency)}` : (A.avg != null ? `${esc(A.refLabel)} (${fmtDisp(A.avg)})` : 'sin datos')}</span>
+        <button type="button" class="link-btn" id="ca-cap">${A.capOwn != null ? 'Cambiar tope' : 'Poner un tope'}</button>
+      </div>
+
+      <div class="ca-section-title">En qué se va este resumen</div>
+      <div class="ca-parts">
+        <div><span>Consumos</span><b>${fmtDisp(A.parts.consumos)}</b></div>
+        <div><span>Cuotas</span><b>${fmtDisp(A.parts.cuotas)}</b></div>
+        <div><span>Fijos</span><b>${fmtDisp(A.parts.fijos)}</b></div>
+      </div>
+      <button type="button" class="link-btn" id="ca-cur-detail">Ver los movimientos del resumen en curso ›</button>
+
+      ${history.length ? `
+      <div class="ca-section-title">Últimos resúmenes</div>
+      <div id="chart-card-stmts"></div>
+      <div class="table-scroll"><table class="data ca-hist">
+        <thead><tr><th>Cierre</th><th>Vence</th><th class="num">Total</th><th class="num">vs. ant.</th></tr></thead>
+        <tbody>${histRows}</tbody>
+      </table></div>
+      <div class="hint">Según lo cargado en la app (sin impuestos ni cargos del banco). Tocá un resumen para ver sus movimientos.</div>` : ''}`;
+
+    const dlg = openDialog(`${card.name} · cómo vengo`, body, { submitLabel: 'Cerrar', viewOnly: true });
+    const chartEl = $('#chart-card-stmts', dlg);
+    if (chartEl) {
+      const rows = history.slice().reverse().map((h) => ({ label: short(h.to), value: h.total }));
+      rows.push({ label: 'En curso', value: A.spent + A.committed, extra: extra, current: true });
+      Charts.statementBars(chartEl, rows, {
+        ref: A.ref || 0, refLabel: A.ref ? (A.capOwn != null ? 'Tope' : 'Promedio') : '',
+        fmt: (v) => (Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1).replace('.', ',')} M` : Charts.compact(v)),
+        ariaLabel: `Total de los últimos resúmenes de ${card.name} y proyección del actual`,
+      });
+    }
+    $$('[data-hist]', dlg).forEach((row) => row.addEventListener('click', () => {
+      const h = history[Number(row.dataset.hist)];
+      dlg.close();
+      methodPeriodDetailDialog(`${card.name} · resumen ${short(h.to)}`, h.txs);
+    }));
+    $('#ca-cur-detail', dlg).addEventListener('click', () => {
+      dlg.close();
+      methodPeriodDetailDialog(`${card.name} · resumen en curso`, A.curTxs);
+    });
+    $('#ca-cap', dlg).addEventListener('click', () => { dlg.close(); cardCapForm(card.id); });
+  }
+
+  /* Tope propio por tarjeta para el pop-up "Cómo vengo" (vacío = usar el
+     promedio de los últimos resúmenes). */
+  function cardCapForm(cardId) {
+    const card = methodById(cardId);
+    if (!card) return;
+    const cap = card.cap || {};
+    openDialog('Tope del resumen', `
+      <div class="field">
+        <label for="cap-amount">Cuánto querés gastar como máximo por resumen</label>
+        <input type="text" inputmode="decimal" name="amount" id="cap-amount" value="${cap.amount ? esc(String(cap.amount)) : ''}" placeholder="Vacío = usar el promedio">
+      </div>
+      <div class="field">
+        <label for="cap-cur">Moneda</label>
+        <select name="currency" id="cap-cur">
+          <option value="ARS" ${cap.currency !== 'USD' ? 'selected' : ''}>ARS</option>
+          <option value="USD" ${cap.currency === 'USD' ? 'selected' : ''}>USD</option>
+        </select>
+      </div>
+      <span class="hint">Se usa para avisarte cuándo conviene dejar de usar la tarjeta en el resumen en curso.</span>`, {
+      onSubmit(d, dlg) {
+        const c = methodById(cardId);
+        if (!c) return;
+        const amount = parseAmountInput(d.amount || '');
+        if (amount > 0) c.cap = { amount, currency: d.currency };
+        else delete c.cap;
+        Store.save();
+        render();
+        dlg.close();
+        cardAnalysisDialog(cardId);
+        return false;
+      },
+    });
+    wireAmountInput($('#cap-amount'));
+  }
+
   function vTarjetas(el) {
     const methods = S().methods;
     el.innerHTML = `
@@ -3513,7 +3756,8 @@
                   ${nOv ? `<dt>Resúmenes cargados</dt><dd>${nOv}</dd>` : ''}
                 </dl>`
               : '';
-            details = `${cardCycleTimeline(m)}${totalsHTML}`;
+            details = `${cardCycleTimeline(m)}${totalsHTML}
+              ${cy ? `<button type="button" class="link-btn ca-open" data-analysis="${esc(m.id)}">Ver cómo vengo con esta tarjeta ›</button>` : ''}`;
           } else {
             const monthTotal = sumDisp(S().transactions.filter(
               (t) => t.methodId === m.id && t.type === 'gasto' && monthKeyOf(t.date) === curMonth()));
@@ -3552,6 +3796,7 @@
     $$('[data-adjust]', el).forEach((b) => b.addEventListener('click', () => {
       cardResumesDialog(methodById(b.dataset.adjust));
     }));
+    $$('[data-analysis]', el).forEach((b) => b.addEventListener('click', () => cardAnalysisDialog(b.dataset.analysis)));
     $$('[data-detail]', el).forEach((b) => b.addEventListener('click', () => {
       const [kind, id] = b.dataset.detail.split(':');
       const m = methodById(id);

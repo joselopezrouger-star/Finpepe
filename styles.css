@@ -2008,3 +2008,42 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .inc-det-table td, .inc-det-table th { padding: 7px 6px; }
 .inc-det-table tr.inc-det-month td { background: var(--surface-2); font-weight: 700; font-family: var(--font-heading); }
 .inc-det-table .key-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+
+/* Tarjetas: pop-up "Cómo vengo" */
+.ca-open { display: block; margin-top: 6px; font-size: 12.5px; font-weight: 600; }
+.ca-head { display: grid; gap: 10px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
+.ca-head-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--ink-2); font-weight: 600; }
+.ca-days { font-size: 11.5px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.ca-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ca-kpis > div { display: grid; gap: 2px; min-width: 0; }
+.ca-k { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; font-weight: 650; }
+.ca-v { font: 700 15px var(--font-heading); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ca-v .cat-mom-pct { font-size: 12px; }
+.ca-meter { position: relative; display: flex; height: 12px; border-radius: 999px; background: var(--border); overflow: visible; }
+.ca-meter .ca-seg { display: block; height: 100%; }
+.ca-meter .ca-seg:first-child { border-radius: 999px 0 0 999px; }
+.ca-spent { background: var(--crit); }
+.ca-committed { background: color-mix(in srgb, var(--crit) 55%, var(--surface)); }
+.ca-proj { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--crit) 45%, transparent) 0 3px, transparent 3px 6px); }
+.ca-ref { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--accent); border-radius: 2px; }
+.ca-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--ink-2); }
+.ca-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.ca-legend i.ca-ref-key { background: var(--accent); width: 3px; }
+.ca-note { font-size: 11.5px; color: var(--muted); }
+.ca-verdict { margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; color: var(--ink); background: var(--surface-2); border-left: 4px solid var(--muted); }
+.ca-verdict.ok { border-left-color: var(--income); background: color-mix(in srgb, var(--income) 10%, var(--surface)); }
+.ca-verdict.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.ca-verdict.crit { border-left-color: var(--crit); background: var(--danger-bg); }
+.ca-ref-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.ca-ref-row .link-btn { font-size: 12px; white-space: nowrap; }
+.ca-section-title { margin: 16px 0 8px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.ca-parts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+.ca-parts > div { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); min-width: 0; }
+.ca-parts span { font-size: 11px; color: var(--muted); }
+.ca-parts b { font: 700 13.5px var(--font-heading); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ca-hist td, .ca-hist th { padding: 7px 6px; }
+/* En un pop-up largo (que scrollea), una tabla con scroll lateral
+   (.table-scroll, overflow-x) es un contenedor de scroll y el grid del
+   cuerpo le daba una fila de 0 de alto: quedaba "tapada" por lo de
+   abajo. Cada fila del grid mide lo que mide su contenido. */
+.dialog-body { grid-auto-rows: max-content; }
