@@ -3198,6 +3198,7 @@
     const incStackEl = $('#chart-inc-stack', el);
     if (incStackEl) {
       Charts.stacked100(incStackEl, incStackRows, incLineCats, {
+        connectors: true,
         ariaLabel: 'Participación de cada categoría de ingreso por mes',
       });
     }

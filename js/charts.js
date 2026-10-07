@@ -444,6 +444,39 @@ const Charts = (() => {
 
     const band = iw / rows.length;
     const colW = Math.min(34, band * 0.5);
+    // opts.connectors: líneas de serie entre barras vecinas — una franja
+    // tenue del color de cada categoría une su tramo en un mes con el del
+    // mes siguiente (con una línea fina en cada borde), para seguir con la
+    // vista cómo crece o se achica su peso. Se dibujan antes que las
+    // barras para que queden por detrás.
+    if (opts.connectors && rows.length > 1) {
+      const bounds = rows.map((r) => {
+        if (!(r.total > 0)) return null;
+        let acc = 0;
+        return r.shares.map((pct) => {
+          const bottom = m.t + ih - (acc / 100) * ih;
+          acc += Math.max(0, pct);
+          return { bottom, top: m.t + ih - (acc / 100) * ih };
+        });
+      });
+      for (let i = 0; i < rows.length - 1; i++) {
+        const a = bounds[i], b = bounds[i + 1];
+        if (!a || !b) continue;
+        const xa = m.l + band * i + band / 2 + colW / 2;
+        const xb = m.l + band * (i + 1) + band / 2 - colW / 2;
+        cats.forEach((c, ci) => {
+          if (a[ci].bottom - a[ci].top <= 0 && b[ci].bottom - b[ci].top <= 0) return;
+          add(svg, 'polygon', {
+            points: `${xa},${a[ci].top} ${xb},${b[ci].top} ${xb},${b[ci].bottom} ${xa},${a[ci].bottom}`,
+            fill: c.color, 'fill-opacity': 0.22,
+          });
+          add(svg, 'line', {
+            x1: xa, y1: a[ci].top, x2: xb, y2: b[ci].top,
+            stroke: c.color, 'stroke-width': 1, 'stroke-opacity': 0.7,
+          });
+        });
+      }
+    }
     rows.forEach((r, i) => {
       const cx = m.l + band * i + band / 2;
       const x0 = cx - colW / 2;
