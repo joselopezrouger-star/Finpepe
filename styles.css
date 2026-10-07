@@ -2050,3 +2050,5 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .insight-row.rowlink { cursor: pointer; }
 .insight-row.rowlink:hover .insight-text { color: var(--ink); }
 .insight-go { margin-left: auto; padding-left: 6px; color: var(--muted); font-weight: 700; align-self: center; }
+.ca-prev { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink-2); border-radius: 2px; }
+.ca-legend i.ca-prev-key { background: var(--ink-2); width: 3px; }

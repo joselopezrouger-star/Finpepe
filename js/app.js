@@ -3641,18 +3641,25 @@
     };
 
     // Barra del resumen en curso: gastado + ya cargado a futuro + proyección, contra la referencia.
-    const scale = Math.max(A.projected, A.ref || 0, 1);
+    // La barra termina un poco después del resumen anterior (marcado en
+    // gris), para leer de un vistazo cuánto representa lo de este ciclo
+    // contra el último; si la proyección o la referencia lo pasan, la
+    // escala se estira para que entren.
+    const prevTotal = last ? last.total : 0;
+    const scale = Math.max(prevTotal * 1.1, A.projected * 1.04, (A.ref || 0) * 1.04, 1);
     const w = (v) => `${Math.max(0, Math.min(100, (v / scale) * 100))}%`;
     const extra = Math.max(0, A.projected - A.spent - A.committed);
     const meter = `
       <div class="ca-meter">
         <span class="ca-seg ca-spent" style="width:${w(A.spent)}"></span><span class="ca-seg ca-committed" style="width:${w(A.committed)}"></span><span class="ca-seg ca-proj" style="width:${w(extra)}"></span>
+        ${prevTotal > 0 ? `<span class="ca-prev" style="left:${w(prevTotal)}"></span>` : ''}
         ${A.ref ? `<span class="ca-ref" style="left:${w(A.ref)}"></span>` : ''}
       </div>
       <div class="ca-legend">
         <span><i class="ca-spent"></i>Gastado ${fmtDisp(A.spent)}</span>
         ${A.committed > 0 ? `<span><i class="ca-committed"></i>Ya cargado (cuotas/fijos) ${fmtDisp(A.committed)}</span>` : ''}
         ${extra > 0 ? `<span><i class="ca-proj"></i>Proyectado ${fmtDisp(extra)}</span>` : ''}
+        ${prevTotal > 0 ? `<span><i class="ca-prev-key"></i>Resumen anterior ${fmtDisp(prevTotal)}</span>` : ''}
         ${A.ref ? `<span><i class="ca-ref-key"></i>Referencia ${fmtDisp(A.ref)}</span>` : ''}
       </div>`;
 
