@@ -4598,17 +4598,16 @@
       drawSavChart();
     }));
     const btnDetail = $('#btn-sav-detail', el);
+    // "Ver detalle" muestra siempre la misma tabla, con los tres datos
+    // juntos (tasa, aporte del mes y acumulado), sin importar qué gráfico
+    // esté elegido. El mes más reciente arriba.
     if (btnDetail) btnDetail.addEventListener('click', () => {
-      if (ui.savChart === 'rate') {
-        chartTableDialog('Tasa de ahorro por mes', ['Mes', 'Tasa de ahorro'],
-          savRateRows.map((r) => [r.label, r.rate + '%']), { numFrom: 1 });
-      } else if (ui.savChart === 'nominal') {
-        chartTableDialog('Ahorro nominal por mes', ['Mes', 'Aporte neto'],
-          savNominalRows.map((r) => [r.label, fmtDisp(r.value)]), { numFrom: 1 });
-      } else {
-        chartTableDialog('Ahorro total acumulado', ['Mes', 'Total acumulado'],
-          savMonths.map((m, i) => [monthShortLabel(m), fmtDisp(savCumulativeSeries[i])]), { numFrom: 1 });
-      }
+      const rows = savMonths.map((m, i) => {
+        const incM = sumDisp(S().transactions.filter((t) => effectiveMonthOf(t) === m && t.type === 'ingreso'));
+        const rate = incM > 0 ? Math.round((savNominalRows[i].value / incM) * 100) + '%' : '—';
+        return [monthShortLabel(m), rate, fmtDisp(savNominalRows[i].value), fmtDisp(savCumulativeSeries[i])];
+      }).reverse();
+      chartTableDialog('Ahorro por mes', ['Mes', 'Tasa', 'Aporte', 'Acumulado'], rows, { numFrom: 1, boldLast: true });
     });
 
     $('#btn-add-saving', el).addEventListener('click', () => savingForm(null));
