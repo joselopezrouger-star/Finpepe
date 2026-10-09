@@ -156,7 +156,7 @@ function buildDailyNotifications(state, todayStr) {
       out.push({
         key: `due:${card.id}:${ymd(s.due)}:${isToday ? 'today' : 'tomorrow'}`,
         title: isToday ? `💳 Hoy vence la ${card.name}` : `💳 Mañana vence la ${card.name}`,
-        body: `Resumen del ${short(s.close)}: ${money(total)} (según lo cargado en FinPep).`,
+        body: `Resumen del ${short(s.close)}: ${money(total)}.`,
         url: './',
         tag: `due-${card.id}`,
       });
@@ -313,7 +313,7 @@ Deno.serve(async (req) => {
     if (!subs?.length) return json({ error: 'Este usuario no tiene dispositivos suscriptos' }, 404);
     let ok = 0;
     for (const s of subs as Sub[]) {
-      if (await send(s, { title: '🔔 FinPep', body: 'Las notificaciones funcionan en este dispositivo.', tag: 'test' })) ok++;
+      if (await send(s, { title: '🔔 Notificaciones activadas', body: 'Las notificaciones funcionan en este dispositivo.', tag: 'test' })) ok++;
     }
     return json({ sent: ok, devices: subs.length });
   }
@@ -375,6 +375,12 @@ Deno.serve(async (req) => {
       .select('user_id, email, display_name').eq('household_id', rec.household_id as string);
     const author = (members ?? []).find((m: { user_id: string }) => m.user_id === rec.created_by);
     const authorName = author?.display_name || (author?.email ? String(author.email).split('@')[0] : 'Tu pareja');
+    // Gastos y pagos del hogar (ya incluye el recién cargado: el trigger
+    // corre después del insert) para mandar el saldo actualizado.
+    const [{ data: exps }, { data: sets }] = await Promise.all([
+      admin.from('shared_expenses').select('paid_by, amount, currency, payer_share').eq('household_id', rec.household_id as string),
+      admin.from('shared_settlements').select('from_user, to_user, amount, currency').eq('household_id', rec.household_id as string),
+    ]);
     let sent = 0;
     for (const m of (members ?? []) as { user_id: string }[]) {
       if (m.user_id === rec.created_by) continue;
@@ -384,10 +390,27 @@ Deno.serve(async (req) => {
       if (!subs?.length) continue;
       const amount = Number(rec.amount);
       const share = rec.paid_by === m.user_id ? Number(rec.payer_share) : 1 - Number(rec.payer_share);
+      // Saldo desde el punto de vista de quien recibe el aviso, en pesos
+      // (mismo cálculo que la app: positivo = le deben a él/ella).
+      const rate = cachedRate(row?.data);
+      const toArs = (a: unknown, cur: unknown) => (cur === 'USD' ? (rate ? Number(a) * rate : 0) : Number(a));
+      let bal = 0;
+      for (const e of (exps ?? []) as { paid_by: string; amount: number; currency: string; payer_share: number }[]) {
+        const owed = toArs(e.amount, e.currency) * (1 - Number(e.payer_share));
+        bal += e.paid_by === m.user_id ? owed : -owed;
+      }
+      for (const x of (sets ?? []) as { from_user: string; to_user: string; amount: number; currency: string }[]) {
+        const a = toArs(x.amount, x.currency);
+        if (x.to_user === m.user_id) bal -= a;
+        if (x.from_user === m.user_id) bal += a;
+      }
+      const saldo = Math.abs(bal) < 1 ? 'Saldo: están a mano.'
+        : bal > 0 ? `Saldo: ${authorName} te debe ${moneyIn(bal, 'ARS')}.`
+          : `Saldo: le debés a ${authorName} ${moneyIn(-bal, 'ARS')}.`;
       sent += await deliver(m.user_id, subs as Sub[], [{
         key: `shared:${rec.id}`,
         title: `👥 ${authorName} cargó un gasto compartido`,
-        body: `${rec.note || 'Gasto compartido'}: ${moneyIn(amount, String(rec.currency || 'ARS'))} · tu parte ${moneyIn(amount * share, String(rec.currency || 'ARS'))}`,
+        body: `${rec.note || 'Gasto compartido'}: ${moneyIn(amount, String(rec.currency || 'ARS'))} · tu parte ${moneyIn(amount * share, String(rec.currency || 'ARS'))}. ${saldo}`,
         url: './',
         tag: 'shared',
       }]);

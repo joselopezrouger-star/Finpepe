@@ -92,7 +92,7 @@ function periodTotal(state, cardId, from, to, rate) {
     .reduce((acc, t) => acc + ars(t, rate), 0);
 }
 
-function cachedRate(state) {
+export function cachedRate(state) {
   const s = state.settings || {};
   if (typeof s.manualRate === 'number' && s.manualRate > 0) return s.manualRate;
   const r = s.cachedRates && s.cachedRates[s.fxSource || 'blue'];
@@ -127,7 +127,7 @@ export function buildDailyNotifications(state, todayStr) {
       out.push({
         key: `due:${card.id}:${ymd(s.due)}:${isToday ? 'today' : 'tomorrow'}`,
         title: isToday ? `💳 Hoy vence la ${card.name}` : `💳 Mañana vence la ${card.name}`,
-        body: `Resumen del ${short(s.close)}: ${money(total)} (según lo cargado en FinPep).`,
+        body: `Resumen del ${short(s.close)}: ${money(total)}.`,
         url: './',
         tag: `due-${card.id}`,
       });
