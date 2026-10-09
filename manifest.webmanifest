@@ -1,0 +1,13 @@
+{
+  "name": "FinPep · Finanzas personales",
+  "short_name": "FinPep",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "lang": "es-AR",
+  "icons": [
+    { "src": "assets/logo.png", "sizes": "256x256", "type": "image/png", "purpose": "any" }
+  ]
+}

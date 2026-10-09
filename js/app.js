@@ -5751,6 +5751,75 @@
     }));
   }
 
+  /* ================= Notificaciones push ================= */
+  // En iPhone solo funcionan con la app agregada a la pantalla de inicio
+  // (iOS 16.4+): ahí corre como "standalone" y tiene PushManager. El
+  // servidor que manda los avisos es la Edge Function "notify" de Supabase.
+  const isStandalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  function urlB64ToUint8Array(b64) {
+    const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+  }
+  async function currentPushSub() {
+    if (!pushSupported()) return null;
+    const reg = await navigator.serviceWorker.getRegistration();
+    return reg ? reg.pushManager.getSubscription() : null;
+  }
+  async function enablePush() {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') throw new Error('No diste permiso para las notificaciones. Podés habilitarlo en Ajustes del iPhone → Notificaciones → FinPep.');
+    const reg = await navigator.serviceWorker.register('sw.js');
+    await navigator.serviceWorker.ready;
+    const { publicKey } = await Cloud.notifyFn({ action: 'vapid' });
+    if (!publicKey) throw new Error('El servidor de notificaciones todavía no está configurado (falta la clave VAPID).');
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(publicKey) });
+    await Cloud.savePushSubscription(sub);
+  }
+  async function disablePush() {
+    const sub = await currentPushSub();
+    if (!sub) return;
+    try { await Cloud.deletePushSubscription(sub.endpoint); } catch (e) { console.error(e); }
+    await sub.unsubscribe();
+  }
+  async function paintNotifCard(card) {
+    const box = $('.notif-body', card);
+    if (!box) return;
+    const what = '<ul class="notif-list"><li>💳 Un día antes y el día que vence cada tarjeta, con el total del resumen.</li><li>⚠️ Cuando el resumen en curso llega al 85% y al 100% de tu tope (o del promedio de tus últimos resúmenes).</li></ul>';
+    if (!Cloud.user()) { box.innerHTML = `<div class="hint">Iniciá sesión (más abajo) para activar las notificaciones.</div>${what}`; return; }
+    if (isIOS() && !isStandalone()) {
+      box.innerHTML = `<div class="hint">En iPhone las notificaciones funcionan solo con FinPep agregada a la pantalla de inicio: en Safari tocá <b>Compartir → Agregar a inicio</b> y abrila desde ese ícono.</div>${what}`;
+      return;
+    }
+    if (!pushSupported()) { box.innerHTML = `<div class="hint">Este navegador no soporta notificaciones push.</div>`; return; }
+    const sub = await currentPushSub();
+    const on = !!sub && Notification.permission === 'granted';
+    box.innerHTML = `
+      <div class="notif-status ${on ? 'on' : ''}">${on ? '🔔 Activadas en este dispositivo' : '🔕 Desactivadas en este dispositivo'}</div>
+      ${what}
+      <div class="inline-form">
+        ${on ? '<button class="btn btn-sm" id="btn-push-test">Enviar prueba</button><button class="btn btn-sm" id="btn-push-off">Desactivar</button>'
+          : '<button class="btn btn-primary btn-sm" id="btn-push-on">Activar notificaciones</button>'}
+      </div>
+      <div class="hint notif-msg" aria-live="polite"></div>`;
+    const msg = (t) => { const m = $('.notif-msg', box); if (m) m.textContent = t; };
+    const run = (id, fn) => { const b = $(id, box); if (b) b.addEventListener('click', async () => {
+      b.disabled = true;
+      try { await fn(); } catch (e) { msg(e.message || String(e)); b.disabled = false; return; }
+      b.disabled = false;
+    }); };
+    run('#btn-push-on', async () => { msg('Activando…'); await enablePush(); await paintNotifCard(card); msg('Listo. Probá con "Enviar prueba".'); });
+    run('#btn-push-off', async () => { await disablePush(); await paintNotifCard(card); });
+    run('#btn-push-test', async () => {
+      msg('Enviando…');
+      const r = await Cloud.notifyFn({ action: 'test' });
+      msg(r && r.sent ? 'Enviada. Debería llegarte en unos segundos.' : 'No se pudo enviar (' + ((r && r.error) || 'sin detalle') + ').');
+    });
+  }
+
   function vAjustes(el) {
     const s = S().settings;
     const updated = s.ratesUpdatedAt
@@ -5766,6 +5835,11 @@
               ${currentTheme() === 'dark' ? '☀ Cambiar a modo claro' : '◐ Cambiar a modo oscuro'}
             </button>
           </div>
+        </div>
+
+        <div class="card" id="notif-card">
+          <h2 class="card-title">Notificaciones</h2>
+          <div class="notif-body"><div class="hint">Cargando…</div></div>
         </div>
 
         <div class="card">
@@ -5840,6 +5914,7 @@
 
     wireAccountCard(el);
     $('#btn-theme-toggle', el).addEventListener('click', toggleTheme);
+    paintNotifCard($('#notif-card', el)).catch((e) => console.error(e));
     $('#set-fx', el).addEventListener('change', (e) => {
       S().settings.fxSource = e.target.value;
       Store.save();
@@ -7016,6 +7091,11 @@
       Store.save();
       render();
     }));
+    // Service worker solo para recibir notificaciones push (no cachea nada:
+    // la app siempre se carga fresca de la red).
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW', e));
+    }
     Charts.setMasked(hideAmounts);
     $('#btn-privacy').addEventListener('click', () => {
       hideAmounts = !hideAmounts;

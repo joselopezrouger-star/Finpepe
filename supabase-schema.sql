@@ -224,3 +224,44 @@ alter table public.household_members add column if not exists display_name text;
 drop policy if exists "household_members_update_self" on public.household_members;
 create policy "household_members_update_self" on public.household_members
   for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+
+-- ============================================================================
+-- Notificaciones push (Web Push). Se puede volver a correr sin problema.
+-- Ver "Notificaciones" en el README para los pasos completos (claves VAPID,
+-- Edge Function "notify" y el cron diario).
+-- ============================================================================
+
+-- Un registro por dispositivo suscripto (cada celular/navegador).
+create table if not exists public.push_subscriptions (
+  id         uuid        primary key default gen_random_uuid(),
+  user_id    uuid        not null references auth.users (id) on delete cascade,
+  endpoint   text        not null unique,
+  p256dh     text        not null,
+  auth       text        not null,
+  created_at timestamptz not null default now()
+);
+alter table public.push_subscriptions enable row level security;
+
+drop policy if exists "push_subs_select_own" on public.push_subscriptions;
+create policy "push_subs_select_own" on public.push_subscriptions
+  for select using (auth.uid() = user_id);
+drop policy if exists "push_subs_insert_own" on public.push_subscriptions;
+create policy "push_subs_insert_own" on public.push_subscriptions
+  for insert with check (auth.uid() = user_id);
+drop policy if exists "push_subs_update_own" on public.push_subscriptions;
+create policy "push_subs_update_own" on public.push_subscriptions
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "push_subs_delete_own" on public.push_subscriptions;
+create policy "push_subs_delete_own" on public.push_subscriptions
+  for delete using (auth.uid() = user_id);
+
+-- Avisos ya mandados (para no repetir el mismo aviso). Solo lo usa la
+-- Edge Function con la service role key: sin políticas para usuarios.
+create table if not exists public.push_sent (
+  user_id uuid        not null references auth.users (id) on delete cascade,
+  key     text        not null,
+  sent_at timestamptz not null default now(),
+  primary key (user_id, key)
+);
+alter table public.push_sent enable row level security;

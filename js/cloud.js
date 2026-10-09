@@ -302,12 +302,40 @@ const Cloud = (() => {
     if (error) throw error;
   }
 
+  /* ---------------- Notificaciones push ---------------- */
+
+  // Guarda (o actualiza) la suscripción push de este dispositivo.
+  async function savePushSubscription(sub) {
+    const cl = ensureClient();
+    if (!cl || !user()) throw new Error('Iniciá sesión para activar las notificaciones.');
+    const j = sub.toJSON();
+    const { error } = await cl.from('push_subscriptions').upsert({
+      user_id: user().id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth,
+    }, { onConflict: 'endpoint' });
+    if (error) throw error;
+  }
+  async function deletePushSubscription(endpoint) {
+    const cl = ensureClient();
+    if (!cl || !user()) return;
+    const { error } = await cl.from('push_subscriptions').delete().eq('endpoint', endpoint);
+    if (error) throw error;
+  }
+  // Llama a la Edge Function "notify" (ver supabase/functions/notify).
+  async function notifyFn(body) {
+    const cl = ensureClient();
+    if (!cl) throw new Error('Sin conexión con la nube.');
+    const { data, error } = await cl.functions.invoke('notify', { body });
+    if (error) throw error;
+    return data;
+  }
+
   return {
     available, config, saveConfig, clearConfig, isConfigured, hasDefaults,
     init, user, signUp, signIn, signOut, signInWithGoogle, linkGoogle, hasGoogle, pull, push, schedulePush,
     getHousehold, createHousehold, createInvite, redeemInvite, leaveHousehold, updateDisplayName,
     listSharedExpenses, addSharedExpense, deleteSharedExpense,
     listSettlements, addSettlement, deleteSettlement,
+    savePushSubscription, deletePushSubscription, notifyFn,
     get lastError() { return lastError; },
   };
 })();

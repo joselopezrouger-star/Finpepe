@@ -177,3 +177,55 @@ supabase-schema.sql  Tabla y políticas RLS para la sincronización
   en el otro.
 - Las conversiones ARS ⇄ USD usan la cotización vigente (cada movimiento
   conserva su moneda original, así que podés cambiar de fuente cuando quieras).
+
+## Notificaciones push (iPhone y otros)
+
+La app puede mandar avisos al celular aunque esté cerrada:
+
+- 💳 un día antes y el día que vence cada tarjeta, con el total del resumen;
+- ⚠️ cuando el resumen en curso llega al 85% y al 100% del tope de la
+  tarjeta (o del promedio de los últimos resúmenes).
+
+En **iPhone** funcionan desde iOS 16.4 y **solo con la app agregada a la
+pantalla de inicio** (Safari → Compartir → Agregar a inicio, y abrirla desde
+ese ícono). Cada dispositivo se activa por separado en **Ajustes →
+Notificaciones**.
+
+### Puesta en marcha (una sola vez)
+
+Los avisos los manda la Edge Function `supabase/functions/notify`, que corre
+una vez por día. Pasos, desde una computadora con Node instalado:
+
+1. **Tablas**: volvé a correr `supabase-schema.sql` completo en el SQL Editor
+   (agrega `push_subscriptions` y `push_sent`; no borra nada).
+2. **Claves VAPID** (identifican al servidor de notificaciones):
+   ```bash
+   npx web-push generate-vapid-keys
+   ```
+3. **Deploy de la función y secrets** (`<ref>` es el id del proyecto, el
+   subdominio de la URL de Supabase):
+   ```bash
+   npx supabase login
+   npx supabase link --project-ref <ref>
+   npx supabase secrets set VAPID_PUBLIC_KEY=<pública> VAPID_PRIVATE_KEY=<privada> \
+     VAPID_SUBJECT=mailto:<tu-mail> CRON_SECRET=<una-clave-larga-inventada>
+   npx supabase functions deploy notify --no-verify-jwt
+   ```
+4. **Cron diario** (9:00 de Argentina = 12:00 UTC), en el SQL Editor:
+   ```sql
+   create extension if not exists pg_cron;
+   create extension if not exists pg_net;
+   select cron.schedule('finpep-notify-daily', '0 12 * * *', $$
+     select net.http_post(
+       url := 'https://<ref>.supabase.co/functions/v1/notify',
+       headers := jsonb_build_object('Content-Type', 'application/json',
+                                     'x-cron-secret', '<la misma CRON_SECRET>'),
+       body := '{"action":"daily"}'::jsonb
+     );
+   $$);
+   ```
+5. En el celular: **Ajustes → Notificaciones → Activar** y después
+   **Enviar prueba**.
+
+Cada aviso se manda una sola vez (queda registrado en `push_sent`). Los
+cálculos usan los datos que el celular sincronizó por última vez con la nube.
