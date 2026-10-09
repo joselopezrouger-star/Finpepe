@@ -275,6 +275,13 @@ const Cloud = (() => {
     return data ? data.id : null;
   }
 
+  async function updateSharedExpense(id, patch) {
+    const cl = ensureClient();
+    if (!cl) throw new Error('Sin conexión con la nube.');
+    const { error } = await cl.from('shared_expenses').update(patch).eq('id', id);
+    if (error) throw error;
+  }
+
   async function deleteSharedExpense(id) {
     const cl = ensureClient();
     if (!cl) return;
@@ -337,7 +344,7 @@ const Cloud = (() => {
     available, config, saveConfig, clearConfig, isConfigured, hasDefaults,
     init, user, signUp, signIn, signOut, signInWithGoogle, linkGoogle, hasGoogle, pull, push, schedulePush,
     getHousehold, createHousehold, createInvite, redeemInvite, leaveHousehold, updateDisplayName,
-    listSharedExpenses, addSharedExpense, deleteSharedExpense,
+    listSharedExpenses, addSharedExpense, updateSharedExpense, deleteSharedExpense,
     listSettlements, addSettlement, deleteSettlement,
     savePushSubscription, deletePushSubscription, notifyFn,
     get lastError() { return lastError; },

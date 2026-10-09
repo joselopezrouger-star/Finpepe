@@ -1844,10 +1844,24 @@
         // cambiaron (para no perder el valor histórico por editar la nota o
         // la categoría); si cambian, se recalcula a la cotización DE LA
         // FECHA del movimiento (no la de hoy).
+        // Gasto compartido vinculado (se busca ANTES de modificar el
+        // movimiento: para los viejos sin vínculo guardado se reconoce por
+        // monto/fecha originales).
+        const linkedShared = (!tx.groupId && tx.type === 'gasto') ? linkedSharedExpense(tx) : null;
         const sameAmount = tx.currency === draft.currency && tx.amount === amount;
         base.usdSnapshot = (sameAmount && tx.usdSnapshot != null) ? tx.usdSnapshot : await usdSnapshotForDate(amount, draft.currency, draft.date);
         base.arsSnapshot = (sameAmount && tx.arsSnapshot != null) ? tx.arsSnapshot : await arsSnapshotForDate(amount, draft.currency, draft.date);
         Object.assign(tx, base);
+        // Editar el monto, la moneda, la fecha o la nota de un gasto
+        // compartido actualiza también el gasto en Compartido.
+        if (linkedShared) {
+          tx.sharedExpenseId = linkedShared.id;
+          const patch = { amount, currency: draft.currency, date: draft.date, note: (note.trim() || null) };
+          Cloud.updateSharedExpense(linkedShared.id, patch)
+            .then(() => Cloud.listSharedExpenses(shared.household.id))
+            .then((list) => { shared.expenses = list; render(); })
+            .catch((e) => alert('El movimiento se guardó, pero no se pudo actualizar en Compartido: ' + friendlyCloudError(e)));
+        }
         // Si se pagó (o se dejó de pagar) con un ahorro, o cambió de monto/
         // fecha/moneda, el retiro vinculado en ese ahorro se rehace desde
         // cero con los datos finales (ver syncSavingWithdrawalForTx()).
