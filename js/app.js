@@ -5805,6 +5805,7 @@
     const wirePrefs = () => $$('[data-notif]', box).forEach((cb) => cb.addEventListener('change', () => {
       S().settings.notifPrefs = { ...(S().settings.notifPrefs || {}), [cb.dataset.notif]: cb.checked };
       Store.save();
+      paintNotifSummary();
     }));
     if (!Cloud.user()) { box.innerHTML = `<div class="hint">Iniciá sesión (más abajo) para activar las notificaciones.</div>${what}`; return; }
     if (isIOS() && !isStandalone()) {
@@ -5830,13 +5831,34 @@
       try { await fn(); } catch (e) { msg(e.message || String(e)); b.disabled = false; return; }
       b.disabled = false;
     }); };
-    run('#btn-push-on', async () => { msg('Activando…'); await enablePush(); await paintNotifCard(card); msg('Listo. Probá con "Enviar prueba".'); });
-    run('#btn-push-off', async () => { await disablePush(); await paintNotifCard(card); });
+    run('#btn-push-on', async () => { msg('Activando…'); await enablePush(); await paintNotifCard(card); paintNotifSummary(); msg('Listo. Probá con "Enviar prueba".'); });
+    run('#btn-push-off', async () => { await disablePush(); await paintNotifCard(card); paintNotifSummary(); });
     run('#btn-push-test', async () => {
       msg('Enviando…');
       const r = await Cloud.notifyFn({ action: 'test' });
       msg(r && r.sent ? 'Enviada. Debería llegarte en unos segundos.' : 'No se pudo enviar (' + ((r && r.error) || 'sin detalle') + ').');
     });
+  }
+
+  // Ajustes: la tarjeta de notificaciones muestra solo un resumen y un
+  // botón; todo lo demás (activar, tipos, prueba) vive en un pop-up.
+  async function paintNotifSummary() {
+    const box = $('#notif-summary');
+    if (!box) return;
+    const prefs = S().settings.notifPrefs || {};
+    const nOn = ['due', 'alerts', 'fixed', 'partner', 'reminder'].filter((k) => prefs[k] !== false).length;
+    let state;
+    if (!Cloud.user()) state = 'Iniciá sesión para usarlas';
+    else if (!pushSupported() || (isIOS() && !isStandalone())) state = 'No disponibles en este navegador';
+    else {
+      const sub = await currentPushSub().catch(() => null);
+      state = sub && Notification.permission === 'granted' ? '🔔 Activadas en este dispositivo' : '🔕 Desactivadas en este dispositivo';
+    }
+    box.innerHTML = `<span>${state}</span><span class="hint">${nOn} de 5 tipos de aviso</span>`;
+  }
+  function notifDialog() {
+    const dlg = openDialog('Notificaciones', '<div class="notif-body"><div class="hint">Cargando…</div></div>', { submitLabel: 'Cerrar', viewOnly: true });
+    paintNotifCard(dlg).catch((e) => console.error(e));
   }
 
   function vAjustes(el) {
@@ -5858,7 +5880,8 @@
 
         <div class="card" id="notif-card">
           <h2 class="card-title">Notificaciones</h2>
-          <div class="notif-body"><div class="hint">Cargando…</div></div>
+          <div class="notif-summary" id="notif-summary"><span class="hint">Cargando…</span></div>
+          <button class="btn btn-sm" id="btn-notif-config">Configurar notificaciones</button>
         </div>
 
         <div class="card">
@@ -5933,7 +5956,8 @@
 
     wireAccountCard(el);
     $('#btn-theme-toggle', el).addEventListener('click', toggleTheme);
-    paintNotifCard($('#notif-card', el)).catch((e) => console.error(e));
+    paintNotifSummary().catch((e) => console.error(e));
+    $('#btn-notif-config', el).addEventListener('click', notifDialog);
     $('#set-fx', el).addEventListener('change', (e) => {
       S().settings.fxSource = e.target.value;
       Store.save();
