@@ -267,8 +267,12 @@ const Cloud = (() => {
   async function addSharedExpense(row) {
     const cl = ensureClient();
     if (!cl || !user()) throw new Error('Iniciá sesión primero.');
-    const { error } = await cl.from('shared_expenses').insert({ ...row, created_by: user().id });
+    // Devuelve el id del gasto creado, para poder vincularlo con el
+    // movimiento propio que lo originó (y borrarlos juntos).
+    const { data, error } = await cl.from('shared_expenses')
+      .insert({ ...row, created_by: user().id }).select('id').single();
     if (error) throw error;
+    return data ? data.id : null;
   }
 
   async function deleteSharedExpense(id) {

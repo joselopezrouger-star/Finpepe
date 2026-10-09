@@ -1194,11 +1194,18 @@
      a otra hoja: se abren y cierran en el lugar). */
   function txForm(tx) {
     const editing = !!tx;
-    const partner = sharedPartner();
+    // El hogar compartido se carga en segundo plano al abrir la app: si el
+    // formulario se abría antes de que terminara, la opción "compartido" no
+    // aparecía hasta cerrar y volver a abrir. Ahora se vuelve a mirar en
+    // cada repintado y, si todavía está cargando, se repinta al terminar.
+    let partner = sharedPartner();
     // Compartir con la pareja solo tiene sentido para gastos (se reparte
     // quién pagó qué); un ingreso o una transferencia entre tus propias
     // cuentas no es algo que "se deba" entre los dos.
-    const canShare = () => !editing && draft.type === 'gasto' && !!partner && !!(shared.household);
+    const canShare = () => {
+      if (!partner) partner = sharedPartner();
+      return !editing && draft.type === 'gasto' && !!partner && !!(shared.household);
+    };
 
     const draft = {
       type: editing ? tx.type : 'gasto',
@@ -1818,6 +1825,7 @@
       if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando…'; }
       const note = draft.note || '';
       const wantShare = canShare() && draft.shareIt;
+      let createdTxs = [];
       const sharePctVal = Math.min(100, Math.max(0, parseFloat(draft.sharePct || '50')));
       const base = draft.type === 'transferencia'
         ? { date: draft.date, type: draft.type, amount, currency: draft.currency,
@@ -1845,6 +1853,7 @@
         // cero con los datos finales (ver syncSavingWithdrawalForTx()).
         syncSavingWithdrawalForTx(tx);
       } else {
+        createdTxs = [];
         if (n === 1) {
           const newTx = {
             id: Store.uid(), ...base,
@@ -1852,6 +1861,7 @@
             arsSnapshot: await arsSnapshotForDate(amount, draft.currency, draft.date),
           };
           S().transactions.push(newTx);
+          createdTxs.push(newTx);
           syncSavingWithdrawalForTx(newTx);
         } else {
           const groupId = Store.uid();
@@ -1861,12 +1871,14 @@
             const cuota = (k === n) ? Math.round((amount - per * (n - 1)) * 100) / 100 : per;
             const dk = installmentDate(base.methodId, start, k);
             const dkStr = dateToStr(dk);
-            S().transactions.push({
+            const cuotaTx = {
               id: Store.uid(), ...base, amount: cuota, date: dkStr,
               groupId, installment: { k, n },
               usdSnapshot: await usdSnapshotForDate(cuota, draft.currency, dkStr),
               arsSnapshot: await arsSnapshotForDate(cuota, draft.currency, dkStr),
-            });
+            };
+            S().transactions.push(cuotaTx);
+            createdTxs.push(cuotaTx);
           }
         }
       }
@@ -1874,11 +1886,16 @@
 
       if (wantShare) {
         try {
-          await Cloud.addSharedExpense({
+          const sharedId = await Cloud.addSharedExpense({
             household_id: shared.household.id, paid_by: sharedMe().id,
             payer_share: sharePctVal / 100, amount, currency: draft.currency,
             date: draft.date, note: note.trim() || null,
           });
+          // Vínculo movimiento ↔ gasto compartido: borrar uno borra el otro.
+          if (sharedId) {
+            for (const t of createdTxs) t.sharedExpenseId = sharedId;
+            Store.save();
+          }
           shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
         } catch (e) {
           alert('El movimiento se guardó, pero no se pudo avisar a la cuenta compartida: ' + e.message);
@@ -1890,6 +1907,25 @@
 
     paint();
     openModal(dlg);
+    // Si el hogar compartido todavía no terminó de cargar, se repinta al
+    // terminar para que aparezca la opción "compartido".
+    if (!editing && Cloud.user() && (!shared.loaded || shared.loading)) {
+      loadShared().then(() => {
+        if (dlg.open && !partner && sharedPartner()) { partner = sharedPartner(); paint(); }
+      }).catch(() => {});
+    }
+  }
+
+  /* Gasto compartido vinculado a un movimiento propio: el id guardado al
+     crearlo o, para los cargados antes de guardar ese vínculo, el gasto del
+     hogar que pagaste vos con el mismo monto, moneda y fecha. */
+  function linkedSharedExpense(tx) {
+    if (!shared.household || !shared.expenses) return null;
+    if (tx.sharedExpenseId) return shared.expenses.find((e) => e.id === tx.sharedExpenseId) || null;
+    if (!tx.shared || !Cloud.user()) return null;
+    const me = sharedMe();
+    return shared.expenses.find((e) => e.paid_by === me.id && e.date === tx.date && e.currency === tx.currency
+      && Math.abs(Number(e.amount) - Number(tx.amount)) < 0.01) || null;
   }
 
   function deleteTx(tx) {
@@ -1902,9 +1938,17 @@
       for (const t of group) removeLinkedSavingEntry(t.id);
       S().transactions = S().transactions.filter((t) => t.groupId !== tx.groupId);
     } else {
-      if (!confirm('¿Eliminar este movimiento?')) return;
+      const linked = linkedSharedExpense(tx);
+      if (!confirm(linked ? '¿Eliminar este movimiento? También se va a borrar de Compartido.' : '¿Eliminar este movimiento?')) return;
       removeLinkedSavingEntry(tx.id);
       S().transactions = S().transactions.filter((t) => t.id !== tx.id);
+      if (linked) {
+        // Se borra también el gasto del hogar (y se actualiza la lista).
+        Cloud.deleteSharedExpense(linked.id)
+          .then(() => Cloud.listSharedExpenses(shared.household.id))
+          .then((list) => { shared.expenses = list; render(); })
+          .catch((e) => alert('El movimiento se borró, pero no se pudo borrar de Compartido: ' + friendlyCloudError(e)));
+      }
     }
     Store.save();
     render();
@@ -6385,8 +6429,17 @@
     return shared.household.members.find((m) => m.user_id !== me.id) || null;
   }
 
-  async function loadShared() {
-    if (shared.loading) return;
+  // Devuelve siempre una promesa que termina cuando se cargó el hogar
+  // (aunque ya hubiera una carga en curso): así quien la necesita — por
+  // ejemplo el formulario de un gasto, para ofrecer "compartido" — puede
+  // esperarla en vez de asumir que no hay hogar.
+  let sharedLoadPromise = null;
+  function loadShared() {
+    if (shared.loading && sharedLoadPromise) return sharedLoadPromise;
+    sharedLoadPromise = loadSharedNow();
+    return sharedLoadPromise;
+  }
+  async function loadSharedNow() {
     shared.loading = true;
     shared.error = null;
     try {
@@ -6896,11 +6949,25 @@
         footExtra: '<button type="button" class="btn btn-danger" data-sh-del style="margin-right:auto">Eliminar</button>',
       });
       $('[data-sh-del]', dlg).addEventListener('click', async () => {
-        if (!confirm(kind === 'expense' ? '¿Eliminar este gasto compartido?' : '¿Eliminar este pago?')) return;
+        // Si el gasto compartido salió de un movimiento tuyo, se borra
+        // también ese movimiento (y viceversa, ver deleteTx).
+        const myTx = kind === 'expense' ? (S().transactions.find((t) => t.sharedExpenseId === id)
+          || (item.paid_by === me.id ? S().transactions.find((t) => t.shared && !t.sharedExpenseId && t.date === item.date
+            && t.currency === item.currency && Math.abs(Number(t.amount) - Number(item.amount)) < 0.01) : null)) : null;
+        if (!confirm(kind === 'expense'
+          ? (myTx ? '¿Eliminar este gasto compartido? También se va a borrar de tus movimientos.' : '¿Eliminar este gasto compartido?')
+          : '¿Eliminar este pago?')) return;
         try {
           if (kind === 'expense') {
             await Cloud.deleteSharedExpense(id);
             shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
+            if (myTx) {
+              const drop = myTx.groupId ? S().transactions.filter((t) => t.groupId === myTx.groupId) : [myTx];
+              for (const t of drop) removeLinkedSavingEntry(t.id);
+              const ids = new Set(drop.map((t) => t.id));
+              S().transactions = S().transactions.filter((t) => !ids.has(t.id));
+              Store.save();
+            }
           } else {
             await Cloud.deleteSettlement(id);
             shared.settlements = await Cloud.listSettlements(shared.household.id);
