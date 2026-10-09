@@ -21,7 +21,19 @@ const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
 const short = (d) => `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}`;
 
 const nfARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+const nfUSD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const money = (n) => nfARS.format(Math.round(n));
+export const moneyIn = (n, cur) => (cur === 'USD' ? nfUSD : nfARS).format(Number(n));
+
+// Qué tipos de aviso quiere el usuario (Ajustes → Notificaciones, guardado
+// en settings.notifPrefs y sincronizado con la nube). Por defecto, todos.
+export const NOTIF_TYPES = ['due', 'alerts', 'fixed', 'partner', 'reminder'];
+export function notifPrefs(state) {
+  const p = (state && state.settings && state.settings.notifPrefs) || {};
+  const out = {};
+  for (const k of NOTIF_TYPES) out[k] = p[k] !== false;
+  return out;
+}
 
 // Resúmenes cargados de una tarjeta, del más viejo al más nuevo.
 export function loadedStatements(card) {
@@ -92,6 +104,8 @@ function cachedRate(state) {
 export function buildDailyNotifications(state, todayStr) {
   const out = [];
   if (!state || !Array.isArray(state.methods)) return out;
+  const prefs = notifPrefs(state);
+  if (prefs.fixed) out.push(...fixedNotifications(state, todayStr));
   const today = parse(todayStr);
   const tomorrow = addDays(today, 1);
   const rate = cachedRate(state);
@@ -102,7 +116,7 @@ export function buildDailyNotifications(state, todayStr) {
 
     // 1) Vencimiento: mañana o hoy.
     st.forEach((s, i) => {
-      if (!s.due) return;
+      if (!prefs.due || !s.due) return;
       const isToday = ymd(s.due) === todayStr;
       const isTomorrow = ymd(s.due) === ymd(tomorrow);
       if (!isToday && !isTomorrow) return;
@@ -120,6 +134,7 @@ export function buildDailyNotifications(state, todayStr) {
     });
 
     // 2) Resumen en curso contra el tope (o el promedio de los últimos 3).
+    if (!prefs.alerts) continue;
     const curIdx = st.findIndex((s) => s.close >= today);
     if (curIdx <= 0) continue;
     const cur = st[curIdx], prev = st[curIdx - 1];
@@ -159,6 +174,52 @@ export function buildDailyNotifications(state, todayStr) {
     }
   }
   return out;
+}
+
+// Fijos que caen hoy (según su configuración: mensual por día del mes,
+// semanal/quincenal desde su fecha de inicio). Uno solo por día, con la
+// lista de los que se cargaron.
+export function fixedOccurrences(state, todayStr) {
+  const today = parse(todayStr);
+  return (state.recurring || []).filter((r) => {
+    if (r.freq === 'weekly' || r.freq === 'biweekly') {
+      if (!r.startDate) return false;
+      const start = parse(r.startDate);
+      if (start > today) return false;
+      const diff = Math.round((today - start) / 86400000);
+      return diff % (r.freq === 'weekly' ? 7 : 14) === 0;
+    }
+    const d = clampDate(today.getUTCFullYear(), today.getUTCMonth(), Math.min(28, Math.max(1, Number(r.day) || 1)));
+    return ymd(d) === todayStr;
+  });
+}
+function fixedNotifications(state, todayStr) {
+  const list = fixedOccurrences(state, todayStr);
+  if (!list.length) return [];
+  const line = (r) => `${r.name}: ${r.type === 'ingreso' ? '+' : '−'} ${moneyIn(r.amount, r.currency)}`;
+  return [{
+    key: `fixed:${todayStr}`,
+    title: list.length === 1 ? `🔁 Hoy se cargó un fijo: ${list[0].name}` : `🔁 Hoy se cargaron ${list.length} fijos`,
+    body: list.length === 1 ? line(list[0]) : list.map(line).join(' · '),
+    url: './',
+    tag: 'fixed',
+  }];
+}
+
+// Recordatorio de la noche: si hoy no cargaste ningún movimiento a mano
+// (los fijos, sobrantes y cuotas siguientes se generan solos, no cuentan).
+export function buildReminder(state, todayStr) {
+  if (!state || !notifPrefs(state).reminder) return [];
+  const manual = (state.transactions || []).filter((t) => t.date === todayStr && !t.recurringId && !t.leftoverGen
+    && !(t.installment && t.installment.k > 1));
+  if (manual.length) return [];
+  return [{
+    key: `reminder:${todayStr}`,
+    title: '📅 ¿Cargaste los gastos de hoy?',
+    body: 'Hoy no anotaste ningún movimiento en FinPep. Tomate un minuto para cargarlos.',
+    url: './',
+    tag: 'reminder',
+  }];
 }
 
 // Fecha de hoy en Argentina ('YYYY-MM-DD').

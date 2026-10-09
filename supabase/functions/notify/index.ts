@@ -5,10 +5,15 @@
 //     suscribir el dispositivo). No requiere sesión.
 //   - "test":  manda una notificación de prueba a los dispositivos del
 //     usuario que llama (header Authorization: Bearer <access token>).
-//   - "daily": la corre el cron una vez por día (header x-cron-secret):
-//     revisa los datos de cada usuario suscripto y manda los avisos del día
-//     (vencimientos de tarjeta, tope del resumen). Cada aviso se manda una
-//     sola vez (tabla push_sent).
+//   - "daily": la corre el cron a la mañana (header x-cron-secret): revisa
+//     los datos de cada usuario suscripto y manda los avisos del día
+//     (vencimientos de tarjeta, alertas de tope, fijos que se cargan hoy).
+//   - "reminder": la corre el cron a la noche: si el usuario no cargó nada
+//     en el día, le recuerda hacerlo.
+//   - "shared": la dispara la base (trigger en shared_expenses) cuando
+//     alguien carga un gasto compartido: avisa a la otra persona del hogar.
+// Cada aviso se manda una sola vez (tabla push_sent) y solo si el usuario
+// tiene ese tipo tildado en Ajustes → Notificaciones (settings.notifPrefs).
 //
 // Secrets necesarios (supabase secrets set ...): VAPID_PUBLIC_KEY,
 // VAPID_PRIVATE_KEY, VAPID_SUBJECT (ej. mailto:vos@mail.com), CRON_SECRET.
@@ -17,7 +22,7 @@
 
 import webpush from 'npm:web-push@3.6.7';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { buildDailyNotifications, todayInArgentina } from './logic.js';
+import { buildDailyNotifications, buildReminder, notifPrefs, moneyIn, todayInArgentina } from './logic.js';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -79,8 +84,12 @@ Deno.serve(async (req) => {
     return json({ sent: ok, devices: subs.length });
   }
 
-  if (action === 'daily') {
-    if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) return json({ error: 'No autorizado' }, 401);
+  const cronOk = () => !!CRON_SECRET && req.headers.get('x-cron-secret') === CRON_SECRET;
+
+  // Recorre a cada usuario con dispositivos suscriptos, arma sus avisos con
+  // `build` (a partir de sus datos sincronizados) y manda los que no se
+  // mandaron antes.
+  async function runForAll(build: (state: unknown, today: string) => Note[]) {
     const today = todayInArgentina();
     const { data: subs } = await admin.from('push_subscriptions').select('*');
     const byUser = new Map<string, Sub[]>();
@@ -91,22 +100,65 @@ Deno.serve(async (req) => {
     let sent = 0;
     for (const [userId, userSubs] of byUser) {
       const { data: row } = await admin.from('finance_state').select('data').eq('user_id', userId).maybeSingle();
-      const notes: Note[] = buildDailyNotifications(row?.data, today);
-      if (!notes.length) continue;
-      const { data: already } = await admin.from('push_sent').select('key').eq('user_id', userId)
-        .in('key', notes.map((n) => n.key));
-      const done = new Set((already ?? []).map((r: { key: string }) => r.key));
-      for (const n of notes) {
-        if (done.has(n.key!)) continue;
-        let any = false;
-        for (const s of userSubs) if (await send(s, n)) any = true;
-        if (any) {
-          sent++;
-          await admin.from('push_sent').insert({ user_id: userId, key: n.key });
-        }
+      const notes: Note[] = build(row?.data, today);
+      sent += await deliver(userId, userSubs, notes);
+    }
+    return { today, users: byUser.size, sent };
+  }
+  async function deliver(userId: string, userSubs: Sub[], notes: Note[]) {
+    if (!notes.length) return 0;
+    const { data: already } = await admin.from('push_sent').select('key').eq('user_id', userId)
+      .in('key', notes.map((n) => n.key));
+    const done = new Set((already ?? []).map((r: { key: string }) => r.key));
+    let sent = 0;
+    for (const n of notes) {
+      if (done.has(n.key!)) continue;
+      let any = false;
+      for (const s of userSubs) if (await send(s, n)) any = true;
+      if (any) {
+        sent++;
+        await admin.from('push_sent').insert({ user_id: userId, key: n.key });
       }
     }
-    return json({ today, users: byUser.size, sent });
+    return sent;
+  }
+
+  if (action === 'daily') {
+    if (!cronOk()) return json({ error: 'No autorizado' }, 401);
+    return json(await runForAll(buildDailyNotifications));
+  }
+
+  if (action === 'reminder') {
+    if (!cronOk()) return json({ error: 'No autorizado' }, 401);
+    return json(await runForAll(buildReminder));
+  }
+
+  if (action === 'shared') {
+    if (!cronOk()) return json({ error: 'No autorizado' }, 401);
+    const rec = (body as { record?: Record<string, unknown> }).record;
+    if (!rec) return json({ error: 'Falta el gasto' }, 400);
+    const { data: members } = await admin.from('household_members')
+      .select('user_id, email, display_name').eq('household_id', rec.household_id as string);
+    const author = (members ?? []).find((m: { user_id: string }) => m.user_id === rec.created_by);
+    const authorName = author?.display_name || (author?.email ? String(author.email).split('@')[0] : 'Tu pareja');
+    let sent = 0;
+    for (const m of (members ?? []) as { user_id: string }[]) {
+      if (m.user_id === rec.created_by) continue;
+      const { data: row } = await admin.from('finance_state').select('data').eq('user_id', m.user_id).maybeSingle();
+      if (!notifPrefs(row?.data).partner) continue;
+      const { data: subs } = await admin.from('push_subscriptions').select('*').eq('user_id', m.user_id);
+      if (!subs?.length) continue;
+      const amount = Number(rec.amount);
+      const share = rec.paid_by === m.user_id ? Number(rec.payer_share) : 1 - Number(rec.payer_share);
+      sent += await deliver(m.user_id, subs as Sub[], [{
+        key: `shared:${rec.id}`,
+        title: `👥 ${authorName} cargó un gasto compartido`,
+        body: `${rec.note || 'Gasto compartido'}: ${moneyIn(amount, String(rec.currency || 'ARS'))} · tu parte ${moneyIn(amount * share, String(rec.currency || 'ARS'))}`,
+        url: './',
+        tag: 'shared',
+      }]);
+    }
+    return json({ sent });
   }
 
   return json({ error: 'Acción desconocida' }, 400);

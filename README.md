@@ -184,7 +184,13 @@ La app puede mandar avisos al celular aunque esté cerrada:
 
 - 💳 un día antes y el día que vence cada tarjeta, con el total del resumen;
 - ⚠️ cuando el resumen en curso llega al 85% y al 100% del tope de la
-  tarjeta (o del promedio de los últimos resúmenes).
+  tarjeta (o del promedio de los últimos resúmenes);
+- 🔁 el día que se carga cada fijo;
+- 👥 apenas tu pareja carga un gasto compartido;
+- 📅 a las 21 h, si ese día no cargaste ningún movimiento.
+
+Cuáles llegan se elige tildándolos en **Ajustes → Notificaciones** (vale
+para todos tus dispositivos).
 
 En **iPhone** funcionan desde iOS 16.4 y **solo con la app agregada a la
 pantalla de inicio** (Safari → Compartir → Agregar a inicio, y abrirla desde
@@ -211,7 +217,10 @@ una vez por día. Pasos, desde una computadora con Node instalado:
      VAPID_SUBJECT=mailto:<tu-mail> CRON_SECRET=<una-clave-larga-inventada>
    npx supabase functions deploy notify --no-verify-jwt
    ```
-4. **Cron diario** (9:00 de Argentina = 12:00 UTC), en el SQL Editor:
+4. **Programación**: corré `supabase/notifications-setup.sql` en el SQL
+   Editor (reemplazando `TU_CRON_SECRET`): crea el cron de las 9:00 y el de
+   las 21:00 de Argentina, y el trigger que avisa a la pareja al cargar un
+   gasto compartido. Equivale a esto (solo el cron de la mañana):
    ```sql
    create extension if not exists pg_cron;
    create extension if not exists pg_net;

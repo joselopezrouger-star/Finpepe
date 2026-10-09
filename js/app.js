@@ -5788,10 +5788,28 @@
   async function paintNotifCard(card) {
     const box = $('.notif-body', card);
     if (!box) return;
-    const what = '<ul class="notif-list"><li>💳 Un día antes y el día que vence cada tarjeta, con el total del resumen.</li><li>⚠️ Cuando el resumen en curso llega al 85% y al 100% de tu tope (o del promedio de tus últimos resúmenes).</li></ul>';
+    // Qué avisos querés recibir: se guarda en tu cuenta (settings.notifPrefs,
+    // sincronizado con la nube), así vale para todos tus dispositivos; el
+    // servidor solo manda los tildados.
+    const prefs = S().settings.notifPrefs || {};
+    const NOTIF_OPTS = [
+      ['due', '💳 Vencimientos de tarjeta', 'Un día antes y el día que vence, con el total del resumen.'],
+      ['alerts', '⚠️ Alertas de tope', 'Cuando el resumen en curso llega al 85% y al 100% del tope (o del promedio).'],
+      ['fixed', '🔁 Se genera un fijo', 'El día que se carga cada gasto o ingreso fijo.'],
+      ['partner', '👥 Tu pareja carga un gasto', 'Apenas tu pareja carga un gasto compartido.'],
+      ['reminder', '📅 Recordatorio', 'A las 21 h, si ese día no cargaste ningún movimiento.'],
+    ];
+    const what = `<div class="notif-opts">${NOTIF_OPTS.map(([k, t, d]) => `
+      <label class="notif-opt"><input type="checkbox" data-notif="${k}" ${prefs[k] === false ? '' : 'checked'}>
+        <span><b>${t}</b><small>${d}</small></span></label>`).join('')}</div>`;
+    const wirePrefs = () => $$('[data-notif]', box).forEach((cb) => cb.addEventListener('change', () => {
+      S().settings.notifPrefs = { ...(S().settings.notifPrefs || {}), [cb.dataset.notif]: cb.checked };
+      Store.save();
+    }));
     if (!Cloud.user()) { box.innerHTML = `<div class="hint">Iniciá sesión (más abajo) para activar las notificaciones.</div>${what}`; return; }
     if (isIOS() && !isStandalone()) {
       box.innerHTML = `<div class="hint">En iPhone las notificaciones funcionan solo con FinPep agregada a la pantalla de inicio: en Safari tocá <b>Compartir → Agregar a inicio</b> y abrila desde ese ícono.</div>${what}`;
+      wirePrefs();
       return;
     }
     if (!pushSupported()) { box.innerHTML = `<div class="hint">Este navegador no soporta notificaciones push.</div>`; return; }
@@ -5805,6 +5823,7 @@
           : '<button class="btn btn-primary btn-sm" id="btn-push-on">Activar notificaciones</button>'}
       </div>
       <div class="hint notif-msg" aria-live="polite"></div>`;
+    wirePrefs();
     const msg = (t) => { const m = $('.notif-msg', box); if (m) m.textContent = t; };
     const run = (id, fn) => { const b = $(id, box); if (b) b.addEventListener('click', async () => {
       b.disabled = true;
