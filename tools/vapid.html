@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FinPep · Claves VAPID</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f5f7fa; --ink: #111; --muted: #667; --card: #fff; --accent: #08a46f; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0b1220; --ink: #eef; --muted: #99a; --card: #151d2e; } }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; background: var(--card); border-radius: 12px; padding: 18px; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  p { color: var(--muted); margin: 6px 0 14px; }
+  label { display: block; font-weight: 700; margin-top: 14px; }
+  textarea { width: 100%; box-sizing: border-box; font: 13px ui-monospace, monospace; padding: 8px; border-radius: 8px; border: 1px solid #8884; background: transparent; color: var(--ink); resize: vertical; }
+  button { margin-top: 6px; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Claves VAPID para las notificaciones de FinPep</h1>
+  <p>Se generan acá mismo, en tu navegador: no se mandan a ningún lado. Copiá cada una en los "Secrets" de Supabase. La privada no la compartas con nadie.</p>
+  <button id="gen">Generar claves</button>
+  <label for="pub">VAPID_PUBLIC_KEY</label>
+  <textarea id="pub" rows="3" readonly></textarea>
+  <button data-copy="pub">Copiar pública</button>
+  <label for="priv">VAPID_PRIVATE_KEY</label>
+  <textarea id="priv" rows="2" readonly></textarea>
+  <button data-copy="priv">Copiar privada</button>
+  <label for="cron">CRON_SECRET (una clave al azar para el cron)</label>
+  <textarea id="cron" rows="2" readonly></textarea>
+  <button data-copy="cron">Copiar CRON_SECRET</button>
+</main>
+<script>
+  const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  document.getElementById('gen').addEventListener('click', async () => {
+    const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    const raw = await crypto.subtle.exportKey('raw', kp.publicKey);
+    const jwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
+    document.getElementById('pub').value = b64url(raw);
+    document.getElementById('priv').value = jwk.d;
+    document.getElementById('cron').value = b64url(crypto.getRandomValues(new Uint8Array(24)));
+  });
+  document.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', async () => {
+    const t = document.getElementById(b.dataset.copy);
+    t.select();
+    try { await navigator.clipboard.writeText(t.value); b.textContent = 'Copiada ✓'; } catch { document.execCommand('copy'); }
+  }));
+</script>
+</body>
+</html>
