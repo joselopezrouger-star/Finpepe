@@ -1,0 +1,1538 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>
+<title>FinPep Rediseño</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: documento de revisión, columna de lectura de 720px; los mockups salen a 1120px con notas al costado. */
+:root{
+  --pg-bg:#F3F5F4;--pg-surface:#FFFFFF;--pg-line:#DCE3E0;--pg-fg:#101A17;--pg-fg2:#4B5753;--pg-fg3:#66716C;
+  --pg-accent:#047857;--pg-accent-soft:#E0F3EA;--pg-crit:#B42318;--pg-crit-soft:#FDECEA;--pg-warn:#8A5300;--pg-warn-soft:#FFF2D9;
+  --pg-code:#0E1513;--pg-code-fg:#D7E3DE;--bezel:#05070C;
+  --f-num:"Barlow","Helvetica Neue",Arial,sans-serif;--f-text:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --pg-bg:#0B100F;--pg-surface:#131A18;--pg-line:#25302C;--pg-fg:#E8EEEB;--pg-fg2:#A9B5B0;--pg-fg3:#8A9691;
+  --pg-accent:#10D39E;--pg-accent-soft:rgba(16,211,158,.12);--pg-crit:#FF8A80;--pg-crit-soft:rgba(255,107,107,.13);--pg-warn:#F5B941;--pg-warn-soft:rgba(245,185,65,.13);
+  --pg-code:#070A09;--pg-code-fg:#D7E3DE;--bezel:#000;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --pg-bg:#0B100F;--pg-surface:#131A18;--pg-line:#25302C;--pg-fg:#E8EEEB;--pg-fg2:#A9B5B0;--pg-fg3:#8A9691;
+  --pg-accent:#10D39E;--pg-accent-soft:rgba(16,211,158,.12);--pg-crit:#FF8A80;--pg-crit-soft:rgba(255,107,107,.13);--pg-warn:#F5B941;--pg-warn-soft:rgba(245,185,65,.13);
+  --pg-code:#070A09;--pg-code-fg:#D7E3DE;--bezel:#000;color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--pg-bg);color:var(--pg-fg);font:400 15px/1.6 var(--f-text);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 80px}
+.prose{max-width:760px}
+h1,h2,h3{font-family:var(--f-num);font-weight:600;letter-spacing:-.01em;text-wrap:balance;margin:0}
+h1{font-size:clamp(34px,6vw,52px);line-height:1.05}
+h2{font-size:30px;line-height:1.15;margin-bottom:8px}
+h3{font-size:20px;line-height:1.25}
+p{margin:0 0 12px}
+a{color:var(--pg-accent)}
+.eyebrow{font:600 12px/1 var(--f-text);letter-spacing:.08em;text-transform:uppercase;color:var(--pg-accent)}
+.lede{font-size:18px;line-height:1.55;color:var(--pg-fg2);max-width:640px}
+.muted{color:var(--pg-fg2)}
+.small{font-size:13px;line-height:1.5}
+code{font:500 .88em ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--pg-accent-soft);padding:1px 5px;border-radius:5px}
+
+/* header + nav */
+.top{padding-block:56px 28px;display:grid;gap:16px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:var(--pg-fg3)}
+.toc{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--pg-bg) 88%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--pg-line);margin-bottom:8px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:21;background:var(--pg-bg)}
+.toc nav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-block:10px}
+.toc a{flex:none;text-decoration:none;color:var(--pg-fg2);font:500 14px/1 var(--f-text);padding:9px 12px;border-radius:999px}
+.toc a:hover,.toc a:focus-visible{background:var(--pg-surface);color:var(--pg-fg);outline:none}
+section.sec{padding-top:56px;scroll-margin-top:60px}
+.sec-head{display:grid;gap:8px;margin-bottom:24px}
+
+/* diagnóstico */
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
+.panel{background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:16px;padding:20px}
+.panel h3{margin-bottom:12px}
+.ticks{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.ticks li{display:grid;grid-template-columns:20px 1fr;gap:10px;font-size:14.5px;line-height:1.5}
+.ticks li::before{content:"";width:8px;height:8px;border-radius:50%;margin:8px 0 0 4px;background:var(--pg-accent)}
+.ticks.bad li::before{background:var(--pg-crit)}
+.score{display:grid;gap:0;background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:16px;overflow:hidden;margin-top:16px}
+.score-row{display:grid;grid-template-columns:170px 108px 1fr;gap:16px;padding:16px 20px;align-items:start}
+.score-row+.score-row{border-top:1px solid var(--pg-line)}
+.score-row b{font-weight:600}
+.score-row p{margin:0;font-size:14.5px;color:var(--pg-fg2)}
+.tag{display:inline-flex;align-items:center;gap:6px;font:600 12px/1 var(--f-text);padding:6px 9px;border-radius:999px;white-space:nowrap;justify-self:start}
+.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.tag.crit{color:var(--pg-crit);background:var(--pg-crit-soft)}
+.tag.warn{color:var(--pg-warn);background:var(--pg-warn-soft)}
+.tag.ok{color:var(--pg-accent);background:var(--pg-accent-soft)}
+@media (max-width:640px){.score-row{grid-template-columns:1fr auto}.score-row p{grid-column:1/-1}}
+
+/* recomendaciones */
+.recs{display:grid;gap:12px;counter-reset:rec}
+.tier{font:600 13px/1 var(--f-text);color:var(--pg-fg3);letter-spacing:.06em;text-transform:uppercase;margin:20px 0 4px}
+.rec{background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:16px;padding:18px 20px;display:grid;grid-template-columns:40px 1fr;gap:4px 14px;counter-increment:rec}
+.rec::before{content:counter(rec);font:600 22px/1 var(--f-num);color:var(--pg-accent);grid-row:1/span 4;padding-top:2px}
+.rec h3{font-size:19px}
+.rec .where{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
+.rec .where span{font:500 12px/1 var(--f-text);color:var(--pg-fg2);border:1px solid var(--pg-line);padding:5px 8px;border-radius:999px}
+.rec dl{margin:0;display:grid;grid-template-columns:84px 1fr;gap:6px 12px;font-size:14.5px;line-height:1.5}
+.rec dt{color:var(--pg-fg3);font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase;padding-top:3px}
+.rec dd{margin:0}
+.effort{justify-self:start;margin-top:6px;font:500 12px/1 var(--f-text);color:var(--pg-fg3)}
+@media (max-width:520px){.rec{grid-template-columns:1fr}.rec::before{grid-row:auto}.rec dl{grid-template-columns:1fr}.rec dt{padding-top:6px}}
+
+/* sistema */
+.tokens{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:10px}
+.tok{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:12px;padding:10px}
+.sw{display:flex;border-radius:9px;overflow:hidden;border:1px solid var(--pg-line)}
+.sw i{display:block;width:30px;height:40px}
+.tok b{font:600 13px/1.3 ui-monospace,Menlo,monospace;display:block}
+.tok span{font-size:12.5px;color:var(--pg-fg2);line-height:1.35;display:block}
+.cats{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.cats span{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;background:var(--pg-surface);border:1px solid var(--pg-line);padding:6px 10px 6px 8px;border-radius:999px}
+.cats i{width:14px;height:14px;border-radius:50%}
+.codebox{position:relative;margin-top:16px}
+pre.code{background:var(--pg-code);color:var(--pg-code-fg);border-radius:14px;padding:18px;overflow-x:auto;font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;max-height:420px}
+.copy{position:absolute;top:10px;right:10px;font:600 12px/1 var(--f-text);padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#D7E3DE;cursor:pointer}
+.scale{background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:16px;overflow:hidden}
+.scale-row{display:grid;grid-template-columns:120px 1fr 150px;gap:16px;align-items:baseline;padding:12px 18px}
+.scale-row+.scale-row{border-top:1px solid var(--pg-line)}
+.scale-row code{background:none;padding:0;color:var(--pg-fg3);font-size:12px}
+.scale-row small{color:var(--pg-fg3);font-size:12px;text-align:right}
+@media (max-width:600px){.scale-row{grid-template-columns:1fr auto}.scale-row .smp{grid-column:1/-1;order:3}}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px}
+.spc{display:grid;gap:8px}
+.spc div{display:grid;grid-template-columns:44px 1fr;align-items:center;gap:10px;font:500 12.5px/1 ui-monospace,Menlo,monospace;color:var(--pg-fg2)}
+.spc i{display:block;height:12px;background:var(--pg-accent);border-radius:3px;opacity:.85}
+.radii{display:flex;flex-wrap:wrap;gap:12px}
+.radii div{width:76px;height:64px;border:2px solid var(--pg-accent);background:var(--pg-accent-soft);display:grid;place-items:end center;padding-bottom:6px;font:500 11.5px/1 var(--f-text);color:var(--pg-fg2)}
+.sub{margin:32px 0 12px}
+.sub h3{margin-bottom:4px}
+
+/* toggle de tema de los mockups */
+.seg-pg{display:inline-flex;background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:999px;padding:3px;gap:2px}
+.seg-pg button{font:600 13px/1 var(--f-text);border:0;background:transparent;color:var(--pg-fg2);padding:9px 14px;border-radius:999px;cursor:pointer}
+.seg-pg button[aria-pressed="true"]{background:var(--pg-fg);color:var(--pg-bg)}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:8px}
+
+/* =========  FINPEP: tokens de la app (mockups)  ========= */
+.fp{
+  --bg:#0A0E1A;--s1:#121826;--s2:#1A2133;--s3:#232B40;--line:rgba(255,255,255,.07);
+  --t1:#EEF2F7;--t2:#A3ADBF;--t3:#7D889C;
+  --brand:#10D39E;--brand-press:#0BB585;--on-brand:#04261B;--brand-text:#10D39E;--brand-soft:rgba(16,211,158,.13);
+  --pos:#10D39E;--neg:#FF6B6B;--neg-soft:rgba(255,107,107,.14);--warn:#F5B941;--warn-soft:rgba(245,185,65,.14);
+  --c-casa:#6C8CFF;--c-compras:#F06EAA;--c-comida:#FF9466;--c-auto:#A78BFA;--c-tel:#4CC9F0;--c-super:#E6C84F;--c-otros:#7D889C;
+  --glass:rgba(13,18,32,.74);--sheet-shadow:0 -12px 40px rgba(0,0,0,.55);--card-shadow:none;--scrim:rgba(0,0,0,.55);
+  font-family:var(--f-text);color:var(--t1);
+}
+.fp.is-light{
+  --bg:#F3F5F8;--s1:#FFFFFF;--s2:#EEF1F5;--s3:#E2E7EE;--line:rgba(15,23,42,.08);
+  --t1:#0F1726;--t2:#4A5568;--t3:#6B7280;
+  --brand:#10D39E;--brand-press:#0BB585;--on-brand:#04261B;--brand-text:#047857;--brand-soft:rgba(16,185,129,.13);
+  --pos:#047857;--neg:#D93A3A;--neg-soft:rgba(217,58,58,.10);--warn:#B45309;--warn-soft:rgba(245,158,11,.15);
+  --c-casa:#4F6FE8;--c-compras:#D9468A;--c-comida:#E8703F;--c-auto:#8B5CF6;--c-tel:#0EA5C9;--c-super:#C9A21A;--c-otros:#94A3B8;
+  --glass:rgba(246,248,251,.8);--sheet-shadow:0 -12px 40px rgba(15,23,42,.16);--card-shadow:0 1px 2px rgba(15,23,42,.06),0 0 0 1px rgba(15,23,42,.04);--scrim:rgba(15,23,42,.35);
+}
+.fp .num{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-weight:600;letter-spacing:-.005em}
+.fp .ic{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.fp .ovl{font:600 11px/1.2 var(--f-text);letter-spacing:.06em;text-transform:uppercase;color:var(--t2)}
+.fp .t2{color:var(--t2)} .fp .t3{color:var(--t3)} .fp .pos{color:var(--pos)} .fp .neg{color:var(--neg)} .fp .bt{color:var(--brand-text)}
+.fp button{font-family:inherit;color:inherit}
+
+/* teléfono */
+.screens{display:grid;gap:56px;margin-top:24px}
+.screen-item{display:grid;grid-template-columns:minmax(0,390px) minmax(0,1fr);gap:40px;align-items:start}
+@media (max-width:860px){.screen-item{grid-template-columns:minmax(0,1fr)}}
+.phone{width:min(390px,100%);height:844px;border-radius:52px;padding:9px;background:var(--bezel);box-shadow:0 30px 60px -20px rgba(0,0,0,.35),0 0 0 1px var(--pg-line)}
+.scr{position:relative;height:100%;border-radius:44px;overflow:hidden;background:var(--bg)}
+.island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:108px;height:31px;border-radius:20px;background:#000;z-index:9}
+.status{position:absolute;top:0;left:0;right:0;height:50px;display:flex;justify-content:space-between;align-items:center;padding:4px 30px 0;font:600 15px/1 var(--f-text);color:var(--t1);z-index:8;background:linear-gradient(var(--bg) 60%,transparent)}
+.status .sig{display:flex;gap:5px;align-items:center}
+.status .sig i{display:block;background:var(--t1);border-radius:2px}
+.scroll{position:absolute;inset:0;overflow-y:auto;padding:54px 16px 112px;scrollbar-width:none;display:flex;flex-direction:column;gap:12px}
+.scroll::-webkit-scrollbar{display:none}
+.scroll>*,.sh-body>*{flex-shrink:0}
+.notes h3{font-size:24px;margin-bottom:6px}
+.notes ul{margin:12px 0 0;padding-left:18px;display:grid;gap:8px;font-size:14.5px}
+.notes li::marker{color:var(--pg-accent)}
+.notes .before{margin-top:16px;font-size:13px;color:var(--pg-fg3)}
+
+/* barra superior */
+.bar{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+.month{display:flex;align-items:center;gap:2px}
+.month h4{margin:0;font:600 20px/1 var(--f-num);letter-spacing:-.01em;padding:0 2px;white-space:nowrap}
+.month .icb{width:32px}
+.icb{width:36px;height:36px;border-radius:50%;border:0;background:var(--s2);display:grid;place-items:center;color:var(--t2);cursor:pointer;transition:transform .12s,background .12s}
+.icb.ghost{background:transparent}
+.icb:active{transform:scale(.92)}
+.mseg{display:inline-flex;background:var(--s2);border-radius:999px;padding:3px}
+.mseg button{border:0;background:transparent;font:600 12px/1 var(--f-text);color:var(--t2);padding:8px 10px;border-radius:999px;cursor:pointer}
+.mseg button.on{background:var(--s1);color:var(--t1);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.fp.is-light .mseg button.on{box-shadow:0 1px 3px rgba(15,23,42,.15)}
+.largetitle{font:600 30px/1.1 var(--f-num);letter-spacing:-.015em;margin:2px 0 0}
+
+/* tarjetas */
+.card{background:var(--s1);border-radius:16px;padding:16px;box-shadow:var(--card-shadow)}
+.card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.card-h h5{margin:0;font:600 15px/1.2 var(--f-text)}
+.link{font:600 13px/1 var(--f-text);color:var(--brand-text);text-decoration:none;display:inline-flex;align-items:center;gap:2px}
+.hero{border-radius:24px;padding:20px;background:radial-gradient(120% 90% at 100% 0%,var(--brand-soft),transparent 58%),var(--s1);box-shadow:var(--card-shadow)}
+.big{font:600 46px/1 var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin:8px 0 6px;display:flex;align-items:baseline;gap:4px}
+.big small{font-size:26px;color:var(--t2);font-weight:500}
+.stack{display:flex;height:10px;border-radius:99px;overflow:hidden;gap:2px;background:var(--s2)}
+.stack i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font:500 12px/1.2 var(--f-text);color:var(--t2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:8px;height:8px;border-radius:50%}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.stats>div{padding:0 10px;display:grid;gap:4px;min-width:0}
+.stats>div:first-child{padding-left:0}
+.stats>div+div{border-left:1px solid var(--line)}
+.stats .lbl{font:500 12px/1.2 var(--f-text);color:var(--t2);display:flex;align-items:center;gap:5px}
+.stats .val{font-size:17px;white-space:nowrap}
+.dchip{display:inline-flex;align-items:center;gap:2px;font:600 11.5px/1 var(--f-text);padding:4px 6px;border-radius:6px;justify-self:start;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dchip.bad{background:var(--neg-soft);color:var(--neg)}
+.dchip.good{background:var(--brand-soft);color:var(--brand-text)}
+.dchip.flat{background:var(--s2);color:var(--t2)}
+
+/* listas */
+.group{background:var(--s1);border-radius:16px;overflow:hidden;box-shadow:var(--card-shadow)}
+.row{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 14px;min-height:60px;text-align:left;width:100%;border:0;background:transparent}
+.row+.row::before{content:"";position:absolute;top:0;left:62px;right:0;height:1px;background:var(--line)}
+.row .tt{font:600 15px/1.25 var(--f-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .st{font:400 13px/1.3 var(--f-text);color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.row .amt{text-align:right;display:grid;gap:2px;justify-items:end}
+.row .amt .num{font-size:16px}
+.row .amt small{font:400 12px/1.2 var(--f-text);color:var(--t3);font-variant-numeric:tabular-nums}
+.cic{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--c,var(--t2));background:color-mix(in srgb,var(--c,var(--t3)) 18%,transparent)}
+.cic .ic{width:18px;height:18px}
+.chev{color:var(--t3);width:16px;height:16px}
+.dayh{position:sticky;top:48px;z-index:3;display:flex;justify-content:space-between;align-items:baseline;padding:10px 4px 8px;background:var(--bg);font:600 13px/1 var(--f-text);color:var(--t2)}
+.dayh .num{font-size:13px;color:var(--t3);font-weight:500}
+.sched .group{background:transparent;border:1.5px dashed var(--line);box-shadow:none}
+.fp.is-light .sched .group{border-color:rgba(15,23,42,.14)}
+.pill{display:inline-flex;align-items:center;gap:4px;font:600 11px/1 var(--f-text);padding:4px 7px;border-radius:999px;background:var(--s2);color:var(--t2)}
+
+/* buscador + chips */
+.search{display:flex;align-items:center;gap:8px;height:40px;border-radius:12px;background:var(--s2);padding:0 12px;color:var(--t3);font-size:16px}
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--s1);font:500 13.5px/1 var(--f-text);color:var(--t1);cursor:pointer}
+.chip.on{background:var(--t1);color:var(--bg);border-color:transparent}
+.chip .ic{width:16px;height:16px}
+
+/* segmentado */
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--s2);border-radius:12px;padding:3px}
+.seg button{border:0;background:transparent;height:34px;border-radius:9px;font:600 14px/1 var(--f-text);color:var(--t2);cursor:pointer;transition:background .18s,color .18s}
+.seg button.on{background:var(--s1);color:var(--t1);box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.fp.is-light .seg button.on{box-shadow:0 1px 3px rgba(15,23,42,.14)}
+.seg.neg button.on{color:var(--neg)}
+
+/* botones */
+.btn{height:50px;border-radius:14px;border:0;font:600 16px/1 var(--f-text);display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 18px;cursor:pointer;transition:transform .12s,background .12s}
+.btn:active{transform:scale(.97)}
+.btn.pri{background:var(--brand);color:var(--on-brand)}
+.btn.pri:active{background:var(--brand-press)}
+.btn.sec{background:var(--s2);color:var(--t1)}
+.btn.ter{background:transparent;color:var(--brand-text);height:44px}
+.btn.dst{background:var(--neg-soft);color:var(--neg)}
+.btn.sm{height:40px;font-size:14px;border-radius:12px;padding:0 14px}
+.btn.full{width:100%}
+
+/* tab bar */
+.tabbar{position:absolute;left:0;right:0;bottom:0;z-index:7;height:86px;padding:8px 6px 28px;display:grid;grid-template-columns:repeat(5,1fr);align-items:start;background:var(--glass);-webkit-backdrop-filter:blur(22px) saturate(1.6);backdrop-filter:blur(22px) saturate(1.6);border-top:1px solid var(--line)}
+.tab{display:grid;justify-items:center;gap:4px;font:600 11px/1 var(--f-text);color:var(--t3);border:0;background:transparent;padding-top:2px}
+.tab .ic{width:24px;height:24px}
+.tab.on{color:var(--brand-text)}
+.fab{justify-self:center;margin-top:-4px;width:52px;height:52px;border-radius:18px;background:var(--brand);color:var(--on-brand);display:grid;place-items:center;border:0;box-shadow:0 6px 18px -4px color-mix(in srgb,var(--brand) 60%,transparent);cursor:pointer;transition:transform .15s}
+.fab:active{transform:scale(.92)}
+.fab .ic{width:26px;height:26px;stroke-width:2.4}
+
+/* sheet */
+.behind{position:absolute;left:10px;right:10px;top:46px;height:60px;border-radius:22px 22px 0 0;background:var(--s2);opacity:.6}
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:1}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:58px;z-index:2;background:var(--s1);border-radius:26px 26px 0 0;box-shadow:var(--sheet-shadow);display:flex;flex-direction:column;overflow:hidden}
+.fp.is-light .sheet{background:var(--bg)}
+.grab{width:38px;height:5px;border-radius:9px;background:var(--s3);margin:8px auto 2px;flex:none}
+.sh-h{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;padding:4px 10px 8px;flex:none}
+.sh-h h5{margin:0;text-align:center;font:600 17px/1.2 var(--f-text)}
+.sh-body{flex:1;overflow-y:auto;padding:0 16px 28px;display:flex;flex-direction:column;gap:12px;scrollbar-width:none}
+.sh-body::-webkit-scrollbar{display:none}
+
+/* carga */
+.amount{display:grid;justify-items:center;gap:6px;padding:6px 0 2px}
+.amount .val{font:600 50px/1 var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.02em;display:flex;align-items:baseline;gap:6px;max-width:100%;overflow:hidden}
+.amount .val small{font-size:28px;color:var(--t3);font-weight:500}
+.amount .caret{width:2px;height:40px;background:var(--brand);align-self:center;animation:blink 1s steps(1) infinite;border-radius:2px}
+@keyframes blink{50%{opacity:0}}
+.cur{display:inline-flex;align-items:center;gap:6px;font:600 12px/1 var(--f-text);color:var(--t2);background:var(--s2);border-radius:999px;padding:6px 10px;border:0;cursor:pointer}
+.catgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 4px}
+.catb{display:grid;justify-items:center;gap:5px;border:0;background:transparent;padding:4px 0;font:500 12px/1.1 var(--f-text);color:var(--t2);cursor:pointer}
+.catb .cic{width:44px;height:44px;transition:transform .15s,box-shadow .15s}
+.catb .cic .ic{width:20px;height:20px}
+.catb.on{color:var(--t1)}
+.catb.on .cic{box-shadow:0 0 0 2px var(--s1),0 0 0 4px var(--c);transform:scale(1.04)}
+.fp.is-light .catb.on .cic{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--c)}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex:none;padding:0 12px}
+.key{height:46px;border-radius:12px;border:0;background:var(--s2);font:500 22px/1 var(--f-num);color:var(--t1);cursor:pointer;display:grid;place-items:center;transition:background .08s,transform .08s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.key:active{background:var(--s3);transform:scale(.96)}
+.key.op{background:transparent;color:var(--brand-text);font-size:24px}
+.fp.is-light .key{background:var(--s1);box-shadow:0 1px 0 rgba(15,23,42,.08)}
+.fp.is-light .key.op{background:transparent;box-shadow:none}
+.savebar{padding:10px 12px 30px;flex:none}
+
+/* barras de categorías */
+.barline{height:6px;border-radius:9px;background:var(--s2);overflow:hidden;margin-top:6px}
+.barline i{display:block;height:100%;border-radius:9px;background:var(--c)}
+.crow{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;position:relative}
+.crow+.crow::before{content:"";position:absolute;top:0;left:62px;right:0;height:1px;background:var(--line)}
+.crow .l1{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.crow .l1 b{font:600 15px/1.2 var(--f-text)}
+.crow .l1 .num{font-size:16px}
+.crow .l2{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font:500 12px/1 var(--f-text);color:var(--t2)}
+.crow.sub{padding:10px 44px 10px 62px;display:block}
+.crow.sub::before{left:62px}
+.crow.sub b{font-weight:500;color:var(--t2)}
+.expanded{background:color-mix(in srgb,var(--s2) 55%,transparent)}
+
+/* gráficos */
+.chart text{font-family:var(--f-text);font-size:11px;fill:var(--t3)}
+.chart .lab{fill:var(--t2);font-weight:600}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.hatch-a{stroke:var(--brand);opacity:.55}
+.statusbox{border-radius:18px;padding:16px;background:var(--brand-soft);display:grid;gap:6px}
+.statusbox .k{display:flex;align-items:center;gap:6px;font:700 12px/1 var(--f-text);letter-spacing:.06em;text-transform:uppercase;color:var(--brand-text)}
+.gauge{position:relative;height:84px;margin-top:4px}
+.gauge .track{position:absolute;left:0;right:0;top:34px;height:14px;border-radius:99px;background:var(--s2);overflow:hidden;display:flex}
+.gauge .track i{display:block;height:100%}
+.gauge .mk{position:absolute;top:26px;width:2px;height:30px;border-radius:2px}
+.gauge .ml{position:absolute;font:500 11.5px/1.25 var(--f-text);color:var(--t2);white-space:nowrap;transform:translateX(-50%)}
+.gauge .ml b{display:block;color:var(--t1);font:600 12.5px/1.2 var(--f-num);font-variant-numeric:tabular-nums}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpis>div{background:var(--s2);border-radius:12px;padding:10px;display:grid;gap:4px;min-width:0}
+.fp.is-light .kpis>div{background:var(--s1);box-shadow:var(--card-shadow)}
+.kpis span{font:500 11.5px/1.2 var(--f-text);color:var(--t2)}
+.kpis .num{font-size:16px;white-space:nowrap}
+.av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font:700 13px/1 var(--f-text);color:#0A0E1A;border:2px solid var(--s1)}
+.avs{display:flex}.avs .av+.av{margin-left:-8px}
+.insight{display:grid;grid-template-columns:36px minmax(0,1fr) 16px;gap:12px;align-items:center;padding:11px 14px;position:relative}
+.insight+.insight::before{content:"";position:absolute;top:0;left:62px;right:0;height:1px;background:var(--line)}
+.insight .tt{font:600 14.5px/1.25 var(--f-text)}
+.insight .st{font:400 13px/1.3 var(--f-text);color:var(--t2);margin-top:2px}
+
+/* blur montos */
+.fp.hide .money{filter:blur(7px);transition:filter .25s}
+.fp .money{transition:filter .25s}
+
+/* galería de componentes */
+.gallery{border-radius:20px;padding:20px;background:var(--bg);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;border:1px solid var(--pg-line)}
+.gallery .gx{display:grid;gap:10px;align-content:start}
+.gallery .gx>.ovl{margin-bottom:2px}
+.dodont{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dodont>div{background:var(--s1);border-radius:12px;padding:10px;box-shadow:var(--card-shadow)}
+.dodont p{margin:6px 0 0;font:600 12px/1.2 var(--f-text)}
+
+/* micro */
+.micro{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:12px}
+.mi{background:var(--pg-surface);border:1px solid var(--pg-line);border-radius:16px;padding:18px 20px;display:grid;gap:8px;align-content:start}
+.mi h3{font-size:18px}
+.mi p{font-size:14.5px;color:var(--pg-fg2);margin:0}
+.mi pre{margin:4px 0 0;background:var(--pg-code);color:var(--pg-code-fg);border-radius:10px;padding:12px;overflow-x:auto;font:12px/1.55 ui-monospace,Menlo,monospace}
+.demo-press{justify-self:start;margin-top:6px}
+:focus-visible{outline:2px solid var(--pg-accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* hero de Inicio fiel al actual */
+.brandmark{display:flex;align-items:center;gap:10px}
+.brandmark b{font:600 19px/1 var(--f-num)}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--s2);display:grid;place-items:center;font:700 15px/1 var(--f-num);color:var(--brand-text)}
+.hero2{border-radius:22px;overflow:hidden;background:var(--s1);box-shadow:var(--card-shadow)}
+.hz-top{position:relative;display:flex;align-items:center;gap:8px;padding:16px 16px 30px;background:linear-gradient(135deg,#06775A,#04573F);color:#fff}
+.hz-top h4{margin:0;font:600 19px/1 var(--f-num);color:#fff}
+.icb.glass{background:rgba(255,255,255,.16);color:#fff;width:34px;height:34px}
+.hz-top .wave{position:absolute;left:0;right:0;bottom:-1px;width:100%;height:26px}
+.hz-body{padding:16px;background:radial-gradient(120% 70% at 100% 0%,var(--brand-soft),transparent 60%)}
+.saldo-row{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:8px;align-items:center}
+.hero2 .big{font-size:40px;margin:6px 0 10px}
+.hero2 .big small{font-size:24px}
+.kv{display:flex;align-items:center;gap:7px;font:400 14px/1.6 var(--f-text);color:var(--t2)}
+.kv i{width:8px;height:8px;border-radius:50%}
+.kv b{color:var(--t1);font-weight:600}
+.ring{position:relative;width:120px;height:120px}
+.ring-c{position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:2px}
+.ring-c .num{font-size:15px;white-space:nowrap}
+.ring-c small{font:500 11px/1 var(--f-text);color:var(--t2)}
+.minis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.minis>div{background:var(--s2);border-radius:14px;padding:10px;display:grid;gap:5px;min-width:0}
+.fp.is-light .minis>div{background:var(--bg)}
+.minis .lbl{display:flex;align-items:center;gap:6px;font:500 12.5px/1 var(--f-text);color:var(--t2)}
+.dotic{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--c);color:var(--bg);flex:none}
+.dotic .ic{width:13px;height:13px;stroke-width:2.4}
+.minis .val{font-size:15px;white-space:nowrap}
+.minis .dl{font:600 11px/1.2 var(--f-text);font-variant-numeric:tabular-nums}
+.subs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:-2px}
+.subl{font:600 12px/1 var(--f-text);color:var(--t2);margin-right:2px}
+.chip.sm{height:30px;font-size:13px;padding:0 11px}
+.chip.on .ic{color:inherit}
+.minis .dl{white-space:nowrap}
+.sheet .amount .val{font-size:44px}
+.sheet .amount{padding:0}
+.sheet .sh-body{gap:10px}
+.sheet .key{height:42px}
+.sheet .catb .cic{width:40px;height:40px}
+.sheet .savebar{padding:8px 12px 24px}
+.catgrid.swap .catb{animation:catin .22s ease-out both}
+.catgrid.swap .catb:nth-child(2){animation-delay:.03s}.catgrid.swap .catb:nth-child(3){animation-delay:.06s}.catgrid.swap .catb:nth-child(4){animation-delay:.09s}
+@keyframes catin{from{opacity:0;transform:scale(.85)}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+ <defs>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-moves" viewBox="0 0 24 24"><path d="M7 20V4M3 8l4-4 4 4M17 4v16M13 16l4 4 4-4"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6 15h4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7c1.9 0 3.5-.6 4.9-1.4M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+  <symbol id="i-cl" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-cr" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+  <symbol id="i-cd" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.8-3.8"/></symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24"><path d="M5.5 8h13l-1 13h-11z"/><path d="M9 8a3 3 0 0 1 6 0"/></symbol>
+  <symbol id="i-food" viewBox="0 0 24 24"><path d="M7 3v18M4.5 3v5a2.5 2.5 0 0 0 5 0V3M17 21V3c-2.5 1.5-3.5 5-3.5 8H17"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M4 16v-4l2-5.5h12L20 12v4zM4 16v2.5M20 16v2.5M4 12h16"/><circle cx="8" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2.5 3.5h3l2.4 11.5h11l2-8.5H6.4"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24"><rect x="3.5" y="8" width="17" height="4.5" rx="1"/><path d="M5.5 12.5V21h13v-8.5M12 8v13M12 8C10.5 4 7 4 7 6s2.5 2 5 2zm0 0c1.5-4 5-4 5-2s-2.5 2-5 2z"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2.5l3.5 3.5L17 9.5M3.5 11V9.5A3.5 3.5 0 0 1 7 6h13.5M7 21.5L3.5 18 7 14.5M20.5 13v1.5A3.5 3.5 0 0 1 17 18H3.5"/></symbol>
+  <symbol id="i-in" viewBox="0 0 24 24"><path d="M17 7 7 17M7 8.5V17h8.5"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M3 7l6 6 4-4 8 8M15 17h6v-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16.2 9.6"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 7.5V6a2 2 0 0 1 2-2h11v3.5"/><rect x="3.5" y="7.5" width="17" height="12.5" rx="2.5"/><circle cx="16.5" cy="13.8" r="1.1"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 4h14v11l-5 5H5z"/><path d="M14 20v-5h5M8.5 9h7M8.5 12.5h4"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M21 5H8.5L2.5 12l6 7H21z"/><path d="M12.5 9l5.5 6M18 9l-5.5 6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4 3.5 7.5 7 11M3.5 7.5h17M17 13l3.5 3.5L17 20M20.5 16.5h-17"/></symbol>
+  <symbol id="i-dollar" viewBox="0 0 24 24"><path d="M12 3v18M16.5 7.5c0-1.7-2-2.8-4.5-2.8S7.5 5.8 7.5 7.6s2 2.5 4.5 3.2 4.5 1.5 4.5 3.4-2 3-4.5 3-4.5-1.1-4.5-2.9"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6a5 5 0 0 1 5.5 5.4"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 24 24"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3.5c0 1.2 1 1.6 1 3M12 3.5c0 1.2 1 1.6 1 3"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12z"/></symbol>
+  <symbol id="i-fuel" viewBox="0 0 24 24"><rect x="4" y="3.5" width="10" height="17" rx="2"/><path d="M4 10h10M14 8l3.5 3v6a1.5 1.5 0 0 0 3 0V9L18 6.5"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.8 16a5 5 0 0 1 6.4 0"/><circle cx="12" cy="19.3" r=".9"/></symbol>
+  <symbol id="i-scooter" viewBox="0 0 24 24"><circle cx="6" cy="17.5" r="2.5"/><circle cx="18" cy="17.5" r="2.5"/><path d="M8.5 17.5h7l-2-8h-3M15.5 9.5h3l1.5 5.5M4 12.5h6"/></symbol>
+  <symbol id="i-dots-v" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/></symbol>
+ </defs>
+</svg>
+
+<div class="wrap">
+ <header class="top">
+  <span class="eyebrow">Revisión de diseño · octubre 2026</span>
+  <h1>FinPep, más clara y más app</h1>
+  <p class="lede">Diagnóstico de las 27 pantallas actuales, recomendaciones ordenadas por impacto, un sistema de diseño listo para pasar a CSS y seis pantallas rediseñadas en formato iPhone. Todo se puede armar con HTML y CSS a mano, sin librerías.</p>
+  <div class="meta"><span>Base: 390 px, modo oscuro por defecto</span><span>Tipografías: Inter + Barlow</span><span>Datos: tus movimientos de octubre 2026</span></div>
+ </header>
+</div>
+<div class="toc"><div class="wrap" style="padding-block:0"><nav aria-label="Secciones">
+ <a href="#diagnostico">1 · Diagnóstico</a><a href="#recomendaciones">2 · Prioridades</a><a href="#sistema">3 · Sistema de diseño</a><a href="#pantallas">4 · Pantallas</a><a href="#micro">5 · Detalles nativos</a>
+</nav></div></div>
+
+<div class="wrap">
+
+<!-- ============ 1. DIAGNÓSTICO ============ -->
+<section class="sec" id="diagnostico">
+ <div class="sec-head prose">
+  <span class="eyebrow">1 · Diagnóstico</span>
+  <h2>Mucha app adentro, poca jerarquía afuera</h2>
+  <p class="muted">FinPep resuelve cosas que casi ninguna app de finanzas resuelve bien para Argentina. El problema no es de funciones sino de presentación: casi todo tiene el mismo peso visual, el verde y el rojo se usan para demasiadas cosas a la vez y algunos gráficos cuestan más de lo que aportan en una pantalla de celular.</p>
+ </div>
+ <div class="two">
+  <div class="panel">
+   <h3>Lo que funciona</h3>
+   <ul class="ticks">
+    <li>La lógica argentina está resuelta: pesos y dólares con el TC guardado en cada movimiento, cuotas, fijos semanales y resúmenes con fechas reales de cierre y vencimiento.</li>
+    <li>"Cómo vengo" con proyección al cierre es la mejor idea de la app. Responde la pregunta que de verdad importa: ¿cómo voy a llegar al resumen?</li>
+    <li>Los mensajes en lenguaje natural ("Vas bien. Al ritmo actual cerrás en…") son cercanos y fáciles de entender.</li>
+    <li>El equivalente en dólares debajo de cada monto (≈ US$ 24) es discreto y útil.</li>
+    <li>La base visual tiene personalidad: azul noche + verde se lee "finanzas" sin ser fría. Los radios de las tarjetas son bastante consistentes.</li>
+    <li>Buenos detalles para construir encima: el ojo que oculta montos, la calculadora en la carga, la línea de tiempo cierre → vencimiento y el Gantt de cuotas.</li>
+   </ul>
+  </div>
+  <div class="panel">
+   <h3>Lo que no</h3>
+   <ul class="ticks bad">
+    <li>Cargar un gasto lleva 6 pasos en un pop-up centrado. Es la acción que hacés varias veces por día.</li>
+    <li>Todo gasto es rojo. Si todo alarma, nada alarma: las alertas reales (Compras +124%) compiten con una nafta normal.</li>
+    <li>Los colores de categoría cambian según la pantalla (Compras es amarillo en Inicio y celeste en la torta; Auto, azul o amarillo).</li>
+    <li>Los números no cierran entre pantallas: Casa es 59% en Inicio y 57% en Categorías, porque Inicio calcula el % sobre las 5 categorías que muestra. El total de gastos de Inicio ($ 1.898.703) tampoco coincide con el de Categorías ($ 937.810) y la pantalla no explica por qué.</li>
+    <li>Las comparaciones "vs. mes anterior" ponen el mes en curso (día 19) contra septiembre completo. Por eso aparecen "▼100%" en categorías que todavía no tuvieron gastos.</li>
+    <li>Hay movimientos futuros (29/10, 23/10) mezclados con los pasados, sin nada que los distinga.</li>
+   </ul>
+  </div>
+ </div>
+
+ <div class="score" role="table" aria-label="Diagnóstico por dimensión">
+  <div class="score-row" role="row"><b role="cell">Jerarquía visual</b><span class="tag warn" role="cell">Mejorable</span><p role="cell">El verde saturado está en el hero, el botón, el saldo, la pestaña activa, la barra de Casa y los links: el ojo no sabe adónde ir. El botón "Añadir movimiento" ocupa una franja entera en el mejor lugar de la pantalla, y en Inicio conviven 8 bloques con el mismo peso.</p></div>
+  <div class="score-row" role="row"><b role="cell">Consistencia</b><span class="tag crit" role="cell">Crítico</span><p role="cell">Colores de categoría distintos según la pantalla. La deuda con Ana es roja en Inicio y aparece sobre un hero verde en Compartido. Los pop-ups cierran de tres formas (Eliminar / Cancelar / Editar, Cerrar, Activar + Cerrar). Movimientos usa selects nativos y el resto, pills.</p></div>
+  <div class="score-row" role="row"><b role="cell">Densidad</b><span class="tag warn" role="cell">Mejorable</span><p role="cell">Desparejo. Categorías tiene una tabla de 5 columnas en 390 px, con 6 filas en $ 0. "Cómo vengo" usa una leyenda de 5 ítems para una sola barra. En el otro extremo, Presupuestos y Fijos dejan media pantalla vacía sin sugerir nada.</p></div>
+  <div class="score-row" role="row"><b role="cell">Tipografía</b><span class="tag warn" role="cell">Mejorable</span><p role="cell">En las capturas los números no salen en Barlow, sino en una fuente de sistema: revisá que cargue también sin conexión. No hay una escala clara: hay textos de 9 a 10 px (etiquetas en mayúscula, ejes de gráficos) y saltos bruscos (el saldo en 40 px al lado de textos de 13 px). Faltan cifras tabulares en las columnas.</p></div>
+  <div class="score-row" role="row"><b role="cell">Espaciado</b><span class="tag warn" role="cell">Mejorable</span><p role="cell">El padding cambia de tarjeta en tarjeta, hay cajas dentro de cajas (hero → tarjeta de Ingresos → chip) y en Movimientos cada día es una tarjeta aparte, lo que fragmenta la lista y gasta altura.</p></div>
+  <div class="score-row" role="row"><b role="cell">Color y contraste</b><span class="tag crit" role="cell">Crítico en claro</span><p role="cell">El verde #08D59D como texto sobre blanco da 1,9:1 (WCAG pide 4,5:1): afecta links, "6%" y montos positivos. El texto blanco sobre el verde del hero da 4,25:1. En oscuro el contraste general está bien (texto secundario ≈ 5,7:1), pero el rojo en todos los gastos y los 12 fondos tintados de la tabla de Categorías meten mucho ruido.</p></div>
+  <div class="score-row" role="row"><b role="cell">Gráficos</b><span class="tag crit" role="cell">Crítico</span><p role="cell">La torta 3D distorsiona las proporciones. Los ejes miden 6 a 7 px. Las curvas suavizadas inventan valores (Ana "gasta" antes de agosto). Hay gráficos de líneas para 3 o 4 puntos, etiquetas que se pisan en Cuotas ("144 mil 162 mil") y el Gantt se corta a la derecha.</p></div>
+  <div class="score-row" role="row"><b role="cell">Legibilidad en el celular</b><span class="tag warn" role="cell">Mejorable</span><p role="cell">La barra inferior flota sin desenfoque y tapa contenido. Hay botones de menos de 44 px (Editar / Eliminar ≈ 28 px, flechas ↑↓ ≈ 24 px), botones de 10 px en Ajustes y textos cortados ("Macro - Crédito …", "Fondo emergen…").</p></div>
+ </div>
+</section>
+
+<!-- ============ 2. RECOMENDACIONES ============ -->
+<section class="sec" id="recomendaciones">
+ <div class="sec-head prose">
+  <span class="eyebrow">2 · Recomendaciones priorizadas</span>
+  <h2>De mayor a menor impacto</h2>
+  <p class="muted">Las primeras seis cambian cómo se siente la app todos los días. El esfuerzo es una estimación para tu stack (HTML/CSS/JS a mano).</p>
+ </div>
+ <div class="recs">
+  <div class="tier">Impacto alto</div>
+  <article class="rec"><h3>Cargar un movimiento en una sola pantalla</h3>
+   <div class="where"><span>Cargar movimiento</span><span>Barra inferior</span></div>
+   <dl><dt>Problema</dt><dd>Seis pasos (tipo → fecha → monto → categoría → …) en un modal centrado que tapa la pantalla de atrás. Un gasto de todos los días lleva más de 8 toques.</dd>
+   <dt>Solución</dt><dd>Un bottom sheet que arranca en el monto con el teclado ya abierto. Arriba, el tipo como control segmentado (Gasto por defecto). Fecha, cuenta, cuotas y nota pasan a ser chips con valores por defecto (hoy, la última cuenta usada, 1 pago). Debajo, las 8 categorías más usadas con ícono y color, y "Guardar" siempre visible. El botón + pasa al centro de la barra inferior. Meta: monto + categoría + Guardar.</dd></dl>
+   <span class="effort">Esfuerzo: medio · reutiliza tu calculadora</span></article>
+
+  <article class="rec"><h3>Dejar el rojo solo para las alertas</h3>
+   <div class="where"><span>Movimientos</span><span>Fijos</span><span>Calendario</span><span>Inicio</span><span>Detalle</span></div>
+   <dl><dt>Problema</dt><dd>Todos los gastos se muestran en rojo, entonces la app parece estar en alerta todo el tiempo y las alertas reales pierden fuerza.</dd>
+   <dt>Solución</dt><dd>Los gastos van en el color del texto con signo "−" y los ingresos en verde con "+". El rojo queda para lo que pide atención: un exceso, un vencimiento, un delta malo, una acción destructiva. El ámbar, para "ojo, todavía no es grave".</dd></dl>
+   <span class="effort">Esfuerzo: bajo · cambiar 2 o 3 clases</span></article>
+
+  <article class="rec"><h3>Un color fijo por categoría, en toda la app</h3>
+   <div class="where"><span>Inicio</span><span>Categorías</span><span>Ahorros</span><span>Movimientos</span></div>
+   <dl><dt>Problema</dt><dd>Compras es amarillo en Inicio y celeste en la torta, Auto es azul o amarillo según la pantalla, y Casa usa el mismo verde que la marca y los ingresos.</dd>
+   <dt>Solución</dt><dd>Una paleta de 6 colores de categoría más un gris para "Otros", sin verde. Cada categoría guarda su color (<code>cat.color</code>) y lo usan todos los gráficos, íconos y puntos. Las categorías que no entran en el top 6 del mes van a "Otros". El verde queda para marca, ingresos y "vas bien".</dd></dl>
+   <span class="effort">Esfuerzo: bajo</span></article>
+
+  <article class="rec"><h3>Gráficos que se lean en un celular</h3>
+   <div class="where"><span>Categorías</span><span>Inicio</span><span>Cuotas</span><span>Compartido</span><span>Cómo vengo</span></div>
+   <dl><dt>Problema</dt><dd>Torta 3D, ejes de 6 a 7 px, líneas suavizadas para 3 o 4 puntos, etiquetas superpuestas y leyendas separadas de los datos.</dd>
+   <dt>Solución</dt><dd>Cinco reglas: (1) nada en 3D, dona plana o barra apilada; (2) líneas suaves con marcadores para la evolución en el tiempo, con una curva que pasa por cada punto sin pasarse de los datos (la de hoy inventa valores entre un mes y otro), y barras para comparar montos; (3) texto de ejes de 11 px como mínimo, con 3 a 4 líneas de grilla; (4) la lista funciona como leyenda (punto de color + nombre + monto); (5) como mucho 2 gráficos en Inicio, el resto en su sección. En Compartido, los dos gráficos se fusionan en barras apiladas por persona.</dd></dl>
+   <span class="effort">Esfuerzo: medio · SVG a mano, sin librería</span></article>
+
+  <article class="rec"><h3>Arreglar el contraste del modo claro</h3>
+   <div class="where"><span>Todas las pantallas en claro</span></div>
+   <dl><dt>Problema</dt><dd>El verde de marca como texto sobre blanco da 1,9:1. Los links, porcentajes y montos positivos casi no se leen al sol.</dd>
+   <dt>Solución</dt><dd>Separar dos tokens: <code>--brand</code> (#10D39E) solo para rellenos, con texto oscuro encima (8,3:1), y <code>--brand-text</code> para texto verde: #10D39E en oscuro y #047857 en claro (5,5:1). Lo mismo para el rojo (#D93A3A en claro) y el ámbar (#B45309).</dd></dl>
+   <span class="effort">Esfuerzo: bajo</span></article>
+
+  <article class="rec"><h3>Inicio con un solo protagonista</h3>
+   <div class="where"><span>Inicio</span></div>
+   <dl><dt>Problema</dt><dd>El saldo, el anillo (con "$ 140.954" cortado), tres cajas, un botón gigante, dos gráficos chicos, tres alertas con emoji y dos gráficos de líneas ilegibles compiten entre sí.</dd>
+   <dt>Solución</dt><dd>El mes pasa a la barra superior. La tarjeta del saldo se queda como está hoy (saldo, anillo de "por día" y las tres tarjetitas), con el anillo más grande para que el número no se corte. El botón "Añadir movimiento" pasa al + de la barra inferior. Debajo: Compartido en una fila, gastos por categoría a todo el ancho, la tasa de ahorro en líneas suaves y, al final de la hoja, "Para tener en cuenta" con hasta 3 avisos de una línea e íconos en vez de emojis. "Balance por día" e "Ingresos vs. gastos" pasan a Movimientos › Categorías › General.</dd></dl>
+   <span class="effort">Esfuerzo: medio</span></article>
+
+  <div class="tier">Impacto medio</div>
+  <article class="rec"><h3>Movimientos como una lista continua</h3>
+   <div class="where"><span>Movimientos</span><span>Detalle</span></div>
+   <dl><dt>Problema</dt><dd>Una tarjeta por día, todos los íconos iguales (◇), tres selects nativos más un checkbox para filtrar, un botón "+ Movimiento" repetido y futuros mezclados con pasados.</dd>
+   <dt>Solución</dt><dd>Lista agrupada por día, con el encabezado fijo arriba (sticky) y el total del día. Un ícono de categoría con su color. Buscador y chips de filtro deslizables. Un bloque "Programados" arriba, con borde punteado, para cuotas y fijos que todavía no pasaron. Deslizar la fila para editar o borrar.</dd></dl>
+   <span class="effort">Esfuerzo: medio</span></article>
+
+  <article class="rec"><h3>Categorías: de tabla a lista</h3>
+   <div class="where"><span>Categorías · Gastos</span><span>Categorías · Ingresos</span></div>
+   <dl><dt>Problema</dt><dd>Cinco columnas en 390 px ("Entretenimien-to" se corta), filas con fondos de colores y 6 categorías en $ 0 ocupando lugar.</dd>
+   <dt>Solución</dt><dd>Filas de dos líneas: nombre y monto arriba; barra, % y variación abajo. El "% de ingresos" pasa al detalle. Las categorías sin gastos se agrupan en una fila plegada. Comparar contra el mismo día del mes anterior ("vs. sept al día 19") en vez de contra el mes completo.</dd></dl>
+   <span class="effort">Esfuerzo: medio · el cálculo a igual día es lo nuevo</span></article>
+
+  <article class="rec"><h3>Selector de mes compacto</h3>
+   <div class="where"><span>Inicio</span><span>Movimientos</span><span>Categorías</span><span>Calendario</span></div>
+   <dl><dt>Problema</dt><dd>El hero verde con olas ocupa unos 90 px en cada pantalla solo para decir "Octubre de 2026".</dd>
+   <dt>Solución</dt><dd>El mes como título de la barra superior, con chevrons, y se cambia deslizando horizontalmente. Recuperás casi una tarjeta entera de altura por pantalla. </dd></dl>
+   <span class="effort">Esfuerzo: bajo</span></article>
+
+  <article class="rec"><h3>Esconder lo destructivo</h3>
+   <div class="where"><span>Cuentas</span><span>Presupuestos</span><span>Fijos</span><span>Resúmenes</span><span>Compartido</span></div>
+   <dl><dt>Problema</dt><dd>"Eliminar" en cada tarjeta, X sueltas en presupuestos, fijos y resúmenes, flechas para reordenar siempre a la vista y "Salir del hogar" como link suelto.</dd>
+   <dt>Solución</dt><dd>Un menú "⋯" o el gesto de deslizar para editar y borrar. Reordenar en un modo "Editar". Al borrar, un aviso con "Deshacer" durante 5 segundos en vez de un diálogo de confirmación.</dd></dl>
+   <span class="effort">Esfuerzo: medio</span></article>
+
+  <article class="rec"><h3>Un solo patrón de pop-up</h3>
+   <div class="where"><span>Detalle</span><span>Resúmenes</span><span>Cómo vengo</span><span>Notificaciones</span><span>Ahorro</span></div>
+   <dl><dt>Problema</dt><dd>Modales centrados con pies distintos y, a veces, dos botones primarios (Activar notificaciones + Cerrar).</dd>
+   <dt>Solución</dt><dd>Todo como bottom sheet con agarradera arriba: se cierra deslizando hacia abajo o con la X. Un solo botón primario, abajo a todo el ancho. "Cancelar" se va, porque ya está la X.</dd></dl>
+   <span class="effort">Esfuerzo: medio · un componente para todos</span></article>
+
+  <div class="tier">Pulido</div>
+  <article class="rec"><h3>Escala tipográfica y números tabulares</h3>
+   <div class="where"><span>Toda la app</span></div>
+   <dl><dt>Problema</dt><dd>Diez tamaños distintos, textos de 9 px y números que "bailan" al cambiar.</dd>
+   <dt>Solución</dt><dd>Usar los 8 pasos de la escala de abajo y nada más. Barlow con <code>font-variant-numeric: tabular-nums</code> en todos los montos y archivos de fuente propios (self-hosted) para que funcione sin conexión.</dd></dl>
+   <span class="effort">Esfuerzo: bajo</span></article>
+
+  <article class="rec"><h3>Botones de 44 px y barra inferior con desenfoque</h3>
+   <div class="where"><span>Cuentas</span><span>Ajustes</span><span>Barra inferior</span></div>
+   <dl><dt>Problema</dt><dd>Botones de 24 a 28 px y una barra inferior que tapa contenido sin desenfocarlo.</dd>
+   <dt>Solución</dt><dd>Área táctil mínima de 44 × 44 px. La barra inferior pegada al borde, con <code>backdrop-filter</code> y padding de <code>env(safe-area-inset-bottom)</code>, y el contenido con padding inferior igual al alto de la barra.</dd></dl>
+   <span class="effort">Esfuerzo: bajo</span></article>
+
+  <article class="rec"><h3>Ajustes y notificaciones con lista agrupada</h3>
+   <div class="where"><span>Ajustes</span><span>Notificaciones</span></div>
+   <dl><dt>Problema</dt><dd>Once tarjetas con botoncitos, checkboxes y emojis.</dd>
+   <dt>Solución</dt><dd>Lista agrupada estilo iOS: filas con el valor a la derecha y un chevron, interruptores (<code>&lt;input type="checkbox" switch&gt;</code>) en vez de checkboxes e íconos SVG. Lo peligroso ("Borrar todos los datos", "Cerrar sesión") va al final, en un grupo aparte.</dd></dl>
+   <span class="effort">Esfuerzo: bajo</span></article>
+
+  <article class="rec"><h3>Estados vacíos que proponen algo</h3>
+   <div class="where"><span>Presupuestos</span><span>Fijos</span><span>Ahorros</span></div>
+   <dl><dt>Problema</dt><dd>Con 2 presupuestos queda media pantalla negra.</dd>
+   <dt>Solución</dt><dd>Sugerencias con tus datos: "Compras va $ 172.358 este mes. ¿Le ponés un presupuesto?", con un botón para crearlo de un toque.</dd></dl>
+   <span class="effort">Esfuerzo: bajo</span></article>
+ </div>
+</section>
+
+<!-- ============ 3. SISTEMA ============ -->
+<section class="sec" id="sistema">
+ <div class="sec-head prose">
+  <span class="eyebrow">3 · Sistema de diseño</span>
+  <h2>Tokens, escala y componentes</h2>
+  <p class="muted">Mismo carácter (azul noche + verde) con menos tonos y reglas claras sobre quién usa cada color. Cada muestra tiene dos mitades: la izquierda es el modo oscuro y la derecha, el claro.</p>
+ </div>
+
+ <div class="sub"><h3>Color</h3><p class="muted small">Regla principal: el verde de marca es para rellenar (botón primario, +, barra de "vas bien"); para texto verde se usa <code>--brand-text</code>. El rojo y el ámbar significan algo: no decoran.</p></div>
+ <div class="tokens">
+  <div class="tok"><div class="sw"><i style="background:#0A0E1A"></i><i style="background:#F3F5F8"></i></div><div><b>--bg</b><span>Fondo de pantalla</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#121826"></i><i style="background:#FFFFFF"></i></div><div><b>--s1</b><span>Tarjetas, grupos de lista, sheets</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#1A2133"></i><i style="background:#EEF1F5"></i></div><div><b>--s2</b><span>Inputs, segmentado, teclas, pistas de barras</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#232B40"></i><i style="background:#E2E7EE"></i></div><div><b>--s3</b><span>Estado presionado, agarradera</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#EEF2F7"></i><i style="background:#0F1726"></i></div><div><b>--t1</b><span>Texto principal · 17:1 en oscuro</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#A3ADBF"></i><i style="background:#4A5568"></i></div><div><b>--t2</b><span>Texto secundario · 7,8:1 / 7,5:1</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#7D889C"></i><i style="background:#6B7280"></i></div><div><b>--t3</b><span>Terciario, ejes, US$ · ≥ 4,8:1</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#10D39E"></i><i style="background:#10D39E"></i></div><div><b>--brand</b><span>Solo rellenos · texto encima #04261B</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#10D39E"></i><i style="background:#047857"></i></div><div><b>--brand-text</b><span>Links, ingresos, "+" · 5,5:1 en claro</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#123036"></i><i style="background:#E0F6EF"></i></div><div><b>--brand-soft</b><span>Fondo de "vas bien", chips buenos</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#FF6B6B"></i><i style="background:#D93A3A"></i></div><div><b>--neg</b><span>Alertas, deltas malos, borrar</span></div></div>
+  <div class="tok"><div class="sw"><i style="background:#F5B941"></i><i style="background:#B45309"></i></div><div><b>--warn</b><span>"Ojo": cerca del tope, vence pronto</span></div></div>
+ </div>
+ <p class="muted small" style="margin-top:16px;margin-bottom:0">Categorías (un color fijo por categoría, sin verde; las que no entran en el top 6 van a "Otros"):</p>
+ <div class="cats">
+  <span><i style="background:#6C8CFF"></i>Casa</span><span><i style="background:#F06EAA"></i>Compras</span><span><i style="background:#FF9466"></i>Comida</span><span><i style="background:#A78BFA"></i>Auto</span><span><i style="background:#4CC9F0"></i>Teléfono</span><span><i style="background:#E6C84F"></i>Supermercado</span><span><i style="background:#7D889C"></i>Otros</span>
+ </div>
+
+ <div class="codebox">
+  <button class="copy" type="button" data-copy="tokens-code">Copiar CSS</button>
+<pre class="code" id="tokens-code">:root {                       /* oscuro (por defecto) */
+  --bg: #0A0E1A;  --s1: #121826;  --s2: #1A2133;  --s3: #232B40;
+  --line: rgba(255,255,255,.07);
+  --t1: #EEF2F7;  --t2: #A3ADBF;  --t3: #7D889C;
+  --brand: #10D39E;  --brand-press: #0BB585;  --on-brand: #04261B;
+  --brand-text: #10D39E;  --brand-soft: rgba(16,211,158,.13);
+  --neg: #FF6B6B;  --neg-soft: rgba(255,107,107,.14);
+  --warn: #F5B941; --warn-soft: rgba(245,185,65,.14);
+  --c-casa:#6C8CFF; --c-compras:#F06EAA; --c-comida:#FF9466; --c-auto:#A78BFA;
+  --c-tel:#4CC9F0;  --c-super:#E6C84F;   --c-otros:#7D889C;
+  --glass: rgba(13,18,32,.74);
+  --shadow-card: none;
+  --shadow-sheet: 0 -12px 40px rgba(0,0,0,.55);
+
+  --f-text: "Inter", -apple-system, system-ui, sans-serif;
+  --f-num:  "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px;
+  --r-xs:6px; --r-sm:10px; --r-md:14px; --r-lg:16px; --r-xl:24px; --r-pill:999px;
+  --tabbar-h: calc(58px + env(safe-area-inset-bottom));
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --bg: #F3F5F8;  --s1: #FFFFFF;  --s2: #EEF1F5;  --s3: #E2E7EE;
+  --line: rgba(15,23,42,.08);
+  --t1: #0F1726;  --t2: #4A5568;  --t3: #6B7280;
+  --brand-text: #047857;  --brand-soft: rgba(16,185,129,.13);
+  --neg: #D93A3A;  --neg-soft: rgba(217,58,58,.10);
+  --warn: #B45309; --warn-soft: rgba(245,158,11,.15);
+  --c-casa:#4F6FE8; --c-compras:#D9468A; --c-comida:#E8703F; --c-auto:#8B5CF6;
+  --c-tel:#0EA5C9;  --c-super:#C9A21A;   --c-otros:#94A3B8;
+  --glass: rgba(246,248,251,.8);
+  --shadow-card: 0 1px 2px rgba(15,23,42,.06), 0 0 0 1px rgba(15,23,42,.04);
+  --shadow-sheet: 0 -12px 40px rgba(15,23,42,.16);
+  color-scheme: light;
+}
+.num { font-family: var(--f-num); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* ícono de categoría: el color sale de la categoría */
+.cic { color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }</pre>
+ </div>
+
+ <div class="sub"><h3>Escala tipográfica</h3><p class="muted small">Ocho pasos y nada más. Barlow para números y títulos, Inter para todo lo que se lee. Nunca menos de 11 px.</p></div>
+ <div class="scale">
+  <div class="scale-row"><code>display</code><span class="smp" style="font:600 46px/1 var(--f-num);letter-spacing:-.02em;font-variant-numeric:tabular-nums">$ 1.691.449</span><small>Barlow 600 · 46/48</small></div>
+  <div class="scale-row"><code>title-1</code><span class="smp" style="font:600 30px/1.1 var(--f-num)">Movimientos</span><small>Barlow 600 · 30/33</small></div>
+  <div class="scale-row"><code>title-2</code><span class="smp" style="font:600 22px/1.2 var(--f-num)">Octubre 2026</span><small>Barlow 600 · 22/26</small></div>
+  <div class="scale-row"><code>amount</code><span class="smp" style="font:600 17px/1.3 var(--f-num);font-variant-numeric:tabular-nums">$ 3.821.152</span><small>Barlow 600 · 16–17/22</small></div>
+  <div class="scale-row"><code>headline</code><span class="smp" style="font:600 15px/1.35 var(--f-text)">Supermercado</span><small>Inter 600 · 15/20</small></div>
+  <div class="scale-row"><code>body</code><span class="smp" style="font:400 15px/1.4 var(--f-text)">Al ritmo actual cerrás en $ 392.601.</span><small>Inter 400 · 15/21</small></div>
+  <div class="scale-row"><code>caption</code><span class="smp" style="font:400 13px/1.4 var(--f-text);color:var(--pg-fg2)">Hogar · Macro VISA · cuota 2/12</span><small>Inter 400–500 · 13/18</small></div>
+  <div class="scale-row"><code>label</code><span class="smp" style="font:600 11px/1.3 var(--f-text);letter-spacing:.06em;text-transform:uppercase;color:var(--pg-fg2)">Disponible este mes</span><small>Inter 600 · 11/14 · +6%</small></div>
+ </div>
+
+ <div class="sub"><h3>Espacios, radios y sombras</h3></div>
+ <div class="grid3">
+  <div class="panel"><h3 style="font-size:16px;margin-bottom:12px">Espaciado (base 4)</h3>
+   <div class="spc"><div>4<i style="width:4px"></i></div><div>8<i style="width:8px"></i></div><div>12<i style="width:12px"></i></div><div>16<i style="width:16px"></i></div><div>20<i style="width:20px"></i></div><div>24<i style="width:24px"></i></div><div>32<i style="width:32px"></i></div><div>40<i style="width:40px"></i></div></div>
+   <p class="small muted" style="margin:12px 0 0">16 de margen lateral y padding de tarjeta · 12 entre tarjetas · 24 entre secciones · 8 entre chips.</p></div>
+  <div class="panel"><h3 style="font-size:16px;margin-bottom:12px">Radios</h3>
+   <div class="radii"><div style="border-radius:6px">6 chip</div><div style="border-radius:10px">10 input</div><div style="border-radius:14px">14 botón</div><div style="border-radius:16px">16 tarjeta</div><div style="border-radius:24px">24 sheet</div><div style="border-radius:999px">pill</div></div>
+   <p class="small muted" style="margin:12px 0 0">Radio interno = radio externo − padding: una tarjeta de 16 con 4 de padding lleva elementos de 12.</p></div>
+  <div class="panel"><h3 style="font-size:16px;margin-bottom:12px">Elevación</h3>
+   <p class="small" style="margin:0 0 8px"><b>Oscuro:</b> sin sombras en tarjetas. La elevación se marca aclarando la superficie (bg → s1 → s2). Solo los sheets llevan sombra.</p>
+   <p class="small" style="margin:0 0 8px"><b>Claro:</b> sombra mínima + borde de 1 px muy suave en las tarjetas; los sheets llevan sombra amplia hacia arriba.</p>
+   <p class="small muted" style="margin:0">Nada de bordes de color a la izquierda de las tarjetas (hoy en Cuentas y Ahorros): el color va en el ícono o en la barra.</p></div>
+ </div>
+
+ <div class="sub"><h3>Componentes</h3><p class="muted small">Vistos con los tokens de la app. El selector de la sección 4 también cambia esta galería a claro.</p></div>
+ <div class="fp gallery" id="gallery">
+  <div class="gx">
+   <span class="ovl">Lista de movimientos</span>
+   <div class="group">
+    <div class="row"><span class="cic" style="--c:var(--c-casa)"><svg class="ic"><use href="#i-home"/></svg></span><div style="min-width:0"><div class="tt">Vajillas</div><div class="st">Hogar · Macro VISA · cuota 2/12</div></div><div class="amt"><span class="num money">− $ 36.347</span><small class="money">US$ 24</small></div></div>
+    <div class="row"><span class="cic" style="--c:var(--brand-text)"><svg class="ic"><use href="#i-in"/></svg></span><div style="min-width:0"><div class="tt">Sueldo AA</div><div class="st">Banco Macro</div></div><div class="amt"><span class="num pos money">+ $ 2.683.509</span><small class="money">US$ 1.743</small></div></div>
+   </div>
+   <p class="t2" style="font-size:12.5px;margin:0">Ícono de 36 px con el color de la categoría al 18%. Monto en Barlow tabular a la derecha y el equivalente en US$ debajo. El gasto va en el color del texto, nunca en rojo.</p>
+  </div>
+  <div class="gx">
+   <span class="ovl">Botones</span>
+   <button class="btn pri full" type="button">Guardar gasto</button>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn sec" type="button">Secundario</button><button class="btn dst" type="button">Eliminar</button></div>
+   <button class="btn ter" type="button" style="justify-self:start;padding:0">Terciario / link</button>
+   <p class="t2" style="font-size:12.5px;margin:0">Un solo primario por pantalla. 50 px de alto (40 px en el chico). Al tocarlo se achica a 0,97.</p>
+  </div>
+  <div class="gx">
+   <span class="ovl">Segmentado, filtros y variación</span>
+   <div class="seg" data-seg><button class="on" type="button">Gastos</button><button type="button">Ingresos</button></div>
+   <div class="chips" style="margin:0;padding:0"><button class="chip on" type="button">Todos</button><button class="chip" type="button">Gastos</button><button class="chip" type="button">Macro VISA</button><button class="chip" type="button">Categoría <svg class="ic"><use href="#i-cd"/></svg></button></div>
+   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="dchip bad">▲ 124%</span><span class="dchip good">▼ 15%</span><span class="dchip flat">= 0%</span><span class="pill"><svg class="ic" style="width:12px;height:12px"><use href="#i-repeat"/></svg>Programado</span></div>
+   <p class="t2" style="font-size:12.5px;margin:0">La flecha dice la dirección y el color dice si es bueno o malo: un gasto que sube es rojo, un ingreso que sube es verde.</p>
+  </div>
+  <div class="gx">
+   <span class="ovl">Tarjeta y gráfico</span>
+   <div class="card">
+    <div class="card-h"><h5>Gastos por categoría</h5><a class="link" href="#pantallas">Ver todo<svg class="ic chev"><use href="#i-cr"/></svg></a></div>
+    <div class="stack"><i style="width:56.5%;background:var(--c-casa)"></i><i style="width:18.4%;background:var(--c-compras)"></i><i style="width:8.3%;background:var(--c-comida)"></i><i style="width:6.7%;background:var(--c-auto)"></i><i style="width:10.1%;background:var(--c-otros)"></i></div>
+    <div class="legend"><span><i style="background:var(--c-casa)"></i>Casa 57%</span><span><i style="background:var(--c-compras)"></i>Compras 18%</span><span><i style="background:var(--c-comida)"></i>Comida 8%</span><span><i style="background:var(--c-auto)"></i>Auto 7%</span><span><i style="background:var(--c-otros)"></i>Otros 10%</span></div>
+   </div>
+   <div class="dodont">
+    <div><svg viewBox="0 0 120 50" width="100%" height="50" class="chart" aria-hidden="true"><line x1="0" x2="120" y1="45" y2="45" class="grid"/><rect x="10" y="20" width="20" height="25" rx="3" style="fill:var(--brand)"/><rect x="50" y="8" width="20" height="37" rx="3" style="fill:var(--brand)"/><rect x="90" y="27" width="20" height="18" rx="3" style="fill:var(--brand)"/></svg><p class="bt">Sí: barras planas, 3–4 períodos</p></div>
+    <div><svg viewBox="0 0 120 50" width="100%" height="50" aria-hidden="true"><ellipse cx="60" cy="30" rx="40" ry="13" style="fill:var(--s3)"/><ellipse cx="60" cy="24" rx="40" ry="13" style="fill:var(--t3)"/><path d="M60 24 L100 24 A40 13 0 0 0 60 11z" style="fill:var(--t2)"/></svg><p class="neg">No: 3D ni curvas que se pasan de los datos</p></div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<!-- ============ 4. PANTALLAS ============ -->
+<section class="sec" id="pantallas">
+ <div class="sec-head prose">
+  <span class="eyebrow">4 · Rediseño</span>
+  <h2>Siete pantallas en iPhone</h2>
+  <p class="muted">Maquetadas con HTML, CSS y SVG, igual que tu app, así que podés inspeccionarlas y copiar lo que sirva. Se pueden scrollear y algunas cosas responden al toque: el ojo, ARS/USD, los segmentados, las categorías y el teclado de la carga.</p>
+ </div>
+ <div class="toolbar">
+  <span class="muted small">Ver los mockups en</span>
+  <div class="seg-pg" role="group" aria-label="Tema de los mockups"><button type="button" data-mtheme="dark" aria-pressed="true">Oscuro</button><button type="button" data-mtheme="light" aria-pressed="false">Claro</button></div>
+ </div>
+
+ <div class="screens">
+
+ <!-- ===== INICIO ===== -->
+ <div class="screen-item">
+  <div class="phone fp" data-phone>
+   <div class="scr">
+    <div class="island"></div>
+    <div class="status"><span>9:41</span><span class="sig"><i style="width:3px;height:5px"></i><i style="width:3px;height:7px"></i><i style="width:3px;height:9px"></i><i style="width:3px;height:11px"></i><i style="width:22px;height:11px;border-radius:3px;margin-left:4px"></i></span></div>
+    <div class="scroll">
+     <div class="bar">
+      <div class="month"><button class="icb ghost" type="button" aria-label="Mes anterior"><svg class="ic"><use href="#i-cl"/></svg></button><h4>Octubre 2026</h4><button class="icb ghost" type="button" aria-label="Mes siguiente"><svg class="ic"><use href="#i-cr"/></svg></button></div>
+      <div style="display:flex;gap:6px;align-items:center"><button class="icb" type="button" data-eye aria-label="Ocultar montos"><svg class="ic"><use href="#i-eye"/></svg></button><div class="mseg" data-cur><button class="on" type="button" data-c="ars">ARS</button><button type="button" data-c="usd">USD</button></div></div>
+     </div>
+
+     <div class="hero2">
+      <div class="hz-body">
+       <div class="saldo-row">
+        <div style="min-width:0">
+         <span class="ovl">Saldo</span>
+         <div class="big money" style="color:var(--brand-text)"><small class="sym" style="color:var(--brand-text)">$</small><span data-ars="1.691.449" data-usd="1.098">1.691.449</span></div>
+         <div class="kv"><i style="background:var(--brand)"></i><b>44%</b> balance</div>
+         <div class="kv"><i style="background:var(--c-super)"></i><b>12</b> días restantes</div>
+        </div>
+        <div class="ring" role="img" aria-label="Balance 44%, quedan 12 de 31 días, podés gastar 140.954 por día">
+         <svg viewBox="0 0 120 120" width="120" height="120"><g transform="rotate(-90 60 60)" fill="none" stroke-linecap="round"><circle cx="60" cy="60" r="54" stroke-width="9" style="stroke:var(--s2)"/><circle cx="60" cy="60" r="54" stroke-width="9" stroke-dasharray="149.3 339.3" style="stroke:var(--brand)"/><circle cx="60" cy="60" r="42" stroke-width="7" style="stroke:var(--s2)"/><circle cx="60" cy="60" r="42" stroke-width="7" stroke-dasharray="102.2 263.9" style="stroke:var(--c-super)"/></g></svg>
+         <div class="ring-c"><span class="num money"><span class="sym">$</span> <span data-ars="140.954" data-usd="92">140.954</span></span><small>por día</small></div>
+        </div>
+       </div>
+       <div class="minis">
+        <div><span class="lbl"><i class="dotic" style="--c:var(--brand)"><svg class="ic"><use href="#i-in"/></svg></i>Ingresos</span><span class="num val money"><span class="sym">$</span> <span data-ars="3.821.152" data-usd="2.481">3.821.152</span></span><span class="dl" style="color:var(--brand-text)">▲ 0,7%</span></div>
+        <div><span class="lbl"><i class="dotic" style="--c:var(--neg)"><svg class="ic" style="transform:rotate(180deg)"><use href="#i-in"/></svg></i>Gastos</span><span class="num val money"><span class="sym">$</span> <span data-ars="1.898.703" data-usd="1.233">1.898.703</span></span><span class="dl" style="color:var(--neg)">▲ 30%</span></div>
+        <div><span class="lbl"><i class="dotic" style="--c:var(--c-super)"><svg class="ic"><use href="#i-dollar"/></svg></i>Ahorros</span><span class="num val money"><span class="sym">$</span> <span data-ars="231.000" data-usd="150">231.000</span></span><span class="dl" style="color:var(--neg)">▼ 76%</span></div>
+       </div>
+      </div>
+     </div>
+
+     <button class="group" type="button" style="border:0;padding:0;text-align:left;cursor:pointer">
+      <div class="row" style="grid-template-columns:auto minmax(0,1fr) auto 16px">
+       <span class="avs"><span class="av" style="background:var(--c-tel)">J</span><span class="av" style="background:var(--c-super)">A</span></span>
+       <div style="min-width:0"><div class="tt">Le debés a Ana</div><div class="st">Brangelina · 8 gastos en común</div></div>
+       <span class="num money" style="font-size:16px">$ 8.085</span><svg class="ic chev"><use href="#i-cr"/></svg>
+      </div>
+     </button>
+
+     <div class="card">
+      <div class="card-h"><h5>Gastos por categoría</h5><a class="link" href="#s-categorias">Ver todo<svg class="ic chev"><use href="#i-cr"/></svg></a></div>
+      <div class="stack"><i style="width:56.5%;background:var(--c-casa)"></i><i style="width:18.4%;background:var(--c-compras)"></i><i style="width:8.3%;background:var(--c-comida)"></i><i style="width:6.7%;background:var(--c-auto)"></i><i style="width:10.1%;background:var(--c-otros)"></i></div>
+      <div style="display:grid;gap:10px;margin-top:14px;font-size:14px">
+       <div style="display:grid;grid-template-columns:10px 1fr auto 52px;gap:10px;align-items:center"><i style="width:8px;height:8px;border-radius:50%;background:var(--c-casa)"></i>Casa<span class="t3" style="font-size:12.5px">57%</span><span class="num money" style="text-align:right">530.253</span></div>
+       <div style="display:grid;grid-template-columns:10px 1fr auto 52px;gap:10px;align-items:center"><i style="width:8px;height:8px;border-radius:50%;background:var(--c-compras)"></i>Compras<span class="t3" style="font-size:12.5px">18%</span><span class="num money" style="text-align:right">172.358</span></div>
+       <div style="display:grid;grid-template-columns:10px 1fr auto 52px;gap:10px;align-items:center"><i style="width:8px;height:8px;border-radius:50%;background:var(--c-comida)"></i>Comida<span class="t3" style="font-size:12.5px">8%</span><span class="num money" style="text-align:right">77.536</span></div>
+       <div style="display:grid;grid-template-columns:10px 1fr auto 52px;gap:10px;align-items:center"><i style="width:8px;height:8px;border-radius:50%;background:var(--c-auto)"></i>Auto<span class="t3" style="font-size:12.5px">7%</span><span class="num money" style="text-align:right">63.010</span></div>
+       <div style="display:grid;grid-template-columns:10px 1fr auto 52px;gap:10px;align-items:center"><i style="width:8px;height:8px;border-radius:50%;background:var(--c-otros)"></i>Otras 3<span class="t3" style="font-size:12.5px">10%</span><span class="num money" style="text-align:right">94.653</span></div>
+      </div>
+     </div>
+
+     <div class="card">
+      <div class="card-h"><h5>Tasa de ahorro</h5><span class="dchip bad">▼ 19 pp</span></div>
+      <svg class="chart" viewBox="0 0 320 140" width="100%" role="img" aria-label="Tasa de ahorro: julio 66%, agosto 19%, septiembre 25%, octubre 6%">
+       <defs><linearGradient id="gAh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--brand);stop-opacity:.32"/><stop offset="1" style="stop-color:var(--brand);stop-opacity:0"/></linearGradient></defs>
+       <line x1="34" x2="312" y1="18" y2="18" class="grid" stroke-dasharray="2 4"/><line x1="34" x2="312" y1="49.3" y2="49.3" class="grid" stroke-dasharray="2 4"/><line x1="34" x2="312" y1="80.7" y2="80.7" class="grid" stroke-dasharray="2 4"/><line x1="34" x2="312" y1="112" y2="112" class="grid"/>
+       <text x="26" y="21.5" text-anchor="end">75%</text><text x="26" y="52.8" text-anchor="end">50%</text><text x="26" y="84.2" text-anchor="end">25%</text><text x="26" y="115.5" text-anchor="end">0%</text>
+       <path d="M44 29.3 C86 29.3 86 88.2 128 88.2 C170 88.2 170 80.7 212 80.7 C251 80.7 251 104.5 290 104.5 L290 112 L44 112 Z" style="fill:url(#gAh)"/>
+       <path d="M44 29.3 C86 29.3 86 88.2 128 88.2 C170 88.2 170 80.7 212 80.7 C251 80.7 251 104.5 290 104.5" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:var(--brand)"/>
+       <circle cx="44" cy="29.3" r="4.5" stroke-width="2.5" style="fill:var(--s1);stroke:var(--brand)"/><circle cx="128" cy="88.2" r="4.5" stroke-width="2.5" style="fill:var(--s1);stroke:var(--brand)"/><circle cx="212" cy="80.7" r="4.5" stroke-width="2.5" style="fill:var(--s1);stroke:var(--brand)"/>
+       <circle cx="290" cy="104.5" r="10" style="fill:var(--brand);opacity:.18"/><circle cx="290" cy="104.5" r="5.5" stroke-width="2.5" style="fill:var(--brand);stroke:var(--s1)"/>
+       <text x="44" y="17" text-anchor="middle" class="lab">66%</text><text x="128" y="76" text-anchor="middle" class="lab">19%</text><text x="212" y="68.5" text-anchor="middle" class="lab">25%</text>
+       <rect x="273" y="76" width="34" height="19" rx="9.5" style="fill:var(--brand)"/><text x="290" y="89.5" text-anchor="middle" style="fill:var(--on-brand);font-weight:700">6%</text>
+       <text x="44" y="132" text-anchor="middle">jul</text><text x="128" y="132" text-anchor="middle">ago</text><text x="212" y="132" text-anchor="middle">sept</text><text x="290" y="132" text-anchor="middle" style="fill:var(--t1);font-weight:600">oct</text>
+      </svg>
+     </div>
+
+
+     <div class="ovl" style="padding:8px 4px 0">Para tener en cuenta</div>
+     <div class="group">
+      <div class="insight"><span class="cic" style="--c:var(--neg)"><svg class="ic"><use href="#i-up"/></svg></span><div style="min-width:0"><div class="tt">Compras subió 124%</div><div class="st money">$ 95.298 más que en septiembre</div></div><svg class="ic chev"><use href="#i-cr"/></svg></div>
+      <div class="insight"><span class="cic" style="--c:var(--warn)"><svg class="ic"><use href="#i-down"/></svg></span><div style="min-width:0"><div class="tt">Ahorraste el 6% de lo que entró</div><div class="st">En septiembre fue 25%</div></div><svg class="ic chev"><use href="#i-cr"/></svg></div>
+      <div class="insight"><span class="cic" style="--c:var(--brand-text)"><svg class="ic"><use href="#i-check"/></svg></span><div style="min-width:0"><div class="tt">Macro VISA viene bien</div><div class="st money">Cerrarías el 29/10 en $ 392.601</div></div><svg class="ic chev"><use href="#i-cr"/></svg></div>
+     </div>
+    </div>
+    <nav class="tabbar" aria-label="Navegación"><button class="tab on" type="button"><svg class="ic"><use href="#i-home"/></svg>Inicio</button><button class="tab" type="button"><svg class="ic"><use href="#i-moves"/></svg>Movimientos</button><button class="fab" type="button" aria-label="Cargar movimiento"><svg class="ic"><use href="#i-plus"/></svg></button><button class="tab" type="button"><svg class="ic"><use href="#i-card"/></svg>Cuentas</button><button class="tab" type="button"><svg class="ic"><use href="#i-more"/></svg>Más</button></nav>
+   </div>
+  </div>
+  <div class="notes">
+   <h3>Inicio</h3>
+   <p class="muted">Responde dos preguntas en este orden: ¿cuánto me queda? y ¿algo pide atención?</p>
+   <ul>
+    <li>El mes pasa a la barra superior, con flechas para cambiarlo, y la franja verde con olas se va: esa altura se recupera. La tarjeta de abajo conserva el diseño actual: el saldo grande en verde, el anillo de "por día" y las tres tarjetitas de ingresos, gastos y ahorros.</li>
+    <li>Lo que cambia ahí son detalles: el anillo es más grande y "$ 140.954" ya no se corta, y la variación queda solo como porcentaje, sin la sigla "MoM".</li>
+        <li>El botón de cargar pasa al + central de la barra inferior: siempre a mano y sin ocupar una franja de la pantalla.</li>
+    <li>Compartido en una fila neutra (deber $ 8.085 no es un error). Los avisos de "Para tener en cuenta" van al final de la hoja, en una línea cada uno y con íconos en vez de emojis.</li>
+    <li>Tasa de ahorro en línea suave con marcadores, un degradé debajo y el mes actual destacado. La curva pasa exactamente por cada punto y no se va por debajo ni por arriba de los valores reales.</li>
+    <li>Gastos por categoría a todo el ancho, con los mismos colores que en Categorías y porcentajes sobre el total real.</li>
+    <li>"Balance por día" e "Ingresos vs. gastos" pasan a la opción General de Movimientos › Categorías, más grandes: en Inicio, a 390 px, no se leían.</li>
+   </ul>
+   <p class="before">Probá el ojo (desenfoca en vez de poner puntitos, así no cambia el ancho) y ARS/USD.</p>
+  </div>
+ </div>
+
+ <!-- ===== CARGAR ===== -->
+ <div class="screen-item">
+  <div class="phone fp" data-phone>
+   <div class="scr">
+    <div class="island"></div>
+    <div class="status"><span>9:41</span><span class="sig"><i style="width:3px;height:5px"></i><i style="width:3px;height:7px"></i><i style="width:3px;height:9px"></i><i style="width:3px;height:11px"></i><i style="width:22px;height:11px;border-radius:3px;margin-left:4px"></i></span></div>
+    <div class="behind"></div><div class="scrim"></div>
+    <div class="sheet" role="dialog" aria-label="Nuevo movimiento">
+     <div class="grab"></div>
+     <div class="sh-h"><button class="icb" type="button" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button><h5>Nuevo movimiento</h5><span></span></div>
+     <div class="sh-body">
+      <div class="seg" data-seg data-type><button class="on" type="button">Gasto</button><button type="button">Ingreso</button><button type="button">Transferencia</button></div>
+      <div class="amount">
+       <div class="val"><small>$</small><span data-amt>25.000</span><span class="caret"></span></div>
+       <div style="display:flex;gap:8px;align-items:center"><button class="cur" type="button">ARS <svg class="ic" style="width:14px;height:14px"><use href="#i-swap"/></svg> USD</button><span class="t3" style="font-size:13px" data-amt-usd>≈ US$ 16</span></div>
+      </div>
+      <div class="chips" style="flex-wrap:wrap;margin:0;padding:0;gap:6px">
+       <button class="chip" type="button"><svg class="ic"><use href="#i-cal"/></svg>Hoy, 19 oct</button>
+       <button class="chip" type="button"><svg class="ic"><use href="#i-card"/></svg>Macro VISA</button>
+       <button class="chip" type="button" data-cuotas><svg class="ic"><use href="#i-repeat"/></svg><span>1 pago</span></button>
+       <button class="chip" type="button" data-shared><svg class="ic"><use href="#i-users"/></svg><span>Compartido</span></button>
+       <button class="chip" type="button"><svg class="ic"><use href="#i-note"/></svg>Nota</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px"><span class="ovl" data-catlabel>Categoría</span><a class="link" href="#pantallas">Todas</a></div>
+      <div class="catgrid" data-cats>
+       <button class="catb" type="button" style="--c:var(--c-casa)"><span class="cic"><svg class="ic"><use href="#i-home"/></svg></span>Casa</button>
+       <button class="catb on" type="button" style="--c:var(--c-comida)"><span class="cic"><svg class="ic"><use href="#i-food"/></svg></span>Comida</button>
+       <button class="catb" type="button" style="--c:var(--c-super)"><span class="cic"><svg class="ic"><use href="#i-cart"/></svg></span>Súper</button>
+       <button class="catb" type="button" style="--c:var(--c-compras)"><span class="cic"><svg class="ic"><use href="#i-bag"/></svg></span>Compras</button>
+       <button class="catb" type="button" style="--c:var(--c-auto)"><span class="cic"><svg class="ic"><use href="#i-car"/></svg></span>Auto</button>
+       <button class="catb" type="button" style="--c:var(--c-tel)"><span class="cic"><svg class="ic"><use href="#i-phone"/></svg></span>Teléfono</button>
+       <button class="catb" type="button" style="--c:var(--c-otros)"><span class="cic"><svg class="ic"><use href="#i-heart"/></svg></span>Salud</button>
+       <button class="catb" type="button" style="--c:var(--t2)"><span class="cic"><svg class="ic"><use href="#i-more"/></svg></span>Más</button>
+      </div>
+     </div>
+     <div class="keys" data-keys>
+      <button class="key" type="button">7</button><button class="key" type="button">8</button><button class="key" type="button">9</button><button class="key op" type="button" data-k="del" aria-label="Borrar"><svg class="ic" style="width:24px;height:24px"><use href="#i-back"/></svg></button>
+      <button class="key" type="button">4</button><button class="key" type="button">5</button><button class="key" type="button">6</button><button class="key op" type="button" data-k="×">×</button>
+      <button class="key" type="button">1</button><button class="key" type="button">2</button><button class="key" type="button">3</button><button class="key op" type="button" data-k="−">−</button>
+      <button class="key" type="button" data-k="000">000</button><button class="key" type="button">0</button><button class="key" type="button" data-k=",">,</button><button class="key op" type="button" data-k="+">+</button>
+     </div>
+     <div class="savebar"><button class="btn pri full" type="button" data-save>Guardar gasto · Delivery</button></div>
+    </div>
+   </div>
+  </div>
+  <div class="notes">
+   <h3>Cargar movimiento</h3>
+   <p class="muted">Pasa de 6 pasos a una sola pantalla. Lo más común ya viene elegido y lo raro queda a un toque.</p>
+   <ul>
+    <li>Bottom sheet en vez de modal centrado: se abre desde el +, se cierra deslizando hacia abajo y deja ver que "atrás" sigue Inicio.</li>
+    <li>El monto es lo primero, con el teclado ya abierto. La calculadora sigue: si escribís "12000+8500", el resultado aparece debajo.</li>
+    <li>Fecha, cuenta, cuotas y nota son chips con valores por defecto: hoy, la última cuenta usada, 1 pago. Tocás solo si cambia.</li>
+    <li>Las 8 categorías más usadas, con ícono y su color de siempre. Al tocar una que tiene subcategorías, los mismos círculos pasan a mostrar sus subcategorías, con el color de la categoría y la más usada ya elegida (en Comida: Delivery, Restaurante, Café). El primer círculo, "Volver", regresa a las categorías. Si la categoría no tiene subcategorías, queda elegida directamente.</li>
+    <li>Cuotas y Compartido son chips de la fila de arriba. "1 pago" se toca para pasar a 3, 6 o 12 cuotas y muestra el valor de cada una; en la app real abriría un selector chico con todas las opciones. "Compartido" se activa con un toque y dice con quién y cómo se divide (50/50 por defecto, editable).</li>
+    <li>El botón dice lo que va a pasar ("Guardar gasto · Comida") y queda fijo arriba del teclado.</li>
+    <li>"AC" y "Borrar" se fusionan: ⌫ borra un dígito y mantenido borra todo.</li>
+   </ul>
+   <p class="before">Probá el teclado y elegí otra categoría.</p>
+  </div>
+ </div>
+
+ <!-- ===== MOVIMIENTOS ===== -->
+ <div class="screen-item">
+  <div class="phone fp" data-phone>
+   <div class="scr">
+    <div class="island"></div>
+    <div class="status"><span>9:41</span><span class="sig"><i style="width:3px;height:5px"></i><i style="width:3px;height:7px"></i><i style="width:3px;height:9px"></i><i style="width:3px;height:11px"></i><i style="width:22px;height:11px;border-radius:3px;margin-left:4px"></i></span></div>
+    <div class="scroll" style="gap:10px">
+     <div class="bar"><h4 class="largetitle">Movimientos</h4><button class="chip" type="button">Oct 2026 <svg class="ic"><use href="#i-cd"/></svg></button></div>
+     <div class="seg" data-seg><button class="on" type="button">Lista</button><button type="button">Categorías</button><button type="button">Calendario</button></div>
+     <div class="search"><svg class="ic" style="width:18px;height:18px"><use href="#i-search"/></svg>Buscar</div>
+     <div class="chips" data-chips><button class="chip on" type="button">Todos</button><button class="chip" type="button">Gastos</button><button class="chip" type="button">Ingresos</button><button class="chip" type="button">Macro VISA</button><button class="chip" type="button">Categoría <svg class="ic"><use href="#i-cd"/></svg></button></div>
+
+     <div class="sched">
+      <div class="dayh" style="top:48px"><span>Programados</span><span class="num">2</span></div>
+      <div class="group">
+       <div class="row"><span class="cic" style="--c:var(--c-casa)"><svg class="ic"><use href="#i-home"/></svg></span><div style="min-width:0"><div class="tt">Vajillas</div><div class="st">Jue 29 oct · cuota 2/12 · Macro VISA</div></div><div class="amt"><span class="num money">− $ 36.347</span><small class="money">US$ 24</small></div></div>
+       <div class="row"><span class="cic" style="--c:var(--c-tel)"><svg class="ic"><use href="#i-repeat"/></svg></span><div style="min-width:0"><div class="tt">Claude</div><div class="st">Vie 23 oct · fijo mensual · Macro VISA</div></div><div class="amt"><span class="num money">− US$ 20</span><small class="money">$ 30.800</small></div></div>
+      </div>
+     </div>
+
+     <div>
+      <div class="dayh"><span>Ayer · dom 18 oct</span><span class="num money">− US$ 3</span></div>
+      <div class="group"><div class="row"><span class="cic" style="--c:var(--c-tel)"><svg class="ic"><use href="#i-repeat"/></svg></span><div style="min-width:0"><div class="tt">Apple</div><div class="st">Suscripciones · Macro VISA</div></div><div class="amt"><span class="num money">− US$ 3</span><small class="money">$ 4.620</small></div></div></div>
+     </div>
+     <div>
+      <div class="dayh"><span>Miércoles 14 oct</span><span class="num money">− $ 48.333</span></div>
+      <div class="group"><div class="row"><span class="cic" style="--c:var(--c-otros)"><svg class="ic"><use href="#i-gift"/></svg></span><div style="min-width:0"><div class="tt">Regalos</div><div class="st">Macro VISA · cuota 2/6</div></div><div class="amt"><span class="num money">− $ 48.333</span><small class="money">US$ 31</small></div></div></div>
+     </div>
+     <div>
+      <div class="dayh"><span>Miércoles 7 oct</span><span class="num money">− $ 102.336</span></div>
+      <div class="group">
+       <div class="row"><span class="cic" style="--c:var(--brand-text)"><svg class="ic"><use href="#i-in"/></svg></span><div style="min-width:0"><div class="tt">Reintegros</div><div class="st">Banco Santander</div></div><div class="amt"><span class="num pos money">+ $ 10.000</span><small class="money">US$ 6</small></div></div>
+       <div class="row"><span class="cic" style="--c:var(--c-auto)"><svg class="ic"><use href="#i-car"/></svg></span><div style="min-width:0"><div class="tt">Nafta</div><div class="st">Auto · Macro VISA</div></div><div class="amt"><span class="num money">− $ 63.010</span><small class="money">US$ 41</small></div></div>
+       <div class="row"><span class="cic" style="--c:var(--c-super)"><svg class="ic"><use href="#i-cart"/></svg></span><div style="min-width:0"><div class="tt">Supermercado</div><div class="st">Banco Santander</div></div><div class="amt"><span class="num money">− $ 19.073</span><small class="money">US$ 12</small></div></div>
+       <div class="row"><span class="cic" style="--c:var(--c-casa)"><svg class="ic"><use href="#i-home"/></svg></span><div style="min-width:0"><div class="tt">Servicios</div><div class="st">Casa · Banco Santander</div></div><div class="amt"><span class="num money">− $ 24.054</span><small class="money">US$ 16</small></div></div>
+       <div class="row"><span class="cic" style="--c:var(--c-casa)"><svg class="ic"><use href="#i-home"/></svg></span><div style="min-width:0"><div class="tt">Servicios</div><div class="st">Casa · Banco Santander</div></div><div class="amt"><span class="num money">− $ 6.199</span><small class="money">US$ 4</small></div></div>
+      </div>
+     </div>
+     <div>
+      <div class="dayh"><span>Martes 6 oct</span><span class="num money">− $ 10.400</span></div>
+      <div class="group"><div class="row"><span class="cic" style="--c:var(--c-comida)"><svg class="ic"><use href="#i-food"/></svg></span><div style="min-width:0"><div class="tt">Delivery</div><div class="st">Comida · Macro VISA</div></div><div class="amt"><span class="num money">− $ 10.400</span><small class="money">US$ 7</small></div></div></div>
+     </div>
+     <div>
+      <div class="dayh"><span>Lunes 5 oct</span><span class="num money">− $ 43.891</span></div>
+      <div class="group">
+       <div class="row"><span class="cic" style="--c:var(--c-otros)"><svg class="ic"><use href="#i-dollar"/></svg></span><div style="min-width:0"><div class="tt">Mana</div><div class="st">Otros gastos · Banco Santander</div></div><div class="amt"><span class="num money">− $ 25.875</span><small class="money">US$ 17</small></div></div>
+       <div class="row"><span class="cic" style="--c:var(--c-comida)"><svg class="ic"><use href="#i-food"/></svg></span><div style="min-width:0"><div class="tt">Delivery</div><div class="st">Comida · Macro VISA</div></div><div class="amt"><span class="num money">− $ 18.016</span><small class="money">US$ 12</small></div></div>
+      </div>
+     </div>
+    </div>
+    <nav class="tabbar" aria-label="Navegación"><button class="tab" type="button"><svg class="ic"><use href="#i-home"/></svg>Inicio</button><button class="tab on" type="button"><svg class="ic"><use href="#i-moves"/></svg>Movimientos</button><button class="fab" type="button" aria-label="Cargar movimiento"><svg class="ic"><use href="#i-plus"/></svg></button><button class="tab" type="button"><svg class="ic"><use href="#i-card"/></svg>Cuentas</button><button class="tab" type="button"><svg class="ic"><use href="#i-more"/></svg>Más</button></nav>
+   </div>
+  </div>
+  <div class="notes">
+   <h3>Movimientos</h3>
+   <p class="muted">Una lista que se escanea de un vistazo: qué fue, de qué categoría y cuánto, sin alarmas.</p>
+   <ul>
+    <li>Los gastos van en el color del texto con "−" y solo los ingresos en verde. La lista deja de gritar.</li>
+    <li>El ícono de cada categoría lleva su color: Auto siempre violeta, Comida siempre naranja, en toda la app.</li>
+    <li>Un grupo por día con encabezado fijo (sticky) y total diario, en vez de una tarjeta por día.</li>
+    <li>Cuotas y fijos que todavía no pasaron van a "Programados", con borde punteado. Antes aparecían el 29/10 y el 23/10 como si ya hubieran pasado.</li>
+    <li>Buscador y chips deslizables reemplazan los 3 selects y el checkbox. "Todos los meses" pasa al selector de mes.</li>
+    <li>Deslizar una fila muestra Editar / Borrar, y al tocarla se abre el detalle en un sheet.</li>
+   </ul>
+  </div>
+ </div>
+
+ <!-- ===== GENERAL ===== -->
+ <div class="screen-item" id="s-general">
+  <div class="phone fp" data-phone>
+   <div class="scr">
+    <div class="island"></div>
+    <div class="status"><span>9:41</span><span class="sig"><i style="width:3px;height:5px"></i><i style="width:3px;height:7px"></i><i style="width:3px;height:9px"></i><i style="width:3px;height:11px"></i><i style="width:22px;height:11px;border-radius:3px;margin-left:4px"></i></span></div>
+    <div class="scroll">
+     <div class="bar"><h4 class="largetitle">Movimientos</h4><button class="chip" type="button">Oct 2026 <svg class="ic"><use href="#i-cd"/></svg></button></div>
+     <div class="seg" data-seg><button type="button">Lista</button><button class="on" type="button">Categorías</button><button type="button">Calendario</button></div>
+     <div class="seg" data-seg style="background:transparent;padding:0;gap:8px;display:flex"><button class="chip on" type="button" style="height:32px">General</button><button class="chip" type="button" style="height:32px">Gastos</button><button class="chip" type="button" style="height:32px">Ingresos</button></div>
+
+     <div class="card">
+      <div class="card-h" style="margin-bottom:4px"><h5>Ingresos y gastos por mes</h5><span class="t3" style="font-size:12px">en millones</span></div>
+      <div class="legend" style="margin:0 0 8px"><span><i style="display:inline-block;width:14px;height:0;border-top:2.5px solid var(--brand);border-radius:2px;height:0"></i>Ingresos</span><span><i style="display:inline-block;width:14px;height:0;border-top:2.5px solid var(--t1);border-radius:2px;height:0"></i>Gastos</span><span><i style="display:inline-block;width:14px;height:0;border-top:2.5px dashed var(--t1);border-radius:0;height:0"></i>Oct en curso</span></div>
+      <svg class="chart" viewBox="0 0 320 156" width="100%" role="img" aria-label="Ingresos y gastos por mes: julio 3,27 y 1,78 millones; agosto 3,50 y 2,17; septiembre 3,80 y 2,14; octubre (en curso) 3,82 y 0,94 millones">
+        <line x1="36" x2="306" y1="130" y2="130" class="grid"/><line x1="36" x2="306" y1="101" y2="101" class="grid" stroke-dasharray="2 4"/><line x1="36" x2="306" y1="72" y2="72" class="grid" stroke-dasharray="2 4"/><line x1="36" x2="306" y1="43" y2="43" class="grid" stroke-dasharray="2 4"/><line x1="36" x2="306" y1="14" y2="14" class="grid" stroke-dasharray="2 4"/>
+        <text x="30" y="133.5" text-anchor="end">0</text><text x="30" y="104.5" text-anchor="end">1 M</text><text x="30" y="75.5" text-anchor="end">2 M</text><text x="30" y="46.5" text-anchor="end">3 M</text><text x="30" y="17.5" text-anchor="end">4 M</text>
+        <path d="M50 35.2 C90 35.2 90 28.5 130 28.5 C170 28.5 170 19.8 210 19.8 C250 19.8 250 19.2 290 19.2 L290 102.7 C250 102.7 250 67.9 210 67.9 C170 67.9 170 67.1 130 67.1 C90 67.1 90 78.4 50 78.4 Z" style="fill:var(--brand);opacity:.08"/>
+        <path d="M50 35.2 C90 35.2 90 28.5 130 28.5 C170 28.5 170 19.8 210 19.8 C250 19.8 250 19.2 290 19.2" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:var(--brand)"/>
+        <path d="M50 78.4 C90 78.4 90 67.1 130 67.1 C170 67.1 170 67.9 210 67.9" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:var(--t1)"/>
+        <path d="M210 67.9 C250 67.9 250 102.7 290 102.7" fill="none" stroke-width="2.5" stroke-dasharray="4 4" stroke-linecap="round" style="stroke:var(--t1)"/>
+        <circle cx="50" cy="35.2" r="4" stroke-width="2.4" style="fill:var(--s1);stroke:var(--brand)"/><circle cx="130" cy="28.5" r="4" stroke-width="2.4" style="fill:var(--s1);stroke:var(--brand)"/><circle cx="210" cy="19.8" r="4" stroke-width="2.4" style="fill:var(--s1);stroke:var(--brand)"/><circle cx="290" cy="19.2" r="5" stroke-width="2.4" style="fill:var(--brand);stroke:var(--s1)"/>
+        <circle cx="50" cy="78.4" r="4" stroke-width="2.4" style="fill:var(--s1);stroke:var(--t1)"/><circle cx="130" cy="67.1" r="4" stroke-width="2.4" style="fill:var(--s1);stroke:var(--t1)"/><circle cx="210" cy="67.9" r="4" stroke-width="2.4" style="fill:var(--s1);stroke:var(--t1)"/><circle cx="290" cy="102.7" r="4.5" stroke-width="2.4" stroke-dasharray="2 2" style="fill:var(--s1);stroke:var(--t1)"/>
+        <text x="50" y="25" text-anchor="middle" class="lab">3,27</text><text x="130" y="18.5" text-anchor="middle" class="lab">3,50</text><text x="210" y="9.8" text-anchor="middle" class="lab">3,80</text><text x="290" y="9.2" text-anchor="middle" class="lab" style="fill:var(--brand-text)">3,82</text>
+        <text x="50" y="94" text-anchor="middle" class="lab">1,78</text><text x="130" y="83" text-anchor="middle" class="lab">2,17</text><text x="210" y="84" text-anchor="middle" class="lab">2,14</text><text x="290" y="120" text-anchor="middle" class="lab">0,94</text>
+        <text x="50" y="148" text-anchor="middle">jul</text><text x="130" y="148" text-anchor="middle">ago</text><text x="210" y="148" text-anchor="middle">sept</text><text x="290" y="148" text-anchor="middle" style="fill:var(--t1);font-weight:600">oct</text>
+       </svg>
+      <p class="t2" style="font-size:13px;margin:6px 0 0">Lo sombreado es lo que quedó entre lo que entró y lo que salió cada mes.</p>
+     </div>
+
+     <div class="card">
+      <div class="card-h" style="margin-bottom:4px"><h5>Gastos día a día</h5><span class="t3" style="font-size:12px">acumulado</span></div>
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="num money" style="font-size:22px">$ 870.677</span><span class="t2" style="font-size:13px">al día 19</span><span class="dchip good">▼ ≈ 0,9 M vs. sept</span></div>
+      <div class="legend" style="margin:0 0 8px"><span><i style="display:inline-block;width:14px;height:0;border-top:2.5px solid var(--t1);border-radius:2px;height:0"></i>Octubre</span><span><i style="display:inline-block;width:14px;height:0;border-top:2.5px dashed var(--t3);border-radius:0;height:0"></i>Septiembre</span></div>
+      <svg class="chart" viewBox="0 0 320 176" width="100%" role="img" aria-label="Gastos acumulados día a día: octubre lleva 870.677 al día 19; septiembre a esta altura llevaba cerca de 1,78 millones y cerró en 2,12 millones. Ingresos del mes 3,82 millones; ingresos menos ahorro 3,59 millones.">
+        <defs><linearGradient id="gDia" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--t1);stop-opacity:.16"/><stop offset="1" style="stop-color:var(--t1);stop-opacity:0"/></linearGradient></defs>
+        <line x1="36" x2="306" y1="150.0" y2="150.0" class="grid"/><text x="30" y="153.5" text-anchor="end">0</text><line x1="36" x2="306" y1="117.5" y2="117.5" class="grid" stroke-dasharray="2 4"/><text x="30" y="121.0" text-anchor="end">1 M</text><line x1="36" x2="306" y1="85.0" y2="85.0" class="grid" stroke-dasharray="2 4"/><text x="30" y="88.5" text-anchor="end">2 M</text><line x1="36" x2="306" y1="52.5" y2="52.5" class="grid" stroke-dasharray="2 4"/><text x="30" y="56.0" text-anchor="end">3 M</text><line x1="36" x2="306" y1="20.0" y2="20.0" class="grid" stroke-dasharray="2 4"/><text x="30" y="23.5" text-anchor="end">4 M</text>
+        <line x1="40" x2="304" y1="25.8" y2="25.8" stroke-width="1.5" stroke-dasharray="5 4" style="stroke:var(--brand)"/>
+        <line x1="40" x2="304" y1="33.3" y2="33.3" stroke-width="1.5" stroke-dasharray="5 4" style="stroke:var(--c-super)"/>
+        <text x="304" y="20.8" text-anchor="end" style="fill:var(--brand-text);font-weight:600">Ingresos 3,82 M</text>
+        <text x="42" y="46.3" text-anchor="start" style="fill:var(--c-super);font-weight:600">Ingresos − ahorro 3,59 M</text>
+        <path d="M40.0 133.8 L48.8 132.8 L57.6 131.8 L66.4 131.2 L75.2 129.8 L84.0 128.9 L92.8 127.9 L101.6 116.5 L110.4 115.5 L119.2 114.9 L128.0 114.6 L136.8 113.6 L145.6 107.8 L154.4 104.5 L163.2 104.5 L172.0 103.8 L180.8 102.2 L189.6 95.4 L198.4 92.2 L207.2 90.5 L216.0 90.2 L224.8 89.5 L233.6 88.9 L242.4 87.6 L251.2 86.0 L260.0 85.0 L268.8 84.0 L277.6 84.0 L286.4 83.4 L295.2 81.1" fill="none" stroke-width="1.6" stroke-dasharray="4 3" stroke-linejoin="round" style="stroke:var(--t3)"/>
+        <path d="M40.0 132.1 L48.8 132.1 L48.8 130.9 L57.6 130.9 L57.6 129.2 L66.4 129.2 L66.4 128.8 L75.2 128.8 L75.2 127.4 L84.0 127.4 L84.0 127.1 L92.8 127.1 L92.8 123.4 L101.6 123.4 L110.4 123.4 L119.2 123.4 L128.0 123.4 L136.8 123.4 L145.6 123.4 L154.4 123.4 L154.4 121.9 L163.2 121.9 L172.0 121.9 L180.8 121.9 L189.6 121.9 L189.6 121.7 L198.4 121.7 L198.4 150 L40.0 150 Z" style="fill:url(#gDia)"/>
+        <path d="M40.0 132.1 L48.8 132.1 L48.8 130.9 L57.6 130.9 L57.6 129.2 L66.4 129.2 L66.4 128.8 L75.2 128.8 L75.2 127.4 L84.0 127.4 L84.0 127.1 L92.8 127.1 L92.8 123.4 L101.6 123.4 L110.4 123.4 L119.2 123.4 L128.0 123.4 L136.8 123.4 L145.6 123.4 L154.4 123.4 L154.4 121.9 L163.2 121.9 L172.0 121.9 L180.8 121.9 L189.6 121.9 L189.6 121.7 L198.4 121.7" fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--t1)"/>
+        <line x1="198.4" x2="198.4" y1="44.4" y2="150" stroke-width="1" stroke-dasharray="2 3" style="stroke:var(--t3)"/>
+        <text x="198.4" y="40.4" text-anchor="middle" style="fill:var(--t2);font-weight:600">Hoy</text>
+        <circle cx="198.4" cy="92.2" r="4" stroke-width="2" style="fill:var(--s1);stroke:var(--t3)"/>
+        <circle cx="198.4" cy="121.7" r="5" stroke-width="2.5" style="fill:var(--t1);stroke:var(--s1)"/>
+        <line x1="207.4" x2="207.4" y1="94.2" y2="119.7" stroke-width="1.5" style="stroke:var(--brand-text)"/>
+        <text x="212.4" y="110.9" style="fill:var(--brand-text);font-weight:700">≈ 0,9 M menos</text>
+        <text x="40.0" y="168" text-anchor="middle">1</text><text x="75.2" y="168" text-anchor="middle">5</text><text x="119.2" y="168" text-anchor="middle">10</text><text x="163.2" y="168" text-anchor="middle">15</text><text x="207.2" y="168" text-anchor="middle">20</text><text x="251.2" y="168" text-anchor="middle">25</text><text x="304.0" y="168" text-anchor="middle">31</text>
+       </svg>
+     </div>
+    </div>
+    <nav class="tabbar" aria-label="Navegación"><button class="tab" type="button"><svg class="ic"><use href="#i-home"/></svg>Inicio</button><button class="tab on" type="button"><svg class="ic"><use href="#i-moves"/></svg>Movimientos</button><button class="fab" type="button" aria-label="Cargar movimiento"><svg class="ic"><use href="#i-plus"/></svg></button><button class="tab" type="button"><svg class="ic"><use href="#i-card"/></svg>Cuentas</button><button class="tab" type="button"><svg class="ic"><use href="#i-more"/></svg>Más</button></nav>
+   </div>
+  </div>
+  <div class="notes">
+   <h3>Movimientos · General</h3>
+   <p class="muted">Una tercera opción, antes de Gastos e Ingresos, con la foto completa del mes. Acá viven los dos gráficos que salieron de Inicio, más grandes y legibles.</p>
+   <ul>
+    <li><b>Ingresos y gastos por mes:</b> líneas suaves con marcadores y los valores en millones arriba de cada punto. El tramo de octubre de gastos va punteado porque el mes no terminó, así la caída no se lee como un ahorro real. El área entre las dos líneas muestra lo que quedó cada mes.</li>
+    <li><b>Gastos día a día:</b> el acumulado de octubre (línea llena) contra septiembre (punteada), con las referencias de ingresos e ingresos − ahorro como líneas horizontales. En "Hoy" se marca la diferencia contra septiembre al mismo día, que es la comparación justa.</li>
+    <li>El total del día 19 ($ 870.677) sale de tus movimientos de octubre: suma lo que ya pasó, sin los programados del 23 y el 29.</li>
+    <li>Los ejes llevan pocas líneas de grilla y texto de 11 px, y las etiquetas van pegadas a cada línea en vez de en una leyenda aparte.</li>
+   </ul>
+   <p class="before">Los valores de julio a septiembre los leí de tus capturas, así que son aproximados.</p>
+  </div>
+ </div>
+
+ <!-- ===== CATEGORÍAS ===== -->
+ <div class="screen-item" id="s-categorias">
+  <div class="phone fp" data-phone>
+   <div class="scr">
+    <div class="island"></div>
+    <div class="status"><span>9:41</span><span class="sig"><i style="width:3px;height:5px"></i><i style="width:3px;height:7px"></i><i style="width:3px;height:9px"></i><i style="width:3px;height:11px"></i><i style="width:22px;height:11px;border-radius:3px;margin-left:4px"></i></span></div>
+    <div class="scroll">
+     <div class="bar"><h4 class="largetitle">Movimientos</h4><button class="chip" type="button">Oct 2026 <svg class="ic"><use href="#i-cd"/></svg></button></div>
+     <div class="seg" data-seg><button type="button">Lista</button><button class="on" type="button">Categorías</button><button type="button">Calendario</button></div>
+     <div class="seg" data-seg style="background:transparent;padding:0;gap:8px;display:flex"><button class="chip" type="button" style="height:32px">General</button><button class="chip on" type="button" style="height:32px">Gastos</button><button class="chip" type="button" style="height:32px">Ingresos</button></div>
+
+     <div class="card" style="display:grid;grid-template-columns:120px 1fr;gap:16px;align-items:center">
+      <svg viewBox="0 0 132 132" width="120" height="120" role="img" aria-label="Distribución de gastos: Casa 57%, Compras 18%, Comida 8%, Auto 7%, Teléfono 5%, otras 5%">
+       <g transform="rotate(-90 66 66)" fill="none" stroke-width="16">
+        <circle cx="66" cy="66" r="54" style="stroke:var(--c-casa)" stroke-dasharray="189.84 339.29"/>
+        <circle cx="66" cy="66" r="54" style="stroke:var(--c-compras)" stroke-dasharray="60.36 339.29" stroke-dashoffset="-191.84"/>
+        <circle cx="66" cy="66" r="54" style="stroke:var(--c-comida)" stroke-dasharray="26.05 339.29" stroke-dashoffset="-254.2"/>
+        <circle cx="66" cy="66" r="54" style="stroke:var(--c-auto)" stroke-dasharray="20.8 339.29" stroke-dashoffset="-282.25"/>
+        <circle cx="66" cy="66" r="54" style="stroke:var(--c-tel)" stroke-dasharray="15.98 339.29" stroke-dashoffset="-305.05"/>
+        <circle cx="66" cy="66" r="54" style="stroke:var(--c-otros)" stroke-dasharray="14.27 339.29" stroke-dashoffset="-323.03"/>
+       </g>
+       <text x="66" y="66" text-anchor="middle" style="font:600 22px var(--f-num);fill:var(--t1)">57%</text>
+       <text x="66" y="84" text-anchor="middle" style="font:500 11px var(--f-text);fill:var(--t2)">es Casa</text>
+      </svg>
+      <div style="display:grid;gap:4px;min-width:0">
+       <span class="ovl">Gastado en octubre</span>
+       <span class="num money" style="font-size:26px">$ 937.810</span>
+       <span class="t2" style="font-size:13px;line-height:1.35">Hasta hoy, día 19. Siete categorías con gastos.</span>
+      </div>
+     </div>
+
+     <div class="group">
+      <div class="expanded">
+       <div class="crow"><span class="cic" style="--c:var(--c-casa)"><svg class="ic"><use href="#i-home"/></svg></span><div style="min-width:0"><div class="l1"><b>Casa</b><span class="num money">$ 530.253</span></div><div class="l2"><div class="barline" style="flex:1;margin:0;--c:var(--c-casa)"><i style="width:57%"></i></div><span>57%</span><span class="dchip good">▼ 15%</span></div></div><svg class="ic chev" style="transform:rotate(90deg)"><use href="#i-cr"/></svg></div>
+       <div class="crow sub"><div class="l1"><b>Alquiler</b><span class="num money t2" style="font-size:14px">$ 500.000</span></div><span></span></div>
+       <div class="crow sub"><div class="l1"><b>Servicios</b><span class="num money t2" style="font-size:14px">$ 30.253</span></div><span></span></div>
+       <div class="crow sub"><a class="link" href="#pantallas">Ver movimientos de Casa<svg class="ic chev"><use href="#i-cr"/></svg></a><span></span></div>
+      </div>
+      <div class="crow"><span class="cic" style="--c:var(--c-compras)"><svg class="ic"><use href="#i-bag"/></svg></span><div style="min-width:0"><div class="l1"><b>Compras</b><span class="num money">$ 172.358</span></div><div class="l2"><div class="barline" style="flex:1;margin:0;--c:var(--c-compras)"><i style="width:18%"></i></div><span>18%</span><span class="dchip bad">▲ 124%</span></div></div><svg class="ic chev"><use href="#i-cr"/></svg></div>
+      <div class="crow"><span class="cic" style="--c:var(--c-comida)"><svg class="ic"><use href="#i-food"/></svg></span><div style="min-width:0"><div class="l1"><b>Comida</b><span class="num money">$ 77.536</span></div><div class="l2"><div class="barline" style="flex:1;margin:0;--c:var(--c-comida)"><i style="width:8%"></i></div><span>8%</span><span class="dchip good">▼ 73%</span></div></div><svg class="ic chev"><use href="#i-cr"/></svg></div>
+      <div class="crow"><span class="cic" style="--c:var(--c-auto)"><svg class="ic"><use href="#i-car"/></svg></span><div style="min-width:0"><div class="l1"><b>Auto</b><span class="num money">$ 63.010</span></div><div class="l2"><div class="barline" style="flex:1;margin:0;--c:var(--c-auto)"><i style="width:7%"></i></div><span>7%</span><span class="dchip good">▼ 82%</span></div></div><svg class="ic chev"><use href="#i-cr"/></svg></div>
+      <div class="crow"><span class="cic" style="--c:var(--c-tel)"><svg class="ic"><use href="#i-phone"/></svg></span><div style="min-width:0"><div class="l1"><b>Teléfono</b><span class="num money">$ 49.705</span></div><div class="l2"><div class="barline" style="flex:1;margin:0;--c:var(--c-tel)"><i style="width:5%"></i></div><span>5%</span><span class="dchip bad">▲ 41%</span></div></div><svg class="ic chev"><use href="#i-cr"/></svg></div>
+      <div class="crow"><span class="cic" style="--c:var(--c-otros)"><svg class="ic"><use href="#i-dollar"/></svg></span><div style="min-width:0"><div class="l1"><b>Otros gastos</b><span class="num money">$ 25.875</span></div><div class="l2"><div class="barline" style="flex:1;margin:0;--c:var(--c-otros)"><i style="width:3%"></i></div><span>3%</span><span class="dchip good">▼ 71%</span></div></div><svg class="ic chev"><use href="#i-cr"/></svg></div>
+      <div class="crow"><span class="cic" style="--c:var(--c-super)"><svg class="ic"><use href="#i-cart"/></svg></span><div style="min-width:0"><div class="l1"><b>Supermercado</b><span class="num money">$ 19.073</span></div><div class="l2"><div class="barline" style="flex:1;margin:0;--c:var(--c-super)"><i style="width:2%"></i></div><span>2%</span><span class="dchip good">▼ 88%</span></div></div><svg class="ic chev"><use href="#i-cr"/></svg></div>
+      <div class="crow"><span class="cic" style="--c:var(--t3)"><svg class="ic"><use href="#i-more"/></svg></span><div style="min-width:0"><div class="l1"><b class="t2">5 sin gastos todavía</b></div><div class="st t3" style="font-size:12.5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Viajes, Salud, Trámites, Entretenimiento, River</div></div><svg class="ic chev"><use href="#i-cd"/></svg></div>
+     </div>
+     <p class="t3" style="font-size:12px;margin:0 4px">Variación contra septiembre. Propuesta: calcularla contra el mismo día del mes anterior.</p>
+
+     <div class="card">
+      <div class="card-h"><h5>Por medio de pago</h5></div>
+      <div class="stack"><i style="width:53.3%;background:var(--t2)"></i><i style="width:37.1%;background:var(--t3)"></i><i style="width:9.6%;background:var(--s3)"></i></div>
+      <div style="display:grid;gap:10px;margin-top:14px;font-size:14px">
+       <div style="display:grid;grid-template-columns:10px 1fr auto 64px;gap:10px;align-items:center"><i style="width:8px;height:8px;border-radius:50%;background:var(--t2)"></i>Banco Macro<span class="t3" style="font-size:12.5px">53%</span><span class="num money" style="text-align:right">500.000</span></div>
+       <div style="display:grid;grid-template-columns:10px 1fr auto 64px;gap:10px;align-items:center"><i style="width:8px;height:8px;border-radius:50%;background:var(--t3)"></i>Macro VISA<span class="t3" style="font-size:12.5px">37%</span><span class="num money" style="text-align:right">348.309</span></div>
+       <div style="display:grid;grid-template-columns:10px 1fr auto 64px;gap:10px;align-items:center"><i style="width:8px;height:8px;border-radius:50%;background:var(--s3)"></i>Santander<span class="t3" style="font-size:12.5px">10%</span><span class="num money" style="text-align:right">89.501</span></div>
+      </div>
+     </div>
+    </div>
+    <nav class="tabbar" aria-label="Navegación"><button class="tab" type="button"><svg class="ic"><use href="#i-home"/></svg>Inicio</button><button class="tab on" type="button"><svg class="ic"><use href="#i-moves"/></svg>Movimientos</button><button class="fab" type="button" aria-label="Cargar movimiento"><svg class="ic"><use href="#i-plus"/></svg></button><button class="tab" type="button"><svg class="ic"><use href="#i-card"/></svg>Cuentas</button><button class="tab" type="button"><svg class="ic"><use href="#i-more"/></svg>Más</button></nav>
+   </div>
+  </div>
+  <div class="notes">
+   <h3>Categorías</h3>
+   <p class="muted">La tabla de 5 columnas pasa a ser una lista que funciona también como leyenda del gráfico.</p>
+   <ul>
+    <li>Dona plana en vez de torta 3D, con el dato que importa en el centro (Casa es el 57%).</li>
+    <li>Filas de dos líneas: nombre y monto arriba; barra, % y variación abajo. Nada se corta.</li>
+    <li>Sin fondos tintados por fila: el color de la categoría está en el ícono y en la barra.</li>
+    <li>Las 5 categorías en $ 0 se pliegan en una sola fila. El "% de ingresos" pasa al detalle de cada categoría.</li>
+    <li>General / Gastos / Ingresos pasan a ser chips, para no apilar dos segmentados iguales.</li>
+    <li>Medios de pago en grises: son cuentas, no categorías, así que no compiten con los colores de arriba.</li>
+    <li>Gastos / Ingresos suma una tercera opción, General, con los gráficos de ingresos y gastos por mes y de gastos día a día (ver la pantalla anterior). Abajo de esta lista seguiría "Evolución por categoría".</li>
+   </ul>
+  </div>
+ </div>
+
+ <!-- ===== CÓMO VENGO ===== -->
+ <div class="screen-item">
+  <div class="phone fp" data-phone>
+   <div class="scr">
+    <div class="island"></div>
+    <div class="status"><span>9:41</span><span class="sig"><i style="width:3px;height:5px"></i><i style="width:3px;height:7px"></i><i style="width:3px;height:9px"></i><i style="width:3px;height:11px"></i><i style="width:22px;height:11px;border-radius:3px;margin-left:4px"></i></span></div>
+    <div class="behind"></div><div class="scrim"></div>
+    <div class="sheet" role="dialog" aria-label="Cómo vengo con Macro VISA">
+     <div class="grab"></div>
+     <div class="sh-h"><span></span><div style="text-align:center"><h5>Cómo vengo</h5><div class="t2" style="font-size:12.5px;margin-top:2px">Macro VISA · cierra 29/10 · faltan 10 días</div></div><button class="icb" type="button" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+     <div class="sh-body" style="padding-top:6px">
+      <div class="statusbox">
+       <span class="k"><svg class="ic" style="width:16px;height:16px"><use href="#i-check"/></svg>Vas bien</span>
+       <span class="t2" style="font-size:14px">Al ritmo actual cerrás en</span>
+       <span class="num money" style="font-size:34px;line-height:1">$ 392.601</span>
+       <span class="t2 money" style="font-size:13px">$ 645.188 menos que tu promedio de los últimos 2 resúmenes</span>
+      </div>
+
+      <div class="card" style="padding-bottom:12px">
+       <span class="ovl">Resumen en curso</span>
+       <div class="gauge" role="img" aria-label="Llevás 311.962, proyectado 392.601, promedio 1.037.789, último 1.309.202">
+        <span class="ml" style="left:0;top:0;transform:none">Llevás<b class="money">$ 311.962</b></span>
+        <span class="ml" style="left:74.1%;top:0">Promedio<b class="money">$ 1,04 M</b></span>
+        <div class="track"><i style="width:17.5%;background:var(--brand)"></i><i style="width:4.8%;background:color-mix(in srgb,var(--brand) 50%,transparent)"></i><i style="width:5.8%;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--brand) 70%,transparent) 0 2px,transparent 2px 5px)"></i></div>
+        <span class="mk" style="left:74.1%;background:var(--t2)"></span>
+        <span class="mk" style="left:93.5%;background:var(--t3)"></span>
+        <span class="ml" style="left:28.1%;top:56px">Proyectado<b class="money">$ 392.601</b></span>
+        <span class="ml" style="left:93.5%;top:56px;transform:translateX(-80%)">Último<b class="money">$ 1,31 M</b></span>
+       </div>
+       <div class="legend" style="margin-top:14px"><span><i style="background:var(--brand)"></i>Gastado $ 244.814</span><span><i style="background:color-mix(in srgb,var(--brand) 50%,transparent)"></i>Cuotas y fijos $ 67.147</span><span><i style="background:repeating-linear-gradient(135deg,var(--brand) 0 2px,transparent 2px 4px)"></i>Proyección $ 80.639</span></div>
+      </div>
+
+      <div class="kpis">
+       <div><span>Podés gastar</span><span class="num money">$ 72.583</span><span class="t3" style="font-size:11.5px">por día</span></div>
+       <div><span>Venís gastando</span><span class="num money">$ 8.064</span><span class="t3" style="font-size:11.5px">por día</span></div>
+       <div><span>Ciclo</span><span class="num">Día 18</span><span class="t3" style="font-size:11.5px">de 28</span></div>
+      </div>
+
+      <div class="card">
+       <div class="card-h" style="margin-bottom:10px"><h5>En qué se va</h5></div>
+       <div class="stack"><i style="width:56.4%;background:var(--brand)"></i><i style="width:43.6%;background:color-mix(in srgb,var(--brand) 50%,transparent)"></i></div>
+       <div class="legend"><span><i style="background:var(--brand)"></i>Consumos $ 175.951</span><span><i style="background:color-mix(in srgb,var(--brand) 50%,transparent)"></i>Cuotas $ 136.011</span><span><i style="background:var(--s3)"></i>Fijos $ 0</span></div>
+      </div>
+
+      <div class="card">
+       <div class="card-h" style="margin-bottom:6px"><h5>Últimos resúmenes</h5></div>
+       <svg class="chart" viewBox="0 0 320 150" width="100%" role="img" aria-label="Resúmenes: 13/08 766 mil, 01/10 1,31 millones, en curso 393 mil proyectado; promedio 1,04 millones">
+        <defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" style="fill:var(--brand-soft)"/><line x1="0" y1="0" x2="0" y2="5" style="stroke:var(--brand)" stroke-width="2.4"/></pattern></defs>
+        <line x1="0" x2="320" y1="120" y2="120" class="grid"/>
+        <rect x="36" y="65.3" width="48" height="54.7" rx="6" style="fill:var(--s3)"/>
+        <rect x="136" y="26.5" width="48" height="93.5" rx="6" style="fill:var(--s3)"/>
+        <rect x="236" y="92" width="48" height="28" rx="6" style="fill:url(#hatch)"/>
+        <rect x="236" y="97.7" width="48" height="22.3" rx="4" style="fill:var(--brand)"/>
+        <line x1="8" x2="312" y1="45.9" y2="45.9" style="stroke:var(--brand-text)" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <text x="312" y="39" text-anchor="end" style="fill:var(--brand-text);font-weight:600">Promedio $ 1,04 M</text>
+        <text x="60" y="58" text-anchor="middle" class="lab">766 mil</text>
+        <text x="160" y="19" text-anchor="middle" class="lab">1,31 M</text>
+        <text x="260" y="85" text-anchor="middle" class="lab" style="fill:var(--brand-text)">393 mil</text>
+        <text x="60" y="138" text-anchor="middle">Cierre 13/08</text><text x="160" y="138" text-anchor="middle">Cierre 01/10</text><text x="260" y="138" text-anchor="middle">En curso</text>
+       </svg>
+      </div>
+      <button class="btn sec full" type="button"><svg class="ic"><use href="#i-target"/></svg>Poner un tope</button>
+      <button class="btn ter" type="button">Ver los movimientos del resumen</button>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="notes">
+   <h3>Tarjeta · Cómo vengo</h3>
+   <p class="muted">La mejor pantalla de la app, ordenada para que la respuesta llegue antes que el detalle.</p>
+   <ul>
+    <li>Primero el veredicto ("Vas bien") y la proyección grande. Antes el mensaje aparecía recién después de la barra y su leyenda de 5 ítems.</li>
+    <li>La barra rotula sus marcas directamente (Llevás, Proyectado, Promedio, Último), así no hay que ir y volver a una leyenda.</li>
+    <li>Tres datos accionables en fila: cuánto podés gastar por día, a qué ritmo venís y en qué día del ciclo estás.</li>
+    <li>"▼70% vs. último" desaparece de arriba: comparar un resumen a medias contra uno cerrado confunde. El historial ya lo muestra bien en el gráfico.</li>
+    <li>El resumen en curso se dibuja como lo gastado (sólido) más lo proyectado (rayado), con el promedio como referencia punteada.</li>
+    <li>Un solo botón secundario ("Poner un tope") y se cierra deslizando hacia abajo: sin "Cerrar" al pie.</li>
+   </ul>
+  </div>
+ </div>
+
+ <!-- ===== COMPARTIDO ===== -->
+ <div class="screen-item">
+  <div class="phone fp" data-phone>
+   <div class="scr">
+    <div class="island"></div>
+    <div class="status"><span>9:41</span><span class="sig"><i style="width:3px;height:5px"></i><i style="width:3px;height:7px"></i><i style="width:3px;height:9px"></i><i style="width:3px;height:11px"></i><i style="width:22px;height:11px;border-radius:3px;margin-left:4px"></i></span></div>
+    <div class="scroll">
+     <div class="bar"><button class="btn ter" type="button" style="padding:0 4px 0 0;height:36px;font-size:16px;gap:0"><svg class="ic" style="width:24px;height:24px"><use href="#i-cl"/></svg>Más</button><button class="icb" type="button" aria-label="Opciones del hogar"><svg class="ic"><use href="#i-dots-v"/></svg></button></div>
+     <h4 class="largetitle">Compartido</h4>
+     <div class="hero">
+      <div style="display:flex;align-items:center;gap:10px"><span class="avs"><span class="av" style="background:var(--c-tel)">J</span><span class="av" style="background:var(--c-super)">A</span></span><span class="ovl">Brangelina</span></div>
+      <p class="t2" style="margin:14px 0 0;font-size:15px">Le debés a Ana</p>
+      <div class="big money" style="margin-top:4px">$ 8.085</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button class="btn pri sm" type="button">Saldar deuda</button><button class="btn sec sm" type="button"><svg class="ic" style="width:18px;height:18px"><use href="#i-plus"/></svg>Gasto</button></div>
+      <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+       <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span class="ovl">Quién pagó en octubre</span><span class="t2 num money" style="font-size:13px">$ 447.830</span></div>
+       <div class="stack"><i style="width:54.9%;background:var(--c-tel)"></i><i style="width:45.1%;background:var(--c-super)"></i></div>
+       <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:13.5px"><span><span class="t2">Jose</span> <b class="num money">$ 245.830</b></span><span><span class="t2">Ana</span> <b class="num money">$ 202.000</b></span></div>
+      </div>
+     </div>
+
+     <div class="card">
+      <div class="card-h" style="margin-bottom:6px"><h5>Gastos en común por mes</h5></div>
+      <div class="legend" style="margin:0 0 6px"><span><i style="background:var(--c-tel)"></i>Jose</span><span><i style="background:var(--c-super)"></i>Ana</span></div>
+      <svg class="chart" viewBox="0 0 320 140" width="100%" role="img" aria-label="Gastos en común: agosto 141 mil (Jose 141), septiembre 176 mil (Jose 56, Ana 120), octubre 131 mil (Jose 49, Ana 82)">
+       <line x1="0" x2="320" y1="118" y2="118" class="grid"/>
+       <rect x="38" y="51" width="44" height="67" rx="5" style="fill:var(--c-tel)"/>
+       <rect x="138" y="91.4" width="44" height="26.6" rx="0" style="fill:var(--c-tel)"/>
+       <rect x="138" y="34.4" width="44" height="55" rx="5" style="fill:var(--c-super)"/>
+       <rect x="238" y="94.7" width="44" height="23.3" style="fill:var(--c-tel)"/>
+       <rect x="238" y="55.7" width="44" height="37" rx="5" style="fill:var(--c-super)"/>
+       <text x="60" y="43" text-anchor="middle" class="lab">141 mil</text><text x="160" y="27" text-anchor="middle" class="lab">176 mil</text><text x="260" y="48" text-anchor="middle" class="lab">131 mil</text>
+       <text x="60" y="135" text-anchor="middle">ago</text><text x="160" y="135" text-anchor="middle">sept</text><text x="260" y="135" text-anchor="middle">oct</text>
+      </svg>
+     </div>
+
+     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px 0"><span class="ovl">Últimos en común</span><a class="link" href="#pantallas">Ver los 8<svg class="ic chev"><use href="#i-cr"/></svg></a></div>
+     <div class="group">
+      <div class="row"><span class="cic" style="--c:var(--c-super)"><svg class="ic"><use href="#i-cart"/></svg></span><div style="min-width:0"><div class="tt">Supermercado</div><div class="st">Pagó Ana · 16 oct</div></div><div class="amt"><span class="num money">$ 32.400</span><small class="money">tu parte $ 16.200</small></div></div>
+      <div class="row"><span class="cic" style="--c:var(--c-comida)"><svg class="ic"><use href="#i-food"/></svg></span><div style="min-width:0"><div class="tt">Cena afuera</div><div class="st">Pagó Jose · 11 oct</div></div><div class="amt"><span class="num money">$ 28.000</span><small class="money">tu parte $ 14.000</small></div></div>
+      <div class="row"><span class="cic" style="--c:var(--c-casa)"><svg class="ic"><use href="#i-home"/></svg></span><div style="min-width:0"><div class="tt">Limpieza</div><div class="st">Pagó Ana · 4 oct</div></div><div class="amt"><span class="num money">$ 12.600</span><small class="money">tu parte $ 6.300</small></div></div>
+     </div>
+    </div>
+    <nav class="tabbar" aria-label="Navegación"><button class="tab" type="button"><svg class="ic"><use href="#i-home"/></svg>Inicio</button><button class="tab" type="button"><svg class="ic"><use href="#i-moves"/></svg>Movimientos</button><button class="fab" type="button" aria-label="Cargar movimiento"><svg class="ic"><use href="#i-plus"/></svg></button><button class="tab" type="button"><svg class="ic"><use href="#i-card"/></svg>Cuentas</button><button class="tab on" type="button"><svg class="ic"><use href="#i-more"/></svg>Más</button></nav>
+   </div>
+  </div>
+  <div class="notes">
+   <h3>Compartido</h3>
+   <p class="muted">Cuánto se deben, quién puso qué y qué se cargó último, en ese orden.</p>
+   <ul>
+    <li>La deuda va en tono neutro: no es una alerta ni un logro. Antes era roja en Inicio y aparecía sobre un hero verde acá.</li>
+    <li>La acción principal es saldar la deuda; "+ Gasto" queda como secundaria. Lo de editar, recargar y "Salir del hogar" pasa al menú ⋮.</li>
+    <li>Cada persona tiene su color (Jose celeste, Ana amarilla) en el avatar, la barra y el gráfico.</li>
+    <li>Los dos gráficos se fusionan en uno: barras apiladas por persona, con el total arriba. Con 3 meses las barras se leen mejor que las curvas, que además inventaban valores.</li>
+    <li>Los últimos gastos en común están a la vista, con "tu parte" en cada uno.</li>
+   </ul>
+   <p class="before">Los montos de Compartido son los simulados de tus capturas. Las tres filas de "Últimos en común" son de ejemplo.</p>
+  </div>
+ </div>
+
+ </div>
+</section>
+
+<!-- ============ 5. MICRO ============ -->
+<section class="sec" id="micro">
+ <div class="sec-head prose">
+  <span class="eyebrow">5 · Detalles nativos</span>
+  <h2>Lo que hace que se sienta app y no página</h2>
+  <p class="muted">Todo esto funciona en Safari de iPhone con la web agregada a la pantalla de inicio, con CSS y unas pocas líneas de JS.</p>
+ </div>
+ <div class="micro">
+  <div class="mi"><h3>Sheets con resorte y cierre deslizando</h3><p>El sheet sube con una curva tipo iOS y la pantalla de atrás se achica un poco. Se cierra arrastrando hacia abajo: con más de 120 px o un gesto rápido, se va.</p>
+<pre>.sheet { transform: translateY(100%);
+  transition: transform .42s cubic-bezier(.32,.72,0,1); }
+.sheet.open { transform: none; }
+body.sheet-open .app { transform: scale(.94);
+  border-radius: 12px; filter: brightness(.7);
+  transition: inherit; }</pre></div>
+
+  <div class="mi"><h3>Respuesta inmediata al toque</h3><p>Sacá el resaltado gris de WebKit y la demora del doble toque. Cada botón se achica apenas al presionarlo.</p>
+<pre>button, .row { -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; user-select: none; }
+.btn:active { transform: scale(.97); }
+.row:active { background: var(--s2); }</pre>
+   <button class="btn pri sm demo-press" type="button" style="background:var(--pg-accent);color:var(--pg-bg);border:0;height:40px;border-radius:12px;padding:0 16px;font:600 14px var(--f-text);cursor:pointer;transition:transform .12s">Tocame</button></div>
+
+  <div class="mi"><h3>Filas que se deslizan, sin JS</h3><p>Con <code>scroll-snap</code>, la fila es un carrusel horizontal: deslizás y aparecen Editar y Borrar. Probalo acá abajo.</p>
+   <div class="fp" style="border-radius:14px;overflow:hidden;background:var(--s1);margin-top:4px">
+    <div style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none" aria-label="Fila deslizable de ejemplo">
+     <div class="row" style="flex:0 0 100%;scroll-snap-align:start;background:var(--s1)"><span class="cic" style="--c:var(--c-comida)"><svg class="ic"><use href="#i-food"/></svg></span><div style="min-width:0"><div class="tt">Delivery</div><div class="st">Comida · Macro VISA</div></div><div class="amt"><span class="num">− $ 10.400</span><small>← deslizá</small></div></div>
+     <button type="button" style="flex:0 0 76px;scroll-snap-align:end;border:0;background:var(--s3);color:var(--t1);font:600 13px var(--f-text)">Editar</button>
+     <button type="button" style="flex:0 0 76px;scroll-snap-align:end;border:0;background:var(--neg);color:#fff;font:600 13px var(--f-text)">Borrar</button>
+    </div>
+   </div></div>
+
+  <div class="mi"><h3>Deshacer en vez de "¿Estás seguro?"</h3><p>Al borrar, la fila se va con una animación corta y aparece un aviso arriba de la barra inferior: "Gasto borrado · Deshacer". El borrado real se hace a los 5 segundos.</p>
+<pre>.toast { position: fixed; left: 16px; right: 16px;
+  bottom: calc(var(--tabbar-h) + 12px);
+  animation: toast-in .3s cubic-bezier(.32,.72,0,1); }</pre></div>
+
+  <div class="mi"><h3>Montos que cuentan</h3><p>Al cambiar de mes o de ARS a USD, el saldo anima del valor anterior al nuevo en unos 400 ms. Con cifras tabulares los dígitos no se mueven de lugar.</p>
+<pre>function countTo(el, from, to, ms = 400) {
+  const t0 = performance.now();
+  const step = t => {
+    const p = Math.min((t - t0) / ms, 1);
+    const e = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(from + (to - from) * e);
+    if (p &lt; 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}</pre></div>
+
+  <div class="mi"><h3>Cambiar de mes deslizando</h3><p>Un swipe horizontal sobre el contenido cambia de mes, con una transición de deslizamiento. Safari 18 ya soporta View Transitions; en versiones anteriores simplemente no anima.</p>
+<pre>const go = dir =&gt; (document.startViewTransition
+  ? document.startViewTransition(() =&gt; setMonth(dir))
+  : setMonth(dir));
+::view-transition-old(root) { animation: slide-out .25s; }
+::view-transition-new(root) { animation: slide-in .25s; }</pre></div>
+
+  <div class="mi"><h3>Ojo con desenfoque y "espiar"</h3><p>En vez de cambiar los números por puntitos (que cambian el ancho y mueven el diseño), desenfocalos. Mantener presionado un monto lo muestra mientras dure el gesto.</p>
+<pre>.hide-amounts .money { filter: blur(7px);
+  transition: filter .25s; }
+.hide-amounts .money:active { filter: none; }</pre></div>
+
+  <div class="mi"><h3>Vibración en los momentos justos</h3><p>Safari en iPhone no soporta <code>navigator.vibrate</code>. Lo que sí funciona desde iOS 18: los interruptores nativos <code>&lt;input type="checkbox" switch&gt;</code> vibran al cambiar. Usalos en Ajustes y Notificaciones; la vibración viene incluida.</p></div>
+
+  <div class="mi"><h3>Guardado con confirmación visual</h3><p>Al guardar, el sheet baja, el movimiento nuevo aparece arriba de la lista con un fondo verde suave que se desvanece en 1,5 s y el saldo de Inicio anima su cambio. No hace falta un "¡Guardado!" en un pop-up.</p>
+<pre>@keyframes nuevo { from { background: var(--brand-soft); } }
+.row.is-new { animation: nuevo 1.5s ease-out; }</pre></div>
+
+  <div class="mi"><h3>Título grande que se achica</h3><p>Como en las apps de Apple: "Movimientos" grande arriba y, al scrollear, pasa a la barra superior en chico, sobre un fondo desenfocado.</p>
+<pre>new IntersectionObserver(([e]) =&gt;
+  bar.classList.toggle('compact', !e.isIntersecting)
+).observe(document.querySelector('.largetitle'));
+.bar.compact { backdrop-filter: blur(20px);
+  background: var(--glass); }</pre></div>
+
+  <div class="mi"><h3>Ajustes de PWA que se notan</h3><p>Barra de estado del color del fondo, contenido detrás del notch, sin rebote del body y sin zoom al tocar un input (iOS hace zoom si la letra es menor a 16 px).</p>
+<pre>&lt;meta name="theme-color" content="#0A0E1A"
+      media="(prefers-color-scheme: dark)"&gt;
+&lt;meta name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"&gt;
+html, body { overscroll-behavior-y: none; }
+input, select { font-size: 16px; }
+.app { padding-top: env(safe-area-inset-top); }</pre></div>
+
+  <div class="mi"><h3>Carga sin saltos</h3><p>Mientras sincroniza con la nube, mostrá esqueletos con la forma de las filas y tarjetas en vez de una pantalla vacía. Si el usuario prefiere menos movimiento, todo esto se apaga.</p>
+<pre>.skeleton { background: linear-gradient(90deg,
+  var(--s2) 30%, var(--s3) 50%, var(--s2) 70%)
+  0 0 / 300% 100%; animation: shimmer 1.2s infinite; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; } }</pre></div>
+ </div>
+
+ <div class="panel" style="margin-top:24px">
+  <h3>Por dónde empezar</h3>
+  <ol style="margin:8px 0 0;padding-left:20px;display:grid;gap:8px;font-size:14.5px">
+   <li><b>Tokens y color (1–2 días):</b> pegar el bloque de tokens, sacar el rojo de los gastos, fijar los colores de categoría y separar <code>--brand</code> de <code>--brand-text</code>. Es lo que más cambia con menos trabajo.</li>
+   <li><b>Carga en un sheet y + en la barra inferior:</b> la acción que más usás pasa de 6 pasos a 1.</li>
+   <li><b>Movimientos y Categorías como listas:</b> lista agrupada, "Programados" y categorías en filas de dos líneas.</li>
+   <li><b>Inicio y gráficos:</b> nueva jerarquía, barras en lugar de líneas cortas, sin torta 3D.</li>
+   <li><b>Pulido:</b> unificar los sheets, el ojo con desenfoque, deshacer, títulos grandes y Ajustes como lista agrupada.</li>
+  </ol>
+ </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  // tema de los mockups
+  var themeBtns = document.querySelectorAll('[data-mtheme]');
+  themeBtns.forEach(function(b){
+    b.addEventListener('click', function(){
+      var light = b.dataset.mtheme === 'light';
+      document.querySelectorAll('.fp').forEach(function(el){ el.classList.toggle('is-light', light); });
+      themeBtns.forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+    });
+  });
+
+  // segmentados y chips de selección única
+  document.querySelectorAll('[data-seg],[data-chips]').forEach(function(g){
+    g.addEventListener('click', function(e){
+      var b = e.target.closest('button'); if(!b || !g.contains(b)) return;
+      Array.prototype.forEach.call(g.children, function(c){ c.classList.toggle('on', c === b); });
+      if (g.hasAttribute('data-type')) updateSave(g.closest('[data-phone]'));
+    });
+  });
+
+  // ojo
+  document.querySelectorAll('[data-eye]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var ph = b.closest('[data-phone]');
+      var on = ph.classList.toggle('hide');
+      b.querySelector('use').setAttribute('href', on ? '#i-eyeoff' : '#i-eye');
+      b.setAttribute('aria-label', on ? 'Mostrar montos' : 'Ocultar montos');
+    });
+  });
+
+  // ARS / USD
+  document.querySelectorAll('[data-cur]').forEach(function(g){
+    g.addEventListener('click', function(e){
+      var b = e.target.closest('button'); if(!b) return;
+      var usd = b.dataset.c === 'usd';
+      Array.prototype.forEach.call(g.children, function(c){ c.classList.toggle('on', c === b); });
+      var ph = g.closest('[data-phone]');
+      ph.querySelectorAll('[data-ars]').forEach(function(el){ el.textContent = usd ? el.dataset.usd : el.dataset.ars; });
+      ph.querySelectorAll('.sym').forEach(function(el){ el.textContent = usd ? 'US$' : '$'; });
+    });
+  });
+
+  // categorías de la carga
+  var SUBS = {
+    Casa:[['Alquiler','i-home'],['Servicios','i-bolt'],['Hogar','i-gift']],
+    Comida:[['Delivery','i-scooter'],['Restaurante','i-food'],['Café','i-cup']],
+    Compras:[['Ropa','i-bag'],['Regalos','i-gift'],['Tecnología','i-phone']],
+    Auto:[['Nafta','i-fuel'],['Seguro','i-check'],['Mantenimiento','i-car']],
+    'Teléfono':[['Celular','i-phone'],['Internet','i-wifi']],
+    Salud:[['Farmacia','i-heart'],['Médico','i-heart']]
+  };
+  var CUOTAS = [1, 3, 6, 12];
+  document.querySelectorAll('[data-cuotas]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var ph = b.closest('[data-phone]'), cur = +(b.dataset.n || 1);
+      var n = CUOTAS[(CUOTAS.indexOf(cur) + 1) % CUOTAS.length]; b.dataset.n = n;
+      var val = +(ph.dataset.val || 25000);
+      b.classList.toggle('on', n > 1);
+      b.querySelector('span').textContent = n === 1 ? '1 pago' : n + ' cuotas de $ ' + fmtVal(Math.round(val / n));
+    });
+  });
+  document.querySelectorAll('[data-shared]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var on = b.classList.toggle('on');
+      b.querySelector('span').textContent = on ? 'Compartido con Ana · 50/50' : 'Compartido';
+    });
+  });
+  function updateSave(ph){
+    if(!ph) return;
+    var save = ph.querySelector('[data-save]'); if(!save) return;
+    var t = ph.querySelector('[data-type] .on'), c = ph.querySelector('[data-cats] .on');
+    var tipo = t ? t.textContent.trim().toLowerCase() : 'gasto';
+    var verbo = tipo === 'transferencia' ? 'transferencia' : tipo;
+    var cat = c ? c.textContent.trim() : '';
+    save.textContent = 'Guardar ' + verbo + (cat && tipo !== 'transferencia' ? ' · ' + cat : '');
+  }
+  document.querySelectorAll('[data-cats]').forEach(function(g){
+    var ph = g.closest('[data-phone]'), label = ph.querySelector('[data-catlabel]');
+    var catsHTML = g.innerHTML, parent = 'Comida';
+    function showCats(sel){
+      g.innerHTML = catsHTML; label.textContent = 'Categoría';
+      g.querySelectorAll('.catb').forEach(function(c){ c.classList.toggle('on', c.textContent.trim() === sel); });
+    }
+    function showSubs(btn){
+      var name = btn.textContent.trim(), color = btn.style.getPropertyValue('--c'), list = SUBS[name];
+      parent = name; label.textContent = name + ' · elegí subcategoría';
+      g.innerHTML = '<button class="catb" type="button" data-back style="--c:var(--t2)"><span class="cic"><svg class="ic"><use href="#i-cl"/></svg></span>Volver</button>' +
+        list.map(function(x, i){ return '<button class="catb' + (i ? '' : ' on') + '" type="button" data-sub style="--c:' + color + '"><span class="cic"><svg class="ic"><use href="#' + x[1] + '"/></svg></span>' + x[0] + '</button>'; }).join('');
+      g.classList.remove('swap'); void g.offsetWidth; g.classList.add('swap');
+    }
+    g.addEventListener('click', function(e){
+      var b = e.target.closest('.catb'); if(!b) return;
+      if (b.hasAttribute('data-back')){ showCats(parent); }
+      else if (b.hasAttribute('data-sub')){ g.querySelectorAll('[data-sub]').forEach(function(c){ c.classList.toggle('on', c === b); }); }
+      else if (SUBS[b.textContent.trim()]){ showSubs(b); }
+      else { g.querySelectorAll('.catb').forEach(function(c){ c.classList.toggle('on', c === b); }); }
+      updateSave(ph);
+    });
+    var start = Array.prototype.find.call(g.querySelectorAll('.catb'), function(c){ return c.textContent.trim() === 'Comida'; });
+    if (start) { showSubs(start); updateSave(ph); }
+  });
+
+  // teclado con calculadora
+  var TC = 1540;
+  function fmtNum(s){
+    var parts = s.split(','), int = parts[0].replace(/^0+(?=\d)/, '');
+    int = int.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return parts.length > 1 ? int + ',' + parts[1] : int;
+  }
+  function fmtVal(n){
+    var neg = n < 0; n = Math.abs(n);
+    var r = Math.round(n * 100) / 100, int = Math.floor(r), dec = Math.round((r - int) * 100);
+    var s = String(int).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return (neg ? '−' : '') + s + (dec ? ',' + String(dec).padStart(2, '0') : '');
+  }
+  function evaluate(expr){
+    var tokens = expr.match(/[0-9,]+|[+−×]/g) || [];
+    var vals = [], ops = [];
+    tokens.forEach(function(t){ if (/[+−×]/.test(t)) ops.push(t); else vals.push(parseFloat(t.replace(',', '.')) || 0); });
+    if (vals.length === ops.length) ops.pop();
+    // primero ×
+    for (var i = 0; i < ops.length; i++){ if (ops[i] === '×'){ vals.splice(i, 2, vals[i] * vals[i+1]); ops.splice(i, 1); i--; } }
+    var res = vals[0] || 0;
+    for (var j = 0; j < ops.length; j++){ res = ops[j] === '+' ? res + vals[j+1] : res - vals[j+1]; }
+    return res;
+  }
+  document.querySelectorAll('[data-keys]').forEach(function(pad){
+    var ph = pad.closest('[data-phone]');
+    var out = ph.querySelector('[data-amt]'), usd = ph.querySelector('[data-amt-usd]');
+    var expr = '25000';
+    function render(){
+      var shown = expr.replace(/[0-9,]+/g, fmtNum).replace(/([+−×])/g, ' $1 ');
+      out.textContent = shown || '0';
+      var hasOp = /[+−×]/.test(expr);
+      var v = evaluate(expr); ph.dataset.val = v;
+      usd.textContent = (hasOp ? '= $ ' + fmtVal(v) + ' · ' : '') + '≈ US$ ' + fmtVal(Math.round(v / TC));
+      var len = shown.length;
+      out.parentElement.style.fontSize = len > 14 ? '30px' : len > 10 ? '38px' : '';
+    }
+    pad.addEventListener('click', function(e){
+      var b = e.target.closest('.key'); if(!b) return;
+      var k = b.dataset.k || b.textContent.trim();
+      var last = expr.slice(-1);
+      if (k === 'del'){ expr = expr.slice(0, -1); }
+      else if (/[+−×]/.test(k)){ if (!expr) return; expr = /[+−×]/.test(last) ? expr.slice(0, -1) + k : expr + k; }
+      else if (k === ','){ var cur = expr.split(/[+−×]/).pop(); if (cur.indexOf(',') === -1) expr += (cur ? '' : '0') + ','; }
+      else { if (expr.length < 18) expr += k; }
+      render();
+    });
+    var holdT;
+    var del = pad.querySelector('[data-k="del"]');
+    del.addEventListener('pointerdown', function(){ holdT = setTimeout(function(){ expr = ''; render(); }, 550); });
+    ['pointerup','pointerleave','pointercancel'].forEach(function(ev){ del.addEventListener(ev, function(){ clearTimeout(holdT); }); });
+  });
+
+  // copiar tokens
+  document.querySelectorAll('[data-copy]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var el = document.getElementById(b.dataset.copy);
+      var done = function(){ b.textContent = 'Copiado'; setTimeout(function(){ b.textContent = 'Copiar CSS'; }, 1600); };
+      try {
+        navigator.clipboard.writeText(el.textContent).then(done, function(){ selectEl(el); });
+      } catch(err){ selectEl(el); }
+    });
+  });
+  function selectEl(el){ var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+
+  // demo de toque
+  document.querySelectorAll('.demo-press').forEach(function(b){
+    b.addEventListener('pointerdown', function(){ b.style.transform = 'scale(.95)'; });
+    ['pointerup','pointerleave'].forEach(function(ev){ b.addEventListener(ev, function(){ b.style.transform = ''; }); });
+  });
+})();
+</script>
+
+</body></html>
