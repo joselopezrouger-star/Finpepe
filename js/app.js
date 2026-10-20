@@ -3422,13 +3422,13 @@
         <div class="cmet-var ${varCls}"><span class="cmet-l">vs. ${esc(prevShortM)}</span><b class="num">${varVal}</b>${varSub ? `<span class="num money cmet-sub">${esc(varSub)}</span>` : ''}</div>
       </div>`;
     };
-    // La lista suma las categorías (y subcategorías) que este mes están en
-    // $ 0 pero el mes pasado tuvieron movimientos: así se ve cuánto bajaron.
+    // Dentro de cada categoría con movimientos, también las subcategorías
+    // que este mes están en $ 0 pero el mes pasado no (para ver cuánto
+    // bajaron). Las categorías enteras en $ 0 van agrupadas más abajo.
     const listRows = breakdown.map((g) => ({ ...g, subs: g.subs.slice() }));
     for (const pg of prevBreakdown) {
-      if (!(pg.total > 0)) continue;
-      let g = listRows.find((x) => x.id === pg.id);
-      if (!g) { g = { id: pg.id, name: pg.name, total: 0, subs: [] }; listRows.push(g); }
+      const g = listRows.find((x) => x.id === pg.id);
+      if (!g) continue;
       for (const ps of pg.subs) if (ps.value > 0 && !g.subs.some((x) => x.id === ps.id)) g.subs.push({ id: ps.id, name: ps.name, value: 0 });
     }
     const zeroGroups = S().categories.filter((c) => c.type === type && !c.parentId && !listRows.some((g) => g.id === c.id));
@@ -3459,17 +3459,22 @@
       </div>`;
     }).join('');
     const zeroOpen = !!ui.catOpen[`${type}:__zero`];
+    // El grupo de las que están en $ 0: cuánto bajaron en total contra el
+    // mes anterior y, abiertas, cada una con su variación.
+    zeroGroups.sort((a, b) => (prevTotals.get(b.id) || 0) - (prevTotals.get(a.id) || 0));
+    const zeroPrev = zeroGroups.reduce((a, c) => a + (prevTotals.get(c.id) || 0), 0);
     const zeroHTML = zeroGroups.length ? `
       <div class="${zeroOpen ? 'expanded' : ''}">
         <button type="button" class="crow" data-catopen="${type}:__zero" aria-expanded="${zeroOpen}">
           <span class="cic" style="--c:var(--t3)">${spriteIcon('more')}</span>
           <div class="crow-main"><div class="l1"><b class="t2">${zeroGroups.length} sin ${isInc ? 'ingresos' : 'gastos'} todavía</b></div>
-            <div class="st t3">${esc(zeroGroups.map((c) => c.name).join(', '))}</div></div>
+            <div class="st t3">${zeroPrev > 0 ? `<span class="money zero-drop${isInc ? ' bad' : ''}">−${esc(fmtPlain(zeroPrev))} vs. ${esc(prevShortM)}</span> · ` : ''}${esc(zeroGroups.map((c) => c.name).join(', '))}</div></div>
           ${spriteIcon('cd').replace('class="ic"', `class="ic chev${zeroOpen ? ' rot180' : ''}"`)}
         </button>
         ${zeroOpen ? zeroGroups.map((c) => `
         <button type="button" class="crow sub" data-catmoves="${esc(c.id)}">
           <div class="l1"><b>${esc(c.name)}</b><span class="num money t3">${esc(fmtPlain(0))}</span></div>
+          ${prevTotals.get(c.id) > 0 ? metricsHTML(0, prevTotals.get(c.id)) : ''}
         </button>`).join('') : ''}
       </div>` : '';
 

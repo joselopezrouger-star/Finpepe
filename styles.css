@@ -2469,3 +2469,5 @@ body[data-grp="mas"] .topbar-inner, body[data-grp="cuentas"] .topbar-inner { min
 .cmet-var.bad .cmet-sub { color: var(--neg); }
 .cmet-var.good .cmet-sub { color: var(--brand-text); }
 .cmet-var.flat .cmet-sub { color: var(--t2); }
+.zero-drop { color: var(--brand-text); font-weight: 600; }
+.zero-drop.bad { color: var(--neg); }
