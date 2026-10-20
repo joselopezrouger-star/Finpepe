@@ -2232,3 +2232,46 @@ body.sheet-behind .topbar { transform: scale(0.94); border-radius: 14px; }
 .pick-sub { padding-left: 28px; }
 .pick-sub .cic { width: 28px; height: 28px; }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* ---------- Categorías y General (rediseño) ---------- */
+.k-card-h-tight { margin-bottom: 4px; }
+.k-card-note { font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 8px; font: 500 12px/1.2 var(--f-text); color: var(--t2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lg-line { display: inline-block; width: 14px; height: 0; border-top: 2.5px solid; border-radius: 2px; }
+.lg-line.lg-dash { border-top-style: dashed; border-radius: 0; }
+.daily-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
+.daily-total { font-size: 22px; }
+.donut-card { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; align-items: center; }
+.donut-card svg { display: block; }
+.donut-text { display: grid; gap: 4px; min-width: 0; }
+.donut-text .t2 { font-size: 13px; line-height: 1.35; }
+.donut-total { font-size: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-note-out { margin: -4px 4px 0; }
+/* Filas de categoría en dos líneas: nombre y monto arriba; barra, % y
+   variación abajo. Sin fondos de color por fila. */
+.crow {
+  position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr) 16px; gap: 12px; align-items: center;
+  width: 100%; padding: 12px 14px; border: 0; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer;
+}
+.cat-group > div + div > .crow:first-child::before,
+.crow + .crow::before { content: ''; position: absolute; top: 0; left: 62px; right: 0; height: 1px; background: var(--line); }
+.crow .cic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; }
+.crow-main { min-width: 0; }
+.crow .l1 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.crow .l1 b { font: 600 15px/1.2 var(--f-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crow .l1 .num { font-size: 16px; white-space: nowrap; }
+.crow .l2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; font: 500 12px/1 var(--f-text); color: var(--t2); }
+.crow .st { font-size: 12.5px; margin-top: 3px; }
+.barline { flex: 1; height: 6px; border-radius: 9px; background: var(--s2); overflow: hidden; }
+.barline i { display: block; height: 100%; border-radius: 9px; background: var(--c); }
+.crow.sub { display: block; padding: 10px 44px 10px 62px; cursor: pointer; }
+.crow.sub::before { left: 62px; }
+.crow.sub .l1 b { font-weight: 500; color: var(--t2); }
+.crow.sub .l1 .num { font-size: 14px; }
+.crow.sub .link { min-height: 28px; }
+.crow-info { cursor: default; font-size: 13px; }
+.expanded { background: color-mix(in srgb, var(--s2) 55%, transparent); }
+.chev.rot { transform: rotate(90deg); }
+.chev.rot180 { transform: rotate(180deg); }
+.evo-chips { margin-bottom: 8px; }

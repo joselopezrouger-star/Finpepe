@@ -546,8 +546,8 @@
     trendTable: false,
     savChart: 'rate',         // Ahorros: gráfico elegido (rate | nominal | cum)
     calSel: null,             // 'YYYY-MM-DD' día seleccionado en el calendario
-    catAnalysisId: null,      // categoría elegida para el gráfico de evolución
-    catKind: 'gasto',         // Categorías: sección Gastos o Ingresos
+    catKind: 'general',       // Categorías: General, Gastos o Ingresos
+    catEvoExp: null, catEvoInc: null, // Categorías: categoría elegida en "Evolución"
     catOpen: {},              // Categorías: grupo -> true si sus subcategorías están desplegadas
   };
 
@@ -2190,7 +2190,7 @@
     // vencimiento (ver comentario al principio de la función). El % es
     // sobre el TOTAL del mes, el mismo que muestra Categorías.
     const byCat = new Map();
-    for (const t of inMonthCal.filter((x) => x.type === 'gasto')) {
+    for (const t of inMonthCal.filter((x) => x.type === 'gasto' && upToToday(x.date))) {
       const v = txDispAmount(t);
       if (v == null) continue;
       const topId = topCategoryOf(t.categoryId);
@@ -2773,533 +2773,454 @@
     return [...groups.values()].sort((a, b) => b.total - a.total);
   }
 
-  // Agrega al desglose del mes actual, en $0, las categorías/subcategorías
-  // que tuvieron gasto el mes anterior pero no este mes — sin esto,
-  // apenas una categoría dejaba de tener movimientos en el mes elegido
-  // desaparecía entera de la tabla en vez de mostrarse reducida a cero
-  // (que es justamente lo que "vs. ant." está pensado para mostrar).
-  function withPrevZeros(breakdown, prevBreakdown) {
-    const result = breakdown.map((g) => ({ ...g, subs: g.subs.map((s) => ({ ...s })) }));
-    const byId = new Map(result.map((g) => [g.id, g]));
-    for (const pg of prevBreakdown) {
-      let g = byId.get(pg.id);
-      if (!g) {
-        g = { id: pg.id, name: pg.name, total: 0, subs: [], direct: 0 };
-        result.push(g);
-        byId.set(pg.id, g);
+
+
+  /* ---------- Escalas y formatos de los gráficos del rediseño ---------- */
+  // Tope "redondo" del eje y su paso, para 3 a 5 líneas de grilla.
+  function niceScale(max, count = 4) {
+    if (!(max > 0)) max = 1;
+    const raw = max / count;
+    const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / pow;
+    const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * pow;
+    return { top: Math.ceil(max / step) * step, step };
+  }
+  // Unidad de un gráfico de montos: millones ("3,82") si llega al millón,
+  // miles ("850") si no. Los ejes dicen "1 M" / "500 k".
+  function moneyUnit(max) {
+    if (max >= 1e6) return { div: 1e6, dec: 2, axis: 'M', note: 'en millones' };
+    return { div: 1e3, dec: 0, axis: 'k', note: 'en miles' };
+  }
+  const unitNum = (v, u) => (hideAmounts ? '•••' : (v / u.div).toFixed(u.dec).replace('.', ','));
+  const unitAxis = (v, u) => (v === 0 ? '0' : `${(v / u.div).toLocaleString('es-AR', { maximumFractionDigits: 1 })} ${u.axis}`);
+
+  /* ---------- Movimientos › Categorías › General ---------- */
+  // Ingresos y gastos por mes (los últimos 4 hasta el elegido): dos líneas
+  // suaves con marcadores y el valor arriba/abajo de cada punto. Si el
+  // último mes está en curso, ese tramo de gastos va punteado (el mes no
+  // terminó) y el área entre las dos líneas muestra lo que quedó.
+  function incomeExpenseChartSvg(rows, inProgress) {
+    const G = Charts.g;
+    const W = 320, H = 156, x0 = 50, x1 = 290, yTop = 14, yBase = 130;
+    const max = Math.max(1, ...rows.map((r) => Math.max(r.inc, r.exp)));
+    const u = moneyUnit(max);
+    const { top, step } = niceScale(max, 4);
+    const ticks = [];
+    for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+    const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
+    const y = G.escala([0, top], [yBase, yTop]);
+    const inc = rows.map((r, i) => [x(i), y(r.inc)]);
+    const exp = rows.map((r, i) => [x(i), y(r.exp)]);
+    const last = rows.length - 1;
+    const expDone = inProgress ? exp.slice(0, last) : exp;
+    const area = rows.length > 1 ? `<path d="${G.areaEntre(inc, exp)}" style="fill:var(--brand);opacity:.08"/>` : '';
+    const expSolid = expDone.length > 1 ? `<path d="${G.lineaSuave(expDone)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:var(--t1)"/>` : '';
+    const expDash = inProgress && last > 0 ? `<path d="${G.lineaSuave(exp.slice(last - 1))}" fill="none" stroke-width="2.5" stroke-dasharray="4 4" stroke-linecap="round" style="stroke:var(--t1)"/>` : '';
+    const incLine = rows.length > 1 ? `<path d="${G.lineaSuave(inc)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:var(--brand)"/>` : '';
+    const markers = rows.map((r, i) => {
+      const isLast = i === last;
+      const expMk = isLast && inProgress
+        ? `<circle cx="${exp[i][0].toFixed(1)}" cy="${exp[i][1].toFixed(1)}" r="4.5" stroke-width="2.4" stroke-dasharray="2 2" style="fill:var(--s1);stroke:var(--t1)"/>`
+        : G.marcador(exp[i][0], exp[i][1], 'var(--t1)', false);
+      return G.marcador(inc[i][0], inc[i][1], 'var(--brand)', isLast) + expMk;
+    }).join('');
+    // Ingresos arriba de su punto; gastos abajo (o arriba si gastó más).
+    const labels = rows.map((r, i) => {
+      const incAbove = r.inc >= r.exp;
+      const iy = incAbove ? inc[i][1] - 10 : inc[i][1] + 18;
+      const ey = incAbove ? exp[i][1] + 18 : exp[i][1] - 10;
+      return `<text x="${inc[i][0].toFixed(1)}" y="${Math.max(10, iy).toFixed(1)}" text-anchor="middle" class="g-lab"${i === last ? ' style="fill:var(--brand-text)"' : ''}>${unitNum(r.inc, u)}</text>
+        <text x="${exp[i][0].toFixed(1)}" y="${Math.min(yBase - 2, ey).toFixed(1)}" text-anchor="middle" class="g-lab">${unitNum(r.exp, u)}</text>`;
+    }).join('');
+    const months = rows.map((r, i) => `<text x="${x(i).toFixed(1)}" y="148" text-anchor="middle"${i === last ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`).join('');
+    const aria = `Ingresos y gastos por mes: ${rows.map((r, i) => `${r.label} ${hideAmounts ? '' : `${fmtPlain(r.inc)} y ${fmtPlain(r.exp)}`}${i === last && inProgress ? ' (en curso)' : ''}`).join('; ')}`;
+    return { unit: u, svg: `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}">
+      ${G.grillaY(ticks, y, 36, 306, (v) => unitAxis(v, u))}
+      ${area}${incLine}${expSolid}${expDash}${markers}${labels}${months}
+    </svg>` };
+  }
+
+  // Gastos acumulados día a día del mes elegido (escalones hasta hoy)
+  // contra el mes anterior completo (punteado), con los ingresos del mes y
+  // los ingresos − ahorro como líneas horizontales, la línea "Hoy" y la
+  // diferencia contra el mes anterior al mismo día.
+  function dailySpendChartSvg({ cur, prev, daysInMonth, upTo, income, incomeMinusSav, isCurrent, prevLabel }) {
+    const G = Charts.g;
+    const W = 320, H = 176, x0 = 40, x1 = 304, yTop = 20, yBase = 150;
+    const curPts = G.acumulado(cur, upTo);
+    const prevDays = Object.keys(prev).length ? Math.max(...Object.keys(prev).map(Number)) : 0;
+    const prevPts = G.acumulado(prev, Math.max(prevDays, 1));
+    const max = Math.max(1, income, incomeMinusSav, ...curPts.map((p) => p[1]), ...prevPts.map((p) => p[1]));
+    const u = moneyUnit(max);
+    const { top, step } = niceScale(max * 1.04, 4);
+    const ticks = [];
+    for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+    const x = G.escala([1, daysInMonth], [x0, x1]);
+    const y = G.escala([0, top], [yBase, yTop]);
+    const curXY = curPts.map(([d, v]) => [x(d), y(v)]);
+    const prevXY = prevPts.map(([d, v]) => [x(Math.min(d, daysInMonth)), y(v)]);
+    const prevPath = prevXY.length > 1 ? `<path d="M${prevXY.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L')}" fill="none" stroke-width="1.6" stroke-dasharray="4 3" stroke-linejoin="round" style="stroke:var(--t3)"/>` : '';
+    const steps = curXY.length ? G.escalones(curXY) : '';
+    const area = curXY.length > 1 ? `<path d="${steps} L${curXY[curXY.length - 1][0].toFixed(1)} ${yBase} L${curXY[0][0].toFixed(1)} ${yBase} Z" style="fill:url(#gDia)"/>` : '';
+    const curPath = curXY.length ? `<path d="${steps}" fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--t1)"/>` : '';
+    const hline = (v, color, label, labelColor, below) => {
+      if (!(v > 0)) return '';
+      const yy = y(v);
+      return `<line x1="${x0}" x2="${x1}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke-width="1.5" stroke-dasharray="5 4" style="stroke:${color}"/>
+        <text x="${below ? x0 + 2 : x1}" y="${(below ? yy + 13 : yy - 5).toFixed(1)}" text-anchor="${below ? 'start' : 'end'}" style="fill:${labelColor};font-weight:600">${esc(label)} ${unitNum(v, u)} ${u.axis}</text>`;
+    };
+    const incLines = hline(income, 'var(--brand)', 'Ingresos', 'var(--brand-text)', false)
+      + (Math.abs(income - incomeMinusSav) >= 1 ? hline(incomeMinusSav, 'var(--c-super)', 'Ingresos − ahorro', 'var(--c-super)', true) : '');
+    let today = '';
+    if (curXY.length) {
+      const [hx, hy] = curXY[curXY.length - 1];
+      const prevAt = prevPts[Math.min(upTo, prevPts.length) - 1];
+      const curVal = curPts[curPts.length - 1][1];
+      // "Hoy" va justo arriba del punto más alto de ese día (el de este mes
+      // o el del anterior), para no pisarse con las líneas de ingresos.
+      const prevAtY = prevAt && prevDays ? y(prevAt[1]) : hy;
+      const hoyY = Math.max(yTop + 10, Math.min(hy, prevAtY) - 14);
+      today = (isCurrent ? `<line x1="${hx.toFixed(1)}" x2="${hx.toFixed(1)}" y1="${(hoyY + 4).toFixed(1)}" y2="${yBase}" stroke-width="1" stroke-dasharray="2 3" style="stroke:var(--t3)"/>
+        <text x="${hx.toFixed(1)}" y="${hoyY.toFixed(1)}" text-anchor="middle" style="fill:var(--t2);font-weight:600">Hoy</text>` : '');
+      if (prevAt && prevDays) {
+        const py = y(prevAt[1]);
+        const diff = curVal - prevAt[1];
+        today += `<circle cx="${hx.toFixed(1)}" cy="${py.toFixed(1)}" r="4" stroke-width="2" style="fill:var(--s1);stroke:var(--t3)"/>`;
+        if (Math.abs(py - hy) > 14 && !hideAmounts) {
+          const lx = hx + 9 > x1 - 70 ? hx - 9 : hx + 9;
+          const anchor = lx < hx ? 'end' : 'start';
+          const color = diff > 0 ? 'var(--neg)' : 'var(--brand-text)';
+          today += `<line x1="${lx.toFixed(1)}" x2="${lx.toFixed(1)}" y1="${(Math.min(py, hy) + 2).toFixed(1)}" y2="${(Math.max(py, hy) - 2).toFixed(1)}" stroke-width="1.5" style="stroke:${color}"/>
+            <text x="${(anchor === 'start' ? lx + 5 : lx - 5).toFixed(1)}" y="${((py + hy) / 2 + 4).toFixed(1)}" text-anchor="${anchor}" style="fill:${color};font-weight:700">≈ ${unitNum(Math.abs(diff), u)} ${u.axis} ${diff > 0 ? 'más' : 'menos'}</text>`;
+        }
       }
-      const subIds = new Set(g.subs.map((s) => s.id));
-      for (const ps of pg.subs) {
-        if (!subIds.has(ps.id)) g.subs.push({ id: ps.id, name: ps.name, value: 0 });
-      }
+      today += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="5" stroke-width="2.5" style="fill:var(--t1);stroke:var(--s1)"/>`;
     }
-    return result.sort((a, b) => b.total - a.total);
+    const xTicks = [1, 5, 10, 15, 20, 25, daysInMonth].filter((d, i, a) => d <= daysInMonth && a.indexOf(d) === i && !(d !== daysInMonth && daysInMonth - d < 3));
+    const xLabels = xTicks.map((d) => `<text x="${x(d).toFixed(1)}" y="168" text-anchor="middle">${d}</text>`).join('');
+    const aria = `Gastos acumulados día a día${hideAmounts ? '' : `: ${fmtPlain(curPts.length ? curPts[curPts.length - 1][1] : 0)} al día ${upTo}; ${prevLabel} cerró en ${fmtPlain(prevPts.length ? prevPts[prevPts.length - 1][1] : 0)}`}.`;
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}">
+      <defs><linearGradient id="gDia" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--t1);stop-opacity:.16"/><stop offset="1" style="stop-color:var(--t1);stop-opacity:0"/></linearGradient></defs>
+      ${G.grillaY(ticks, y, 36, 306, (v) => unitAxis(v, u))}
+      ${incLines}${prevPath}${area}${curPath}${today}${xLabels}
+    </svg>`;
+  }
+
+  // Evolución de una categoría por mes: línea suave en su color, con el
+  // valor de cada mes y el último destacado.
+  function categoryEvoSvg(rows, color) {
+    const G = Charts.g;
+    const W = 320, H = 140, x0 = 44, x1 = 290, yTop = 22, yBase = 112;
+    const max = Math.max(1, ...rows.map((r) => r.value));
+    const u = moneyUnit(max);
+    const { top, step } = niceScale(max, 3);
+    const ticks = [];
+    for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+    const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
+    const y = G.escala([0, top], [yBase, yTop]);
+    const pts = rows.map((r, i) => [x(i), y(r.value)]);
+    const last = rows.length - 1;
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(rows.map((r) => `${r.label} ${hideAmounts ? '' : fmtPlain(r.value)}`).join(', '))}">
+      ${G.grillaY(ticks, y, 34, 312, (v) => unitAxis(v, u))}
+      ${pts.length > 1 ? `<path d="${G.lineaSuave(pts)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:${color}"/>` : ''}
+      ${pts.map((p, i) => G.marcador(p[0], p[1], color, i === last)).join('')}
+      ${rows.map((r, i) => `<text x="${pts[i][0].toFixed(1)}" y="${(pts[i][1] - 10).toFixed(1)}" text-anchor="middle" class="g-lab">${unitNum(r.value, u)}</text>`).join('')}
+      ${rows.map((r, i) => `<text x="${pts[i][0].toFixed(1)}" y="132" text-anchor="middle"${i === last ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`).join('')}
+    </svg>`;
+  }
+
+  // Dona plana con el % de la categoría más grande en el centro.
+  function donutSvg(items, total) {
+    const r = 54, c = 2 * Math.PI * r, gap = items.length > 1 ? 2 : 0;
+    let off = 0;
+    const arcs = items.map((it) => {
+      const len = Math.max(0, (it.value / total) * c - gap);
+      const s = `<circle cx="66" cy="66" r="${r}" style="stroke:${it.color}" stroke-dasharray="${len.toFixed(2)} ${c.toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"/>`;
+      off += (it.value / total) * c;
+      return s;
+    }).join('');
+    const top = items[0];
+    const topPct = total > 0 ? Math.round((top.value / total) * 100) : 0;
+    return `<svg viewBox="0 0 132 132" width="120" height="120" role="img" aria-label="${esc(items.map((it) => `${it.label} ${Math.round((it.value / total) * 100)}%`).join(', '))}">
+      <g transform="rotate(-90 66 66)" fill="none" stroke-width="16">${arcs}</g>
+      <text x="66" y="66" text-anchor="middle" style="font:600 22px var(--f-num);fill:var(--t1)">${topPct}%</text>
+      <text x="66" y="84" text-anchor="middle" style="font:500 11px var(--f-text);fill:var(--t2)">es ${esc(top.label.length > 14 ? top.label.slice(0, 13) + '…' : top.label)}</text>
+    </svg>`;
   }
 
   function vCategorias(el) {
     const mk = ui.month;
     const txs = S().transactions;
-    // Toda esta vista es por fecha real de carga, no de vencimiento: solo
-    // "Balance del mes" (en Inicio) respeta ese ajuste — ver el comentario
-    // al principio de vResumen().
-    const inMonth = txs.filter((t) => monthKeyOf(t.date) === mk);
-    const inc = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
-    const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
-    let breakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'gasto'));
-
-    // Variación contra el mes anterior, por grupo y por subcategoría, para
-    // la columna nueva de la tabla — se arman dos mapas (id → monto) a
-    // partir del mismo categoryBreakdown() del mes pasado, así queda
-    // consistente con cómo se agrupan las subcategorías en todos lados.
-    const prevMkCat = addMonthsKey(mk, -1);
-    const inPrevCat = txs.filter((t) => monthKeyOf(t.date) === prevMkCat);
-    const prevBreakdown = categoryBreakdown(inPrevCat.filter((t) => t.type === 'gasto'));
-    const prevGroupTotals = new Map(prevBreakdown.map((g) => [g.id, g.total]));
-    const prevSubTotals = new Map();
-    for (const g of prevBreakdown) for (const s of g.subs) prevSubTotals.set(s.id, s.value);
-    breakdown = withPrevZeros(breakdown, prevBreakdown);
-
-    // Mismo desglose, pero de ingresos: de dónde viene la plata del mes
-    // (sueldo, freelance, etc.), no sólo en qué se gastó.
-    const incomeBreakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'ingreso'));
-    const incPrevTotal = sumDisp(inPrevCat.filter((t) => t.type === 'ingreso'));
-    const prevIncomeBreakdown = categoryBreakdown(inPrevCat.filter((t) => t.type === 'ingreso'));
-    const prevIncomeGroupTotals = new Map(prevIncomeBreakdown.map((g) => [g.id, g.total]));
-    const prevIncomeSubTotals = new Map();
-    for (const g of prevIncomeBreakdown) for (const s of g.subs) prevIncomeSubTotals.set(s.id, s.value);
-    // Celda compacta: % arriba (en una pill, bien visible si aumentó) y el
-    // monto nominal abajo en chico — apilado en vez de "▲ 28% · +$17.000"
-    // en una sola línea, que no entraba en la columna de una tabla angosta.
-    // badWhenUp invierte qué dirección es la "mala" (roja): en gastos,
-    // gastar más es malo; en ingresos, ganar más es bueno, así que se pasa
-    // badWhenUp=false para esa tabla.
-    // Siempre dos líneas (pill + monto), aunque la segunda quede vacía: así
-    // todas las filas de la tabla miden lo mismo — antes una fila "—" o "="
-    // tenía un solo renglón y quedaba más baja que sus vecinas con variación.
-    const momHTML = (cur, prevVal, badWhenUp = true) => {
-      if (!(prevVal > 0)) {
-        if (!(cur > 0)) return '<span class="cat-mom-cell"><span class="cat-mom-pct flat">—</span><span class="cat-mom-amt">&nbsp;</span></span>';
-        return `<span class="cat-mom-cell"><span class="cat-mom-pct new">nuevo</span><span class="cat-mom-amt">${fmtDisp(cur)}</span></span>`;
-      }
-      const diff = cur - prevVal;
-      const pctVar = fmtVarPct((diff / prevVal) * 100);
-      if (pctVar == null) return '<span class="cat-mom-cell"><span class="cat-mom-pct flat">=</span><span class="cat-mom-amt">&nbsp;</span></span>';
-      const up = diff > 0;
-      const bad = badWhenUp ? up : !up;
-      return `<span class="cat-mom-cell">
-        <span class="cat-mom-pct ${bad ? 'up' : 'down'}">${up ? '▲' : '▼'}${pctVar}%</span>
-        <span class="cat-mom-amt">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))}</span>
-      </span>`;
+    const kind = ['general', 'gasto', 'ingreso'].includes(ui.catKind) ? ui.catKind : 'general';
+    const isCurrent = mk === curMonth();
+    const todayDay = new Date().getDate();
+    const [mkY, mkM] = mk.split('-').map(Number);
+    const daysInMk = new Date(mkY, mkM, 0).getDate();
+    const prevMk = addMonthsKey(mk, -1);
+    const monthName = (m) => {
+      const [yy, mm] = m.split('-').map(Number);
+      return new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(new Date(yy, mm - 1, 1));
     };
+    // Todo por fecha real de carga (no de vencimiento) y, en el mes en
+    // curso, solo lo que ya pasó: sin los programados (cuotas y fijos con
+    // fecha futura). Las comparaciones van contra el MISMO DÍA del mes
+    // anterior (del 1 al 19 de octubre contra del 1 al 19 de septiembre).
+    const cutDay = isCurrent ? todayDay : daysInMk;
+    const inMonth = txs.filter((t) => monthKeyOf(t.date) === mk && Number(t.date.slice(8, 10)) <= cutDay);
+    const inPrevSameDay = txs.filter((t) => monthKeyOf(t.date) === prevMk && (!isCurrent || Number(t.date.slice(8, 10)) <= todayDay));
+    const inPrevFull = txs.filter((t) => monthKeyOf(t.date) === prevMk);
 
-    // Últimos 6 meses hasta el mes elegido, para el selector y el gráfico
-    // de evolución (una categoría sin gasto este mes puede igual mostrarse
-    // si tuvo peso en algún mes reciente).
-    const months = [];
-    for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
-    const windowBreakdown = categoryBreakdown(txs.filter((t) => t.type === 'gasto' && months.includes(monthKeyOf(t.date))));
-    // Ids que se pueden elegir en el selector de abajo: cada grupo Y cada
-    // una de sus subcategorías reales (no la fila sintética "Otros (sin
-    // subcategoría)", que no es una categoría de verdad que se pueda
-    // graficar sola).
-    const catAnalysisOptions = windowBreakdown.map((g) => (
-      { id: g.id, name: g.name, subs: g.subs.filter((s) => !s.id.endsWith(':directo')) }
-    ));
-    const validAnalysisIds = new Set(catAnalysisOptions.flatMap((g) => [g.id, ...g.subs.map((s) => s.id)]));
+    const chipsHTML = `
+      <div class="chips" role="tablist" aria-label="Vista">
+        ${[['general', 'General'], ['gasto', 'Gastos'], ['ingreso', 'Ingresos']].map(([k, label]) =>
+          `<button type="button" class="chip${kind === k ? ' on' : ''}" data-catkind="${k}" role="tab" aria-selected="${kind === k}">${label}</button>`).join('')}
+      </div>`;
 
-    if (!validAnalysisIds.has(ui.catAnalysisId)) {
-      ui.catAnalysisId = windowBreakdown[0] ? windowBreakdown[0].id : null;
-    }
-    const selId = ui.catAnalysisId;
-
-    // Meses con ingresos, para los gráficos de evolución de abajo — un mes
-    // sin ingresos (ej. sólo un gasto suelto) no es comparable con el
-    // resto, así que no entra al eje.
-    const activeMonths = months.filter((m) => txs.some((t) => t.type === 'ingreso' && monthKeyOf(t.date) === m));
-    const monthLabels = activeMonths.map((m) => {
-      const [y, mo] = m.split('-').map(Number);
-      return monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', '');
-    });
-    // Serie del gráfico de evolución para una categoría o subcategoría.
-    // Se recalcula sola al cambiar el selector, sin volver a armar toda la
-    // vista (antes render() rehacía la pantalla y el scroll saltaba).
-    function catEvoSeries(id) {
-      // Si el id elegido tiene parentId es una subcategoría (comparar
-      // categoryId directo); si no, es un grupo de arriba (comparar contra
-      // topCatKeyOf, que ya suma las subcategorías propias).
-      const c = id ? catById(id) : null;
-      const isSub = !!(c && c.parentId);
-      const exp = [];
-      const inc = [];
-      activeMonths.forEach((m) => {
-        const listM = txs.filter((t) => monthKeyOf(t.date) === m);
-        const gastoM = listM.filter((t) => t.type === 'gasto');
-        const expM = sumDisp(gastoM);
-        const incM = sumDisp(listM.filter((t) => t.type === 'ingreso'));
-        const catValM = id
-          ? sumDisp(gastoM.filter((t) => isSub ? t.categoryId === id : topCatKeyOf(t) === id))
-          : 0;
-        exp.push(expM > 0 ? (catValM / expM) * 100 : 0);
-        // null (no 0) si no hubo ingresos ese mes: dividir por cero no tiene
-        // sentido, y mostrar 0% sugeriría que la categoría no pesó nada en
-        // vez de "no hay con qué calcularlo" — Charts.lines() salta el punto.
-        inc.push(incM > 0 ? (catValM / incM) * 100 : null);
+    if (kind === 'general') {
+      // Ingresos y gastos de los últimos 4 meses hasta el elegido.
+      const months = [];
+      for (let i = 3; i >= 0; i--) months.push(addMonthsKey(mk, -i));
+      const rows = months.map((m) => {
+        const cut = m === curMonth() ? todayDay : 99;
+        const list = txs.filter((t) => monthKeyOf(t.date) === m && Number(t.date.slice(8, 10)) <= cut);
+        return { label: monthShortLabel(m).toLowerCase(), inc: sumDisp(list.filter((t) => t.type === 'ingreso')), exp: sumDisp(list.filter((t) => t.type === 'gasto')) };
       });
-      return { exp, inc, name: id === '__sin' ? 'Sin categoría' : (c ? c.name : '') };
-    }
-    function drawCatEvo(id) {
-      const evoEl = $('#chart-cat-evo', el);
-      if (!evoEl) return;
-      const sr = catEvoSeries(id);
-      Charts.lines(evoEl, monthLabels, [
-        { label: '% de tus gastos', color: Charts.COLORS.expense, values: sr.exp },
-        { label: '% de tus ingresos', color: Charts.COLORS.income, values: sr.inc },
-      ], {
-        fmtAxis: (v) => Math.round(v) + '%',
-        ariaLabel: `Evolución del peso de ${sr.name} sobre ingresos y gastos`,
-        smooth: true, pointLabels: true, markerRadius: 4,
-      });
-    }
+      const first = rows.findIndex((r) => r.inc > 0 || r.exp > 0);
+      const shown = first >= 0 ? rows.slice(first) : [];
+      const chart = shown.length ? incomeExpenseChartSvg(shown, isCurrent) : null;
 
-    const pct = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0) + '%';
-
-    // Gastos del mes por medio de pago (nominal + % del total), de mayor a
-    // menor; tocar uno abre sus movimientos comparados con el mes anterior.
-    const byMethod = new Map();
-    for (const t of inMonth) {
-      if (t.type !== 'gasto') continue;
-      const v = txDispAmount(t);
-      if (v == null) continue;
-      const key = methodById(t.methodId) ? t.methodId : '__sin';
-      byMethod.set(key, (byMethod.get(key) || 0) + v);
-    }
-    const methodItems = [...byMethod.entries()]
-      .filter(([, v]) => v > 0)
-      .sort((a, b) => b[1] - a[1])
-      .map(([id, value], i) => ({
-        id, value, label: id === '__sin' ? 'Sin medio de pago' : methodName(id),
-        color: NEUTRAL_PALETTE[Math.min(i, NEUTRAL_PALETTE.length - 1)],
-      }));
-    const methodTxs = (list, id) => list.filter((t) => t.type === 'gasto' &&
-      (id === '__sin' ? !methodById(t.methodId) : t.methodId === id));
-
-    // Cada categoría con su color fijo (catColor), el mismo en la tabla, la
-    // torta, las barras apiladas y las líneas de evolución.
-    const incomeWindowBreakdown = categoryBreakdown(txs.filter((t) => t.type === 'ingreso' && months.includes(monthKeyOf(t.date))));
-    // Torta de ingresos del mes: hasta 4 orígenes + "Otros".
-    const incPie = incomeBreakdown.filter((g) => g.total > 0);
-    const incPieItems = incPie.slice(0, 4).map((g) => ({ label: g.name, value: g.total, color: catColor(g.id) }));
-    if (incPie.length > 4) incPieItems.push({ label: 'Otros', value: incPie.slice(4).reduce((a, g) => a + g.total, 0), color: OTROS_COLOR });
-    // Evolución de ingresos: una línea por categoría (las 5 con más peso en
-    // la ventana + "Otros"), sólo en los meses con ingresos.
-    const INC_LINES_MAX = 5;
-    const incLineCats = incomeWindowBreakdown.slice(0, INC_LINES_MAX).map((g) => ({ id: g.id, name: g.name, color: catColor(g.id) }));
-    const incLineIds = new Set(incLineCats.map((c) => c.id));
-    if (incomeWindowBreakdown.length > INC_LINES_MAX) incLineCats.push({ id: '__otros', name: 'Otros', color: OTROS_COLOR });
-    // Barras apiladas al 100% de ingresos: mismas categorías, colores y
-    // meses que las líneas, pero como participación de cada una en el mes.
-    const incStackRows = activeMonths.map((m, i) => {
-      const [y, mo] = m.split('-').map(Number);
-      const vals = incLineCats.map((c) => sumDisp(txs.filter((t) => t.type === 'ingreso' && monthKeyOf(t.date) === m &&
-        (c.id === '__otros' ? !incLineIds.has(topCatKeyOf(t)) : topCatKeyOf(t) === c.id))));
-      const totalM = vals.reduce((a, v) => a + v, 0);
-      return {
-        label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
-        total: totalM,
-        shares: vals.map((v) => (totalM > 0 ? (v / totalM) * 100 : 0)),
+      // Gastos acumulados por día.
+      const perDay = (list) => {
+        const o = {};
+        for (const t of list) {
+          if (t.type !== 'gasto') continue;
+          const v = txDispAmount(t);
+          if (v == null) continue;
+          const d = Number(t.date.slice(8, 10));
+          o[d] = (o[d] || 0) + v;
+        }
+        return o;
       };
-    });
-    const incLineSeries = incLineCats.map((c) => ({
-      label: c.name, color: c.color,
-      values: activeMonths.map((m) => {
-        const list = txs.filter((t) => t.type === 'ingreso' && monthKeyOf(t.date) === m &&
-          (c.id === '__otros' ? !incLineIds.has(topCatKeyOf(t)) : topCatKeyOf(t) === c.id));
-        return sumDisp(list);
-      }),
-    }));
+      const curDaily = perDay(inMonth);
+      const prevDaily = perDay(inPrevFull);
+      const [py, pm] = prevMk.split('-').map(Number);
+      const daysInPrev = new Date(py, pm, 0).getDate();
+      for (let d = 1; d <= daysInPrev; d++) if (!(d in prevDaily)) prevDaily[d] = 0;
+      const spentToDate = Object.values(curDaily).reduce((a, v) => a + v, 0);
+      const prevAtSameDay = sumDisp(inPrevSameDay.filter((t) => t.type === 'gasto'));
+      const incomeMonth = sumDisp(txs.filter((t) => monthKeyOf(t.date) === mk && t.type === 'ingreso'));
+      const savMonth = savingsAtEndOf(mk, { excludeOpening: true }) - savingsAtEndOf(prevMk, { excludeOpening: true });
+      const hasPrev = inPrevFull.some((t) => t.type === 'gasto');
+      const diff = spentToDate - prevAtSameDay;
+      // Misma unidad que el gráfico de abajo (M o k), para que se lean igual.
+      const prevMonthTotal = sumDisp(inPrevFull.filter((t) => t.type === 'gasto'));
+      const uDiff = moneyUnit(Math.max(incomeMonth, spentToDate, prevMonthTotal, 1));
+      const diffChip = hasPrev && Math.abs(diff) >= 1
+        ? `<span class="dchip ${diff > 0 ? 'bad' : 'good'}">${diff > 0 ? '▲' : '▼'} ≈ ${unitNum(Math.abs(diff), uDiff)} ${uDiff.axis} vs. ${esc(monthShortLabel(prevMk).toLowerCase())}</span>` : '';
 
-    // Torta cilindro: las 4 categorías con más peso del mes elegido (misma
-    // tabla de arriba, que ya viene ordenada de mayor a menor) + "Otros"
-    // con el resto — así no se amontonan demasiadas porciones finas.
-    const PIE_MAX = 4;
-    // Sobre las categorías con gasto real este mes — las agregadas en $0
-    // solo para la tabla (ver withPrevZeros) no pintan nada en la torta.
-    const pieBreakdown = breakdown.filter((g) => g.total > 0);
-    const pieTop = pieBreakdown.slice(0, PIE_MAX);
-    const pieRest = pieBreakdown.slice(PIE_MAX);
-    const pieItems = pieTop.map((g) => ({
-      label: g.name, value: g.total, color: catColor(g.id),
-    }));
-    if (pieRest.length) {
-      pieItems.push({ label: 'Otros', value: pieRest.reduce((a, g) => a + g.total, 0), color: OTROS_COLOR });
+      el.innerHTML = `${chipsHTML}
+        <section class="k-card">
+          <div class="k-card-h k-card-h-tight"><h2>Ingresos y gastos por mes</h2>${chart ? `<span class="t3 k-card-note">${chart.unit.note}</span>` : ''}</div>
+          ${chart ? `
+          <div class="legend">
+            <span><i class="lg-line" style="border-color:var(--brand)"></i>Ingresos</span>
+            <span><i class="lg-line" style="border-color:var(--t1)"></i>Gastos</span>
+            ${isCurrent ? `<span><i class="lg-line lg-dash" style="border-color:var(--t1)"></i>${esc(monthShortLabel(mk))} en curso</span>` : ''}
+          </div>
+          ${chart.svg}
+          <p class="k-note">Lo sombreado es lo que quedó entre lo que entró y lo que salió cada mes.</p>`
+          : '<div class="empty">Todavía no hay movimientos para comparar meses.</div>'}
+        </section>
+
+        <section class="k-card">
+          <div class="k-card-h k-card-h-tight"><h2>Gastos día a día</h2><span class="t3 k-card-note">acumulado</span></div>
+          <div class="daily-head">
+            <span class="num money daily-total">${esc(fmtPlain(spentToDate))}</span>
+            <span class="t2">${isCurrent ? `al día ${todayDay}` : `en ${esc(monthName(mk))}`}</span>
+            ${diffChip}
+          </div>
+          <div class="legend">
+            <span><i class="lg-line" style="border-color:var(--t1)"></i>${esc(monthShortLabel(mk))}</span>
+            ${hasPrev ? `<span><i class="lg-line lg-dash" style="border-color:var(--t3)"></i>${esc(monthShortLabel(prevMk))}</span>` : ''}
+          </div>
+          ${dailySpendChartSvg({ cur: curDaily, prev: hasPrev ? prevDaily : {}, daysInMonth: daysInMk, upTo: cutDay, income: incomeMonth, incomeMinusSav: incomeMonth - savMonth, isCurrent, prevLabel: monthName(prevMk) })}
+        </section>`;
+      wireCatKindChips(el);
+      return;
     }
 
-    // Barras apiladas al 100%: hasta 6 categorías con más peso en la
-    // ventana de 6 meses + "Otros" con el resto, para que no se amontonen
-    // demasiadas tiritas finas en una sola barra.
-    const STACK_MAX = 6;
-    const stackTop = windowBreakdown.slice(0, STACK_MAX);
-    const stackRest = windowBreakdown.slice(STACK_MAX);
-    const stackCats = stackTop.map((g) => ({ id: g.id, name: g.name, color: catColor(g.id) }));
-    if (stackRest.length) stackCats.push({ id: '__otros', name: 'Otros', color: OTROS_COLOR });
-    const stackIds = new Set(stackTop.map((g) => g.id));
-    const stackRows = activeMonths.map((m) => {
-      const gastoM = txs.filter((t) => t.type === 'gasto' && monthKeyOf(t.date) === m);
-      const totalM = sumDisp(gastoM);
-      const byCat = new Map();
-      for (const t of gastoM) {
+    /* ---------- Gastos / Ingresos ---------- */
+    const isInc = kind === 'ingreso';
+    const type = isInc ? 'ingreso' : 'gasto';
+    const breakdown = categoryBreakdown(inMonth.filter((t) => t.type === type)).filter((g) => g.total > 0);
+    const prevBreakdown = categoryBreakdown(inPrevSameDay.filter((t) => t.type === type));
+    const prevTotals = new Map(prevBreakdown.map((g) => [g.id, g.total]));
+    const total = breakdown.reduce((a, g) => a + g.total, 0);
+    const incMonth = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
+    const pctOf = (v) => (total > 0 ? Math.round((v / total) * 100) : 0);
+    // Dona: hasta 5 categorías + "Otras".
+    const DONUT_MAX = 5;
+    const donutItems = breakdown.slice(0, DONUT_MAX).map((g) => ({ label: g.name, value: g.total, color: g.id === '__sin' ? OTROS_COLOR : catColor(g.id) }));
+    const restDonut = breakdown.slice(DONUT_MAX).reduce((a, g) => a + g.total, 0);
+    if (restDonut > 0) donutItems.push({ label: 'Otras', value: restDonut, color: OTROS_COLOR });
+    // Variación contra el mismo día del mes anterior. En gastos, subir es
+    // malo (rojo); en ingresos, subir es bueno (verde).
+    const varChip = (cur, prev) => {
+      if (!(prev > 0)) return cur > 0 ? '<span class="dchip flat">nuevo</span>' : '';
+      const pctVar = fmtVarPct(((cur - prev) / prev) * 100);
+      if (pctVar == null) return '<span class="dchip flat">= igual</span>';
+      const up = cur > prev;
+      return `<span class="dchip ${up !== isInc ? 'bad' : 'good'}">${up ? '▲' : '▼'} ${pctVar}%</span>`;
+    };
+    const zeroGroups = S().categories.filter((c) => c.type === type && !c.parentId && !breakdown.some((g) => g.id === c.id));
+    const rowsHTML = breakdown.map((g) => {
+      const key = `${type}:${g.id}`;
+      const open = !!ui.catOpen[key];
+      const color = g.id === '__sin' ? OTROS_COLOR : catColor(g.id);
+      const icon = g.id === '__sin' ? spriteIcon('more') : iconSvg(categoryIconName(g.id));
+      const subs = g.subs.filter((s) => s.value > 0);
+      const detail = open ? `
+        ${subs.map((s) => `
+        <button type="button" class="crow sub" data-catmoves="${esc(g.id)}" data-subid="${esc(s.id)}">
+          <div class="l1"><b>${esc(s.name)}</b><span class="num money t2">${esc(fmtPlain(s.value))}</span></div>
+        </button>`).join('')}
+        ${!isInc && incMonth > 0 ? `<div class="crow sub crow-info"><span class="t2">Es el ${Math.round((g.total / incMonth) * 100)}% de lo que entró en ${esc(monthName(mk))}</span></div>` : ''}
+        <div class="crow sub"><button type="button" class="link" data-catmoves="${esc(g.id)}">Ver movimientos de ${esc(g.name)}${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}</button></div>` : '';
+      return `
+      <div class="${open ? 'expanded' : ''}">
+        <button type="button" class="crow" data-catopen="${esc(key)}" aria-expanded="${open}">
+          <span class="cic" style="--c:${color}">${icon}</span>
+          <div class="crow-main">
+            <div class="l1"><b>${esc(g.name)}</b><span class="num money">${esc(fmtPlain(g.total))}</span></div>
+            <div class="l2"><div class="barline" style="--c:${color}"><i style="width:${Math.max(1, pctOf(g.total))}%"></i></div><span>${pctOf(g.total)}%</span>${varChip(g.total, prevTotals.get(g.id) || 0)}</div>
+          </div>
+          ${spriteIcon('cr').replace('class="ic"', `class="ic chev${open ? ' rot' : ''}"`)}
+        </button>${detail}
+      </div>`;
+    }).join('');
+    const zeroOpen = !!ui.catOpen[`${type}:__zero`];
+    const zeroHTML = zeroGroups.length ? `
+      <div class="${zeroOpen ? 'expanded' : ''}">
+        <button type="button" class="crow" data-catopen="${type}:__zero" aria-expanded="${zeroOpen}">
+          <span class="cic" style="--c:var(--t3)">${spriteIcon('more')}</span>
+          <div class="crow-main"><div class="l1"><b class="t2">${zeroGroups.length} sin ${isInc ? 'ingresos' : 'gastos'} todavía</b></div>
+            <div class="st t3">${esc(zeroGroups.map((c) => c.name).join(', '))}</div></div>
+          ${spriteIcon('cd').replace('class="ic"', `class="ic chev${zeroOpen ? ' rot180' : ''}"`)}
+        </button>
+        ${zeroOpen ? zeroGroups.map((c) => `
+        <button type="button" class="crow sub" data-catmoves="${esc(c.id)}">
+          <div class="l1"><b>${esc(c.name)}</b><span class="num money t3">${esc(fmtPlain(0))}</span></div>
+        </button>`).join('') : ''}
+      </div>` : '';
+
+    // Por medio de pago (solo gastos), en grises: son cuentas, no categorías.
+    const byMethod = new Map();
+    if (!isInc) {
+      for (const t of inMonth) {
+        if (t.type !== 'gasto') continue;
         const v = txDispAmount(t);
         if (v == null) continue;
-        const topId = topCatKeyOf(t);
-        const key = stackIds.has(topId) ? topId : '__otros';
-        byCat.set(key, (byCat.get(key) || 0) + v);
+        const k = methodById(t.methodId) || isSavingMethod(t.methodId) ? t.methodId : '__sin';
+        byMethod.set(k, (byMethod.get(k) || 0) + v);
       }
-      const [y, mo] = m.split('-').map(Number);
+    }
+    const methodRows = [...byMethod.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+      .map(([id, value], i) => ({ id, value, name: id === '__sin' ? 'Sin medio de pago' : methodName(id), color: NEUTRAL_PALETTE[Math.min(i + 1, NEUTRAL_PALETTE.length - 1)] }));
+
+    // Evolución de una categoría en los últimos 6 meses.
+    const evoMonths = [];
+    for (let i = 5; i >= 0; i--) evoMonths.push(addMonthsKey(mk, -i));
+    const evoOptions = S().categories.filter((c) => c.type === type && !c.parentId)
+      .filter((c) => txs.some((t) => t.type === type && topCategoryOf(t.categoryId) === c.id && evoMonths.includes(monthKeyOf(t.date))));
+    const evoKey = isInc ? 'catEvoInc' : 'catEvoExp';
+    if (!evoOptions.some((c) => c.id === ui[evoKey])) ui[evoKey] = breakdown[0] && breakdown[0].id !== '__sin' ? breakdown[0].id : (evoOptions[0] ? evoOptions[0].id : null);
+    const evoId = ui[evoKey];
+    const evoRows = evoId ? evoMonths.map((m) => {
+      const cut = m === curMonth() ? todayDay : 99;
       return {
-        label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
-        total: totalM,
-        shares: stackCats.map((c) => (totalM > 0 ? ((byCat.get(c.id) || 0) / totalM) * 100 : 0)),
+        label: monthShortLabel(m).toLowerCase(),
+        value: sumDisp(txs.filter((t) => t.type === type && monthKeyOf(t.date) === m && Number(t.date.slice(8, 10)) <= cut && topCategoryOf(t.categoryId) === evoId)),
       };
-    });
+    }) : [];
+    const evoFirst = evoRows.findIndex((r) => r.value > 0);
 
-    // Transacciones detrás de una fila (grupo o subcategoría puntual), para
-    // el detalle que se abre al tocarla — mismo criterio de agrupación que
-    // categoryBreakdown(): el id ":directo" son los gastos cargados
-    // directo en el grupo, sin subcategoría. Recibe la lista del mes (este
-    // o el anterior) para poder armar el detalle comparando los dos.
-    function txsForBreakdownRow(monthTxs, gid, subId, type = 'gasto') {
-      const matching = monthTxs.filter((t) => t.type === type);
-      if (subId) {
-        if (subId.endsWith(':directo')) return matching.filter((t) => t.categoryId === gid);
-        return matching.filter((t) => t.categoryId === subId);
-      }
-      if (gid === '__sin') return matching.filter((t) => !t.categoryId || !catById(t.categoryId));
-      return matching.filter((t) => topCategoryOf(t.categoryId) === gid);
-    }
-
-    // Tabla compacta (fuente y padding chicos) para que las columnas
-    // numéricas + el nombre entren sin scroll lateral en un celular. De
-    // entrada se ve sólo el nivel categoría: tocar una que tenga
-    // subcategorías las despliega (deslizando) debajo; tocar una
-    // subcategoría, o una categoría sin subcategorías, abre el detalle de
-    // movimientos contra el mes anterior.
-    function breakdownRowsHTML(list, kind) {
-      const isInc = kind === 'ingreso';
-      const prevGroups = isInc ? prevIncomeGroupTotals : prevGroupTotals;
-      const prevSubs = isInc ? prevIncomeSubTotals : prevSubTotals;
-      const pctCells = (v) => isInc
-        ? `<td class="num">${pct(v, inc)}</td>`
-        : `<td class="num">${pct(v, exp)}</td><td class="num">${pct(v, inc)}</td>`;
-      const wrapCells = (html) => html.replace(/<td([^>]*)>([\s\S]*?)<\/td>/g, '<td$1><div class="cs">$2</div></td>');
-      return list.map((g) => {
-        const showSubs = g.subs.length && !(g.subs.length === 1 && g.total === g.direct && g.subs[0].name === 'Otros (sin subcategoría)');
-        const open = showSubs && !!ui.catOpen[kind + ':' + g.id];
-        const kindAttr = isInc ? ' data-kind="ingreso"' : '';
-        const subsHtml = showSubs ? g.subs.map((s) => `
-          <tr class="cat-sub-row${open ? ' open' : ''}" data-catid="${esc(g.id)}" data-subid="${esc(s.id)}" data-parent="${esc(g.id)}"${kindAttr}>
-            ${wrapCells(`<td class="cell-sub">${esc(s.name)}</td>
-            <td class="num cell-sub">${fmtDisp(s.value)}</td>
-            ${pctCells(s.value).replace(/class="num"/g, 'class="num cell-sub"')}
-            <td class="num cell-sub">${momHTML(s.value, prevSubs.get(s.id) || 0, !isInc)}</td>`)}
-          </tr>`).join('') + `
-          <tr class="cat-sub-row cat-sub-all${open ? ' open' : ''}" data-catid="${esc(g.id)}" data-parent="${esc(g.id)}"${kindAttr}>
-            ${wrapCells(`<td colspan="${isInc ? 4 : 5}" class="cell-sub">Ver todos los movimientos de ${esc(g.name)} ›</td>`)}
-          </tr>` : '';
-        const groupColor = catColor(g.id);
-        return `<tr class="cat-break-group${showSubs ? ' has-subs' : ''}${open ? ' open' : ''}" data-catid="${esc(g.id)}"${showSubs ? ' data-toggle="1"' : ''}${kindAttr} style="--row-tint:${tint(groupColor, 12)}">
-          <td><span class="cat-chev${showSubs ? '' : ' is-empty'}" aria-hidden="true">›</span>${esc(g.name)}</td>
-          <td class="num amount-out">${fmtDisp(g.total)}</td>
-          ${pctCells(g.total)}
-          <td class="num">${momHTML(g.total, prevGroups.get(g.id) || 0, !isInc)}</td>
-        </tr>${subsHtml}`;
-      }).join('');
-    }
-    const rowsHtml = breakdownRowsHTML(breakdown, 'gasto');
-    const incomeRowsHtml = breakdownRowsHTML(incomeBreakdown, 'ingreso');
-
-    const kindIsInc = ui.catKind === 'ingreso';
-    el.innerHTML = `
-      <div class="subtabs kind-tabs${kindIsInc ? ' is-ingreso' : ''}" role="tablist">
-        <span class="subtabs-thumb" aria-hidden="true"></span>
-        <button type="button" data-catkind="gasto" class="${kindIsInc ? '' : 'active'}" role="tab" aria-selected="${!kindIsInc}">Gastos</button>
-        <button type="button" data-catkind="ingreso" class="${kindIsInc ? 'active' : ''}" role="tab" aria-selected="${kindIsInc}">Ingresos</button>
-      </div>
-      ${kindIsInc ? `
-      <div class="card">
-        <h2 class="card-title"><span>Ingresos por categoría</span></h2>
-        ${incomeBreakdown.length ? `
-        <div class="table-scroll"><table class="data cat-breakdown-table cat-income-table">
-          <colgroup>
-            <col class="cat-col-name"><col class="cat-col-amount">
-            <col class="cat-col-pct"><col class="cat-col-mom">
-          </colgroup>
-          <thead><tr><th>Origen</th><th class="num">Monto</th><th class="num">% ingr.</th><th class="num">vs. ant.</th></tr></thead>
-          <tbody>${incomeRowsHtml}</tbody>
-          <tfoot><tr class="cat-total-row">
-            <td>Total</td>
-            <td class="num amount-out">${fmtDisp(inc)}</td>
-            <td class="num">100%</td>
-            <td class="num">${momHTML(inc, incPrevTotal, false)}</td>
-          </tr></tfoot>
-        </table></div>` : `<div class="empty">Sin ingresos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title"><span>Distribución de ingresos · ${esc(monthLabel(mk))}</span></h2>
-        ${incPieItems.length ? `
-        <div class="pie-cylinder-wrap">
-          <div id="chart-inc-pie"></div>
-          <div class="chart-legend chart-legend-col">
-            ${incPieItems.map((it) => `<span><span class="key" style="background:${it.color}"></span>${esc(it.label)} · ${pct(it.value, inc)}</span>`).join('')}
-          </div>
-        </div>` : `<div class="empty">Sin ingresos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">
-          <span>Evolución de ingresos por categoría</span>
-          ${incLineSeries.length && activeMonths.length ? '<button type="button" class="link-btn" id="btn-detail-incevo">Ver detalle</button>' : ''}
-        </h2>
-        ${incLineSeries.length && activeMonths.length ? `
-        <div class="chart-legend">
-          ${incLineCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
+    el.innerHTML = `${chipsHTML}
+      <section class="k-card donut-card">
+        ${breakdown.length ? donutSvg(donutItems, total) : ''}
+        <div class="donut-text">
+          <span class="ovl">${isInc ? 'Entró' : 'Gastado'} en ${esc(monthName(mk))}</span>
+          <span class="num money donut-total">${esc(fmtPlain(total))}</span>
+          <span class="t2">${isCurrent ? `Hasta hoy, día ${todayDay}. ` : ''}${breakdown.length === 1 ? 'Una categoría' : `${breakdown.length} categorías`} con ${isInc ? 'ingresos' : 'gastos'}.</span>
         </div>
-        <div id="chart-inc-evo"></div>` : '<div class="empty">Todavía no hay suficientes ingresos para ver una evolución.</div>'}
-      </div>
+      </section>
 
-      <div class="card">
-        <h2 class="card-title"><span>Participación de ingresos por categoría · últimos 6 meses</span></h2>
-        ${incStackRows.some((r) => r.total > 0) ? `
-        <div class="chart-legend">
-          ${incLineCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
+      ${breakdown.length || zeroGroups.length ? `<div class="group cat-group">${rowsHTML}${zeroHTML}</div>
+      ${breakdown.length ? `<p class="k-note k-note-out">Variación contra el ${isCurrent ? `${todayDay} de ${esc(monthName(prevMk))}` : esc(monthName(prevMk))}.</p>` : ''}` : ''}
+
+      ${methodRows.length ? `
+      <section class="k-card">
+        <div class="k-card-h"><h2>Por medio de pago</h2></div>
+        <div class="stack">${methodRows.map((r) => `<i style="width:${((r.value / total) * 100).toFixed(2)}%;background:${r.color}"></i>`).join('')}</div>
+        <div class="cat-lines">
+          ${methodRows.map((r) => `
+          <button type="button" class="cat-line" data-methodmoves="${esc(r.id)}">
+            <i style="background:${r.color}"></i><span class="cat-line-name">${esc(r.name)}</span>
+            <span class="t3 cat-line-pct">${pctOf(r.value)}%</span><span class="num">${money(r.value)}</span>
+          </button>`).join('')}
         </div>
-        <div id="chart-inc-stack"></div>
-        <div class="hint" style="margin-top:6px">Cada barra es el 100% de lo que ingresó ese mes: si una franja crece o se achica, cambió el peso de esa categoría.</div>` :
-          '<div class="empty">Todavía no hay suficientes ingresos para ver la participación mes a mes.</div>'}
-      </div>` : `
-      <div class="card">
-        <h2 class="card-title"><span>Distribución de gastos · ${esc(monthLabel(mk))}</span></h2>
-        ${pieItems.length ? `
-        <div class="pie-cylinder-wrap">
-          <div id="chart-cat-pie"></div>
-          <div class="chart-legend chart-legend-col">
-            ${pieItems.map((it) => `<span><span class="key" style="background:${it.color}"></span>${esc(it.label)} · ${pct(it.value, exp)}</span>`).join('')}
-          </div>
-        </div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>
+      </section>` : ''}
 
-      <div class="card">
-        <h2 class="card-title"><span>Gastos por categoría</span></h2>
-        ${breakdown.length ? `
-        <div class="table-scroll"><table class="data cat-breakdown-table">
-          <colgroup>
-            <col class="cat-col-name"><col class="cat-col-amount">
-            <col class="cat-col-pct"><col class="cat-col-pct"><col class="cat-col-mom">
-          </colgroup>
-          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">Gastos</th><th class="num">Ingr.</th><th class="num">vs. ant.</th></tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title"><span>Evolución del peso por categoría</span></h2>
-        ${windowBreakdown.length ? `
-        <div class="field">
-          <select id="cat-analysis-sel" aria-label="Categoría o subcategoría a graficar">
-            ${catAnalysisOptions.map((g) => {
-              const groupOpt = `<option value="${esc(g.id)}" ${g.id === selId ? 'selected' : ''}>${esc(g.name)}${g.subs.length ? ' (todas)' : ''}</option>`;
-              if (!g.subs.length) return groupOpt;
-              const subOpts = g.subs.map((s) => `<option value="${esc(s.id)}" ${s.id === selId ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
-              return `<optgroup label="${esc(g.name)}">${groupOpt}${subOpts}</optgroup>`;
-            }).join('')}
-          </select>
+      ${evoOptions.length ? `
+      <section class="k-card">
+        <div class="k-card-h"><h2>Evolución por categoría</h2></div>
+        <div class="chips chips-scroll evo-chips">
+          ${evoOptions.map((c) => `<button type="button" class="chip${c.id === evoId ? ' on' : ''}" data-evo="${esc(c.id)}">${esc(c.name)}</button>`).join('')}
         </div>
-        <div class="chart-legend">
-          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>% de tus gastos</span>
-          <span><span class="key" style="background:${Charts.COLORS.income}"></span>% de tus ingresos</span>
-        </div>
-        <div id="chart-cat-evo"></div>` : '<div class="empty">Todavía no hay suficientes movimientos para ver una evolución.</div>'}
-      </div>
+        ${evoFirst >= 0 ? categoryEvoSvg(evoRows.slice(evoFirst), catColor(evoId)) : '<div class="empty">Sin movimientos en los últimos meses.</div>'}
+      </section>` : ''}`;
 
-      <div class="card">
-        <h2 class="card-title"><span>Participación por categoría · últimos 6 meses</span></h2>
-        ${stackRows.some((r) => r.total > 0) ? `
-        <div class="chart-legend">
-          ${stackCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
-        </div>
-        <div id="chart-cat-stack"></div>
-        <div class="hint" style="margin-top:6px">Cada barra es el 100% de lo gastado ese mes: si una franja crece o se achica, cambió el peso de esa categoría.</div>` :
-          '<div class="empty">Todavía no hay suficientes movimientos para ver la participación mes a mes.</div>'}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title"><span>Gastos por medio de pago · ${esc(monthLabel(mk))}</span></h2>
-        ${methodItems.length ? `
-        <div id="chart-cat-methods" class="cats-bars method-bars"></div>
-        <div class="method-total"><span>Total gastado</span><b>${fmtDisp(exp)}</b></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>`}`;
-
-    if (windowBreakdown.length) drawCatEvo(selId);
-    const incPieEl = $('#chart-inc-pie', el);
-    if (incPieEl) {
-      Charts.pieCylinder(incPieEl, incPieItems, { ariaLabel: `Distribución de ingresos de ${monthLabel(mk)}` });
-    }
-    const incEvoEl = $('#chart-inc-evo', el);
-    if (incEvoEl) {
-      Charts.lines(incEvoEl, monthLabels, incLineSeries, {
-        smooth: true, markerRadius: 4, leftPad: 52,
-        fmtAxis: (v) => Charts.compact(v),
-        ariaLabel: 'Evolución de los ingresos de cada categoría por mes',
-      });
-    }
-    const incStackEl = $('#chart-inc-stack', el);
-    if (incStackEl) {
-      Charts.stacked100(incStackEl, incStackRows, incLineCats, {
-        connectors: true,
-        ariaLabel: 'Participación de cada categoría de ingreso por mes',
-      });
-    }
-    const btnIncEvo = $('#btn-detail-incevo', el);
-    if (btnIncEvo) btnIncEvo.addEventListener('click', () => {
-      // Lo mismo que el gráfico, en números. Un bloque por mes (el más
-      // reciente arriba) con cada categoría, su monto y su % del mes — una
-      // columna por categoría no entraba a lo ancho en un celular.
-      const blocks = activeMonths.map((m, i) => {
-        const vals = incLineSeries.map((sr) => ({ label: sr.label, color: sr.color, v: sr.values[i] || 0 }));
-        const total = vals.reduce((acc, x) => acc + x.v, 0);
-        return `<tr class="inc-det-month"><td>${esc(monthLabel(m))}</td><td class="num">${fmtDisp(total)}</td><td class="num">100%</td></tr>
-          ${vals.filter((x) => x.v > 0).sort((x, y) => y.v - x.v).map((x) => `<tr>
-            <td><span class="key-dot" style="background:${x.color}"></span>${esc(x.label)}</td>
-            <td class="num">${fmtDisp(x.v)}</td>
-            <td class="num">${pct(x.v, total)}</td>
-          </tr>`).join('')}`;
-      }).reverse().join('');
-      openDialog('Ingresos por categoría y mes', `
-        <div class="table-scroll"><table class="data inc-det-table">
-          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">% del mes</th></tr></thead>
-          <tbody>${blocks}</tbody>
-        </table></div>`, { submitLabel: 'Cerrar', viewOnly: true });
-    });
-    if (pieItems.length && $('#chart-cat-pie', el)) {
-      Charts.pieCylinder($('#chart-cat-pie', el), pieItems, {
-        ariaLabel: `Distribución de gastos de ${monthLabel(mk)}`,
-      });
-    }
-    if (methodItems.length && $('#chart-cat-methods', el)) {
-      Charts.hBars($('#chart-cat-methods', el), methodItems, {
-        fmt: fmtDisp,
-        onClick: (it) => categoryCompareDialog(it.label,
-          mk, methodTxs(inMonth, it.id), prevMkCat, methodTxs(inPrevCat, it.id)),
-      });
-    }
-    if (stackRows.some((r) => r.total > 0) && $('#chart-cat-stack', el)) {
-      Charts.stacked100($('#chart-cat-stack', el), stackRows, stackCats, {
-        ariaLabel: 'Participación de cada categoría por mes',
-      });
-    }
-
-    // Gastos / Ingresos: la píldora se desliza ya y la vista se rearma
-    // cuando termina la animación.
-    $$('[data-catkind]', el).forEach((b) => b.addEventListener('click', () => {
-      const k = b.dataset.catkind;
-      if (k === ui.catKind) return;
-      const tabs = $('.kind-tabs', el);
-      tabs.classList.toggle('is-ingreso', k === 'ingreso');
-      $$('[data-catkind]', el).forEach((x) => x.classList.toggle('active', x === b));
-      ui.catKind = k;
-      setTimeout(render, 220);
-    }));
-
-    $$('tr[data-catid]', el).forEach((row) => row.addEventListener('click', () => {
-      // Categoría con subcategorías: despliega/pliega sin rearmar la vista.
-      if (row.dataset.toggle) {
-        const key = (row.dataset.kind || 'gasto') + ':' + row.dataset.catid;
-        const open = !ui.catOpen[key];
-        ui.catOpen[key] = open;
-        row.classList.toggle('open', open);
-        $$(`tr.cat-sub-row[data-parent="${CSS.escape(row.dataset.catid)}"]`, row.closest('tbody'))
-          .forEach((r) => r.classList.toggle('open', open));
+    wireCatKindChips(el);
+    // Los movimientos de una categoría (o subcategoría, o medio de pago)
+    // del mes, comparados con el mes anterior.
+    const forRow = (list, gid, subId) => {
+      const m = list.filter((t) => t.type === type);
+      if (subId) return subId.endsWith(':directo') ? m.filter((t) => t.categoryId === gid) : m.filter((t) => t.categoryId === subId);
+      if (gid === '__sin') return m.filter((t) => !t.categoryId || !catById(t.categoryId));
+      return m.filter((t) => topCategoryOf(t.categoryId) === gid);
+    };
+    const monthAll = txs.filter((t) => monthKeyOf(t.date) === mk);
+    el.addEventListener('click', (e) => {
+      let b;
+      if ((b = e.target.closest('[data-catopen]'))) {
+        const k = b.dataset.catopen;
+        ui.catOpen = { ...ui.catOpen, [k]: !ui.catOpen[k] };
+        render();
         return;
       }
-      const gid = row.dataset.catid;
-      const subId = row.dataset.subid;
-      const isIncome = row.dataset.kind === 'ingreso';
-      const type = isIncome ? 'ingreso' : 'gasto';
-      const g = (isIncome ? incomeBreakdown : breakdown).find((x) => x.id === gid);
-      const label = subId ? ((g.subs.find((s) => s.id === subId) || {}).name || g.name) : g.name;
-      // Se ve el mes actual Y el anterior en el mismo diálogo: si la fila
-      // está en rojo (aumentó), sirve para comparar qué cambió sin tener
-      // que ir y volver entre meses.
-      categoryCompareDialog(label,
-        mk, txsForBreakdownRow(inMonth, gid, subId, type),
-        prevMkCat, txsForBreakdownRow(inPrevCat, gid, subId, type));
-    }));
-    const sel = $('#cat-analysis-sel', el);
-    if (sel) sel.addEventListener('change', (e) => {
-      ui.catAnalysisId = e.target.value;
-      drawCatEvo(ui.catAnalysisId);
+      if ((b = e.target.closest('[data-catmoves]'))) {
+        const gid = b.dataset.catmoves, subId = b.dataset.subid;
+        const g = breakdown.find((x) => x.id === gid);
+        const label = subId ? ((g && g.subs.find((s) => s.id === subId)) || {}).name || catName(gid) : (g ? g.name : catName(gid));
+        categoryCompareDialog(label, mk, forRow(monthAll, gid, subId), prevMk, forRow(inPrevFull, gid, subId));
+        return;
+      }
+      if ((b = e.target.closest('[data-methodmoves]'))) {
+        const id = b.dataset.methodmoves;
+        const pick = (list) => list.filter((t) => t.type === 'gasto' && (id === '__sin' ? !(methodById(t.methodId) || isSavingMethod(t.methodId)) : t.methodId === id));
+        categoryCompareDialog(id === '__sin' ? 'Sin medio de pago' : methodName(id), mk, pick(monthAll), prevMk, pick(inPrevFull));
+        return;
+      }
+      if ((b = e.target.closest('[data-evo]'))) { ui[evoKey] = b.dataset.evo; render(); }
     });
   }
+  function wireCatKindChips(el) {
+    $$('[data-catkind]', el).forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.catkind === ui.catKind) return;
+      ui.catKind = b.dataset.catkind;
+      render();
+    }));
+  }
+
 
   /* ================= Vista: Tarjetas y medios ================= */
   function methodForm(method) {
