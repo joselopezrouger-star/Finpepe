@@ -280,24 +280,6 @@
     return arsSnapshotFor(amount, currency);
   }
 
-  // Encabezado verde con el mes (a la izquierda), flechas redondas (a la
-  // derecha) y borde de ola: el mismo en Inicio y arriba de Movimientos /
-  // Categorías / Calendario. Los botones usan data-mnav (cada vista los
-  // conecta a su propio cambio de mes).
-  function heroHeadHTML(mk) {
-    return `<div class="hero-head">
-          <span class="hero-head-label">${iconSvg('calendar')}<span>${esc(monthLabel(mk))}</span></span>
-          <span class="hero-head-nav">
-            <button class="hero-head-btn" data-mnav="-1" aria-label="Mes anterior">${iconSvg('chevLeft')}</button>
-            <button class="hero-head-btn" data-mnav="1" aria-label="Mes siguiente">${iconSvg('chevRight')}</button>
-          </span>
-          <svg class="hero-wave" viewBox="0 0 400 36" preserveAspectRatio="none" aria-hidden="true">
-            <path class="hero-wave-back" d="M0 24 C 70 8, 150 8, 230 20 S 350 30, 400 10 V36 H0 Z"/>
-            <path class="hero-wave-front" d="M0 30 C 90 12, 170 34, 260 26 S 360 14, 400 22 V36 H0 Z"/>
-          </svg>
-        </div>`;
-  }
-
   // Número protagonista (ej. Patrimonio neto): sin decimales, como el resto
   // de los montos de la app.
   function heroMoneyHTML(n, cur) {
@@ -426,12 +408,8 @@
   // con líneas radiales- se confundía con el típico ícono de "sol" para
   // cambiar a modo claro. Este es el clásico ícono de ajustes (viewBox
   // propio de 24x24, no encaja en el sistema de 20x20 de ICON_PATHS).
-  const EYE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
-  const EYE_OFF_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.7 17.7 0 0 1-2.6 3.6M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a10 10 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>';
-  const SETTINGS_GEAR_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-    <circle cx="12" cy="12" r="3"/>
-  </svg>`;
+  // Íconos del sprite de index.html (docs/rediseno/iconos.svg).
+  const spriteIcon = (id) => `<svg class="ic" aria-hidden="true"><use href="#i-${id}"/></svg>`;
   // Anillo doble: aro externo = % del ingreso que todavía no se gastó, aro
   // interno = % del mes que todavía falta transcurrir. Comparar los dos de
   // un vistazo muestra si el ritmo de gasto va por delante o por detrás del
@@ -1101,6 +1079,8 @@
     if (next === 'light') document.documentElement.setAttribute('data-theme', 'light');
     else document.documentElement.removeAttribute('data-theme');
     localStorage.setItem(THEME_KEY, next);
+    const meta = $('#meta-theme-color');
+    if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
     render(); // Repinta los gráficos con los colores del nuevo tema.
   }
 
@@ -2478,8 +2458,6 @@
           <path d="M0 200 C 100 165, 190 235, 280 195 S 370 170, 400 190 V300 H0 Z"/>
           <path d="M0 250 C 90 225, 200 280, 300 245 S 380 235, 400 245 V300 H0 Z"/>
         </svg>
-        ${heroHeadHTML(mk)}
-        ${mk === curMonth() ? '' : '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>'}
         <div class="hero-main">
           <div class="hero-main-left">
             <div class="hero-label">Saldo</div>
@@ -2516,7 +2494,6 @@
         </div>
       </div>
 
-      <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
       ${sharedWidget}
 
       <div class="grid-2 grid-2-pair">
@@ -2647,12 +2624,6 @@
       ariaLabel: 'Gastos acumulados por día del mes',
     });
 
-    $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
-      ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
-      render();
-    }));
-    const btnToday = $('[data-mtoday]', el);
-    if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
     $('[data-trendtable]', el).addEventListener('click', () => {
       ui.trendTable = !ui.trendTable;
       render();
@@ -2718,7 +2689,6 @@
         ariaLabel: 'Gastos acumulados por día del mes',
       });
     });
-    $('#btn-cta-tx', el).addEventListener('click', () => txForm(null));
     $$('[data-goto-card]', el).forEach((row) => row.addEventListener('click', () => {
       ui.view = 'tarjetas';
       render();
@@ -7054,16 +7024,14 @@
     { key: 'inicio', views: ['resumen'] },
     { key: 'movimientos', views: ['movimientos', 'categorias', 'calendario'] },
     { key: 'cuentas', views: ['tarjetas', 'ahorros'] },
-    { key: 'mas', views: ['cuotas', 'presupuestos', 'fijos', 'compartido'] },
+    { key: 'mas', views: ['cuotas', 'presupuestos', 'fijos', 'compartido', 'ajustes'] },
   ];
   const VIEW_LABELS = {
     resumen: 'Resumen', movimientos: 'Movimientos', calendario: 'Calendario',
     categorias: 'Categorías', tarjetas: 'Tarjetas y medios', ahorros: 'Ahorros',
     cuotas: 'Cuotas', presupuestos: 'Presupuestos', fijos: 'Fijos', compartido: 'Compartido', ajustes: 'Ajustes',
   };
-  // Ajustes ya no vive dentro de ningún grupo de la nav inferior — se abre
-  // directo con el botón del encabezado, así que groupOf() puede no
-  // encontrar nada para esa vista (y para ninguna otra que se agregue suelta).
+  // Puede no encontrar nada para una vista que se agregue suelta.
   function groupOf(view) { return GROUPS.find((g) => g.views.includes(view)) || null; }
 
   // Al cambiar de hoja (no en cualquier re-render — eso incluiría cosas
@@ -7072,6 +7040,89 @@
   // en una hoja, la siguiente no debería abrir en ese mismo nivel.
   let lastRenderedView = null;
   const lastSubIdx = {};
+
+  /* ---------- Mes elegido (barra superior) ----------
+     Inicio y Movimientos (con Categorías y Calendario) dependen del mes:
+     la barra superior muestra el mes con flechas ‹ › y, en esas hojas, se
+     cambia también deslizando el contenido hacia los costados. El resto de
+     las secciones muestra su nombre en ese lugar. */
+  const MONTH_GROUPS = ['inicio', 'movimientos'];
+  const GROUP_TITLES = { inicio: 'Inicio', movimientos: 'Movimientos', cuentas: 'Cuentas', mas: 'Más' };
+  const usesMonth = (grp) => !!grp && MONTH_GROUPS.includes(grp.key);
+  const topbarMonthLabel = (mk) => {
+    const [y, m] = mk.split('-').map(Number);
+    const name = new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(new Date(y, m - 1, 1));
+    return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${y}`;
+  };
+  function renderTopbar(grp) {
+    const left = $('#topbar-left');
+    if (!left) return;
+    if (!usesMonth(grp)) {
+      left.innerHTML = `<h1 class="topbar-title">${esc((grp && GROUP_TITLES[grp.key]) || VIEW_LABELS[ui.view] || '')}</h1>`;
+      return;
+    }
+    // Fuera del mes actual, el nombre del mes queda en verde y al tocarlo
+    // vuelve al mes actual (no entra un botón "Hoy" al lado sin cortar
+    // "Septiembre 2026" en un celular).
+    const isCur = ui.month === curMonth();
+    const label = topbarMonthLabel(ui.month);
+    const longCls = label.length > 13 ? ' is-long' : '';
+    left.innerHTML = `
+      <button type="button" class="icb ghost" data-mnav="-1" aria-label="Mes anterior">${spriteIcon('cl')}</button>
+      ${isCur
+        ? `<h1 class="topbar-title topbar-month${longCls}">${esc(label)}</h1>`
+        : `<h1 class="topbar-title topbar-month${longCls}"><button type="button" class="topbar-month-btn" data-mtoday aria-label="${esc(label)}. Volver a ${esc(topbarMonthLabel(curMonth()))}">${esc(label)}</button></h1>`}
+      <button type="button" class="icb ghost" data-mnav="1" aria-label="Mes siguiente">${spriteIcon('cr')}</button>`;
+  }
+  // Cambia de mes (delta = ±1, o 0 para volver al actual). Si el navegador
+  // tiene View Transitions, el contenido se desliza hacia el lado que
+  // corresponde; si no (o con "reducir movimiento"), cambia sin animación.
+  function changeMonth(delta) {
+    const target = delta ? addMonthsKey(ui.month, delta) : curMonth();
+    if (target === ui.month) return;
+    const dir = target > ui.month ? 'next' : 'prev';
+    const go = () => { ui.month = target; render(); };
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!document.startViewTransition || reduce) { go(); return; }
+    const root = document.documentElement;
+    root.dataset.slide = dir;
+    const t = document.startViewTransition(go);
+    t.finished.finally(() => { delete root.dataset.slide; });
+  }
+  // Deslizar el contenido hacia los costados cambia de mes. Se ignora si el
+  // gesto empieza adentro de algo que se scrollea de costado (tablas,
+  // gráficos anchos, chips) o de un campo de texto, y si es más vertical
+  // que horizontal (eso es scrollear la página).
+  function initMonthSwipe() {
+    const view = $('#view');
+    let start = null;
+    const scrollsSideways = (node) => {
+      for (let n = node; n && n !== view; n = n.parentElement) {
+        if (n.matches('input, select, textarea, [data-noswipe]')) return true;
+        if (n.scrollWidth > n.clientWidth + 1) {
+          const ox = getComputedStyle(n).overflowX;
+          if (ox === 'auto' || ox === 'scroll') return true;
+        }
+      }
+      return false;
+    };
+    view.addEventListener('touchstart', (e) => {
+      start = null;
+      if (e.touches.length !== 1 || !usesMonth(groupOf(ui.view)) || scrollsSideways(e.target)) return;
+      const t = e.touches[0];
+      start = { x: t.clientX, y: t.clientY, at: Date.now() };
+    }, { passive: true });
+    view.addEventListener('touchend', (e) => {
+      if (!start) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - start.x, dy = t.clientY - start.y;
+      const quick = Date.now() - start.at < 600;
+      start = null;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5 || !quick) return;
+      changeMonth(dx < 0 ? 1 : -1);
+    }, { passive: true });
+    view.addEventListener('touchcancel', () => { start = null; }, { passive: true });
+  }
   function render() {
     const changingView = ui.view !== lastRenderedView;
     // Re-render en la misma hoja (ej. cambiar de moneda): mientras se arma
@@ -7081,11 +7132,16 @@
     const prevScrollY = window.scrollY;
     lastRenderedView = ui.view;
     const grp = groupOf(ui.view);
-    $$('.bottom-nav button').forEach((b) => b.classList.toggle('active', !!grp && b.dataset.group === grp.key));
+    $$('.tabbar [data-group]').forEach((b) => {
+      const on = !!grp && b.dataset.group === grp.key;
+      b.classList.toggle('active', on);
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    renderTopbar(grp);
     $$('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.cur === disp()));
     const eye = $('#btn-privacy');
     if (eye) {
-      eye.innerHTML = hideAmounts ? EYE_OFF_SVG : EYE_SVG;
+      eye.innerHTML = spriteIcon(hideAmounts ? 'eyeoff' : 'eye');
       eye.classList.toggle('active', hideAmounts);
       eye.setAttribute('aria-pressed', String(hideAmounts));
       eye.setAttribute('aria-label', hideAmounts ? 'Mostrar montos' : 'Ocultar montos');
@@ -7096,23 +7152,7 @@
     renderRateChip();
     renderAccountChip();
     renderBanner();
-    // Dentro de Ajustes el engranaje pasa a ser un ícono de "volver a
-    // Inicio" (antes no había forma de salir de Ajustes salvo la nav de
-    // abajo, que ni siquiera queda resaltada ahí).
-    const settingsBtn = $('#btn-open-settings');
-    if (settingsBtn) {
-      settingsBtn.innerHTML = ui.view === 'ajustes' ? iconSvg('home') : SETTINGS_GEAR_SVG;
-      settingsBtn.setAttribute('aria-label', ui.view === 'ajustes' ? 'Volver a Inicio' : 'Ajustes');
-    }
     const el = $('#view');
-    // Movimientos/Categorías/Calendario comparten un solo mes (ui.month):
-    // el selector va antes que las sub-pestañas y afuera de cualquier
-    // tarjeta de contenido en particular, con el mismo look que el de
-    // Inicio — así no parece "pertenecer" a una sola de las tres vistas.
-    const showMonthBar = grp && grp.key === 'movimientos';
-    const monthBarHTML = showMonthBar ? `
-      <div class="month-head-card">${heroHeadHTML(ui.month)}</div>
-      ${ui.month !== curMonth() ? '<button class="link-btn hero-mtoday shared-month-today" data-mtoday>volver al mes actual</button>' : ''}` : '';
     // Sub-pestañas con el mismo look que el selector de moneda: una píldora
     // que se desliza atrás de la activa. Se dibuja primero en la posición
     // de la pestaña anterior del mismo grupo y en el próximo frame se mueve
@@ -7128,7 +7168,7 @@
         ${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}
       </div>`;
     }
-    el.innerHTML = monthBarHTML + subtabsHTML + '<div class="view-content"></div>';
+    el.innerHTML = subtabsHTML + '<div class="view-content"></div>';
     if (subIdx >= 0) {
       // Las pestañas miden según su texto (no todas iguales), así que la
       // píldora toma la posición y el ancho reales del botón.
@@ -7148,14 +7188,6 @@
       } else {
         requestAnimationFrame(() => { thumbEl.style.transition = ''; });
       }
-    }
-    if (showMonthBar) {
-      $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
-        ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
-        render();
-      }));
-      const btnToday = $('[data-mtoday]', el);
-      if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
     }
     $$('[data-subview]', el).forEach((b) => b.addEventListener('click', () => {
       b.blur();
@@ -7205,7 +7237,7 @@
     }
     sortMethodsOnce();
 
-    $$('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
+    $$('.tabbar [data-group]').forEach((b) => b.addEventListener('click', () => {
       // El botón queda enfocado al tocarlo, y en algunos navegadores
       // mobile eso dispara un scroll automático para "mostrar" el elemento
       // enfocado — aunque sea uno fijo (position: fixed) que ya está
@@ -7238,10 +7270,13 @@
       Charts.setMasked(hideAmounts);
       render();
     });
-    $('#btn-open-settings').addEventListener('click', () => {
-      ui.view = ui.view === 'ajustes' ? 'resumen' : 'ajustes';
-      render();
+    $('#btn-fab').addEventListener('click', (e) => { e.currentTarget.blur(); txForm(null); });
+    $('#topbar-left').addEventListener('click', (e) => {
+      const nav = e.target.closest('[data-mnav]');
+      if (nav) changeMonth(Number(nav.dataset.mnav));
+      else if (e.target.closest('[data-mtoday]')) changeMonth(0);
     });
+    initMonthSwipe();
     // La píldora de las sub-pestañas está en px (ver render()): si cambia el
     // ancho de pantalla (ej. girar el celular) se reacomoda sobre la activa.
     window.addEventListener('resize', () => {

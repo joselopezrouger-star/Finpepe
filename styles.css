@@ -55,6 +55,9 @@
 [hidden] { display: none !important; }
 
 html { -webkit-text-size-adjust: 100%; }
+/* Sin el "rebote" de iOS al llegar arriba/abajo de todo: en una PWA deja
+   ver el fondo detrás de las barras fijas. */
+html, body { overscroll-behavior-y: none; }
 
 body {
   margin: 0;
@@ -79,49 +82,74 @@ button {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent; /* sin el resaltado gris de WebKit */
+  touch-action: manipulation;
+  position: relative;
+  transition: scale 0.12s;
+}
+/* Al tocarlo, el botón se achica apenas. Se usa la propiedad "scale" (no
+   transform) para no pisar los botones que ya usan transform. */
+button:active:not(:disabled) { scale: 0.97; }
+/* Área táctil de 44×44px como mínimo, aunque el botón se vea más chico:
+   una capa invisible centrada de 44×44 (si el botón ya es más grande, la
+   capa queda adentro y no cambia nada). */
+button::after {
+  content: '';
+  position: absolute;
+  inset: calc(50% - 22px);
 }
 
-/* ---------- Encabezado ---------- */
+/* ---------- Barra superior ----------
+   Mes con flechas a la izquierda (o el nombre de la sección) y, a la
+   derecha, el ojo y ARS/USD. Fondo translúcido con blur, y lugar para la
+   barra de estado del iPhone (la app se abre como PWA con
+   status-bar-style black-translucent, así que el contenido arranca debajo
+   de ella). */
 .topbar {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 20;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  backdrop-filter: blur(22px) saturate(1.6);
+  padding-top: env(safe-area-inset-top);
+  view-transition-name: topbar;
 }
-
 .topbar-inner {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 12px 20px 8px;
+  min-height: 52px;
+  padding: 4px max(12px, env(safe-area-inset-right)) 4px max(10px, env(safe-area-inset-left));
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+}
+.topbar-actions-right { display: flex; align-items: center; gap: 6px; flex: none; }
+.month { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.topbar-title {
+  margin: 0; padding: 0 2px;
+  font: 600 20px/1 var(--f-num); letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.month > .topbar-title:only-child { padding-left: 6px; }
+.month .icb { width: 32px; }
+.topbar-month.is-long { font-size: 18px; }
+.topbar-month-btn {
+  border: 0; background: transparent; padding: 0; cursor: pointer;
+  font: inherit; letter-spacing: inherit; color: var(--brand-text);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
 
-.brand { display: flex; align-items: center; gap: 10px; }
-.topbar-actions-right { display: flex; align-items: center; gap: 10px; flex: none; }
-.topbar-settings {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  flex: none;
+/* Botón redondo de ícono (flechas del mes, ojo). */
+.icb {
+  width: 36px; height: 36px; border-radius: 50%; border: 0; padding: 0;
+  background: var(--s2); color: var(--t2);
+  display: grid; place-items: center; cursor: pointer; flex: none;
 }
-
-.brand-mark {
-  width: 32px; height: 32px;
-  border-radius: 9px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  object-fit: contain;
-  padding: 3px;
-  display: block;
-}
-
-.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
-.brand-name { font-weight: 650; font-size: 16px; letter-spacing: -0.01em; }
-.brand-sub { font-size: 11px; color: var(--muted); }
+.icb.ghost { background: transparent; }
+.icb.active { background: var(--brand); color: var(--on-brand); }
+.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
 .topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
@@ -141,10 +169,9 @@ button {
   position: relative;
   display: inline-flex;
   justify-self: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  background: var(--surface-2);
-  padding: 2px;
+  border-radius: 999px;
+  background: var(--s2);
+  padding: 3px;
 }
 /* La "píldora" que se desliza atrás del botón activo, como el segmented
    control de iOS: un solo elemento que se anima con transform en vez de
@@ -152,11 +179,12 @@ button {
    de un cambio brusco de color. */
 .seg-thumb {
   position: absolute;
-  top: 2px; left: 2px;
-  width: calc(50% - 2px);
-  height: calc(100% - 4px);
-  background: var(--accent);
-  border-radius: calc(var(--radius-s) - 2px);
+  top: 3px; left: 3px;
+  width: calc(50% - 3px);
+  height: calc(100% - 6px);
+  background: var(--s1);
+  box-shadow: 0 1px 3px var(--scrim);
+  border-radius: 999px;
   transition: transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 .seg-thumb.pos-usd { transform: translateX(100%); }
@@ -165,53 +193,44 @@ button {
   z-index: 1;
   border: 0;
   background: transparent;
-  width: 54px;
-  padding: 5px 0;
-  font: 12px var(--font);
+  width: 46px;
+  padding: 8px 0;
+  font: 600 12px/1 var(--f-text);
   color: var(--ink-2);
   cursor: pointer;
   transition: color 0.2s;
 }
-.seg-btn.active { color: var(--on-accent); font-weight: 600; }
+.seg-btn.active { color: var(--t1); }
 
-/* ---------- Navegación inferior ---------- */
-.bottom-nav {
-  position: fixed;
-  left: 50%;
-  bottom: 14px;
-  bottom: calc(14px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  z-index: 40;
-  width: min(420px, calc(100vw - 20px));
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 2px;
-  padding: 6px;
-  background: color-mix(in srgb, var(--surface) 86%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  box-shadow: var(--sheet-shadow);
+/* ---------- Barra inferior ----------
+   Pegada al borde, translúcida con blur, con el + central para cargar.
+   El contenido deja var(--tabbar-h) libre abajo (ver .view). */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  height: var(--tabbar-h);
+  padding: 6px max(6px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(6px, env(safe-area-inset-left));
+  display: grid; grid-template-columns: repeat(5, 1fr); align-items: start;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  backdrop-filter: blur(22px) saturate(1.6);
+  border-top: 1px solid var(--line);
+  view-transition-name: tabbar;
 }
-.bottom-nav button {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  border: 0;
-  background: transparent;
-  border-radius: 999px;
-  padding: 8px 4px 7px;
-  color: var(--muted);
-  cursor: pointer;
+.tab {
+  display: grid; justify-items: center; align-content: start; gap: 4px;
+  min-height: 46px; padding: 4px 0 0; border: 0; background: transparent;
+  font: 600 11px/1 var(--f-text); color: var(--t3); cursor: pointer;
 }
-.bottom-nav button .bn-icon { font-size: 19px; line-height: 1; }
-.bottom-nav button .bn-label { font-size: 11px; font-weight: 650; letter-spacing: 0.01em; }
-.bottom-nav button.active { color: var(--accent-down); background: var(--accent-wash); }
+.tab .ic { width: 24px; height: 24px; }
+.tab.active { color: var(--brand-text); }
+.fab {
+  justify-self: center; margin-top: -2px;
+  width: 52px; height: 52px; border-radius: 18px; border: 0;
+  background: var(--brand); color: var(--on-brand);
+  display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 6px 18px -4px color-mix(in srgb, var(--brand) 60%, transparent);
+}
+.fab .ic { width: 26px; height: 26px; stroke-width: 2.4; }
 
 /* ---------- Sub-pestañas (dentro de cada sección) ----------
    Mismo look que el selector de moneda (.seg): un riel con fondo suave y
@@ -257,19 +276,11 @@ button {
    todas sin cortarse en un celular. */
 .subtabs-dense button { font-size: 12px; padding-left: 6px; padding-right: 6px; }
 
-/* Encabezado de mes de Movimientos / Categorías / Calendario: el mismo
-   de Inicio (.hero-head), suelto arriba de las sub-pestañas. La ola se
-   pinta del color de fondo de la página, así la tarjeta "termina" en ola. */
-.month-head-card { border-radius: 12px; overflow: hidden; }
-.month-head-card .hero-head { padding-bottom: 28px; }
-.month-head-card .hero-wave-front { fill: var(--bg); }
-.month-head-card .hero-wave-back { fill: color-mix(in srgb, var(--bg) 30%, transparent); }
-
 /* ---------- Estructura ---------- */
 .view {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 20px 20px 104px;
+  padding: 16px max(16px, env(safe-area-inset-right)) calc(var(--tabbar-h) + 24px) max(16px, env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -493,7 +504,7 @@ select, input[type="text"], input[type="number"], input[type="date"], input[type
   border-radius: var(--radius-s);
   background: var(--surface);
   color: var(--ink);
-  font: 13px var(--font);
+  font: 16px var(--font); /* menos de 16px hace que iOS haga zoom al tocarlo */
   padding: 7px 9px;
   max-width: 100%;
 }
@@ -891,7 +902,7 @@ dialog[open].dialog-tx.dialog-tx-wiz {
 }
 .auth-tab.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .auth-body { padding: 18px 24px 22px; display: grid; gap: 12px; }
-.auth-body input { padding: 11px 12px; font-size: 14px; }
+.auth-body input { padding: 11px 12px; font-size: 16px; }
 .auth-submit { width: 100%; padding: 11px 0; font-size: 14px; }
 .auth-msg { min-height: 16px; font-size: 12.5px; color: var(--crit); }
 .btn-google {
@@ -1105,7 +1116,6 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .budget-row-pct.over { color: var(--crit); }
 .budget-row-amounts { font-size: 11.5px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
 
-.shared-month-today { margin: 0; }
 
 .badge {
   display: inline-block;
@@ -1395,17 +1405,6 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   cursor: pointer;
 }
 
-/* ---------- CTA ancho completo ---------- */
-.pill-cta {
-  width: 100%;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  background: var(--accent); color: var(--on-accent);
-  border: 0; border-radius: 999px;
-  padding: 13px; font: 600 14px var(--font); letter-spacing: 0.01em;
-  cursor: pointer;
-}
-.pill-cta:hover { background: var(--accent-strong); }
-
 /* ---------- Mini resumen de Compartido (Resumen) ---------- */
 .shared-mini {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -1550,35 +1549,6 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .hero-month-bar .icon-btn { width: 26px; height: 26px; border: 0; background: color-mix(in srgb, var(--on-brand) 11%, transparent); color: var(--on-brand); }
 .hero-month-bar .icon-btn:hover { background: color-mix(in srgb, var(--on-brand) 19%, transparent); }
 .hero-month-bar-label { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; white-space: nowrap; }
-/* Encabezado del Resumen: mes a la izquierda, flechas redondas a la
-   derecha, degradé verde y borde inferior en forma de ola (dos capas, la
-   de atrás más clara) que se funde con el fondo de la tarjeta. */
-.hero-head {
-  position: relative;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 16px 18px 32px;
-  background: linear-gradient(135deg, var(--brand), var(--brand-press));
-  color: var(--on-brand);
-}
-.hero-head-label { display: flex; align-items: center; gap: 10px; font: 700 17px var(--font-heading); white-space: nowrap; min-width: 0; overflow: hidden; }
-.hero-head-label span { overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 400px) {
-  .hero-head { padding-left: 14px; padding-right: 14px; }
-  .hero-head-label { font-size: 15px; gap: 8px; }
-  .hero-head-label svg { width: 19px; height: 19px; }
-  .hero-head-btn { width: 30px; height: 30px; font-size: 18px; }
-}
-.hero-head-label svg { width: 22px; height: 22px; flex: none; }
-.hero-head-nav { display: flex; gap: 8px; flex: none; }
-.hero-head-btn {
-  width: 34px; height: 34px; border-radius: 50%; border: 0; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 20px; line-height: 1; color: var(--on-brand);
-  background: color-mix(in srgb, var(--on-brand) 13%, transparent);
-}
-.hero-head-btn svg { width: 18px; height: 18px; stroke-width: 2.4; display: block; }
-.hero-head-btn:hover { background: color-mix(in srgb, var(--on-brand) 21%, transparent); }
-.hero-head-btn:focus-visible { outline: 2px solid var(--on-brand); outline-offset: 1px; }
 /* Olas de fondo en el cuerpo de la tarjeta: mismo dibujo que las del
    encabezado pero casi transparentes, detrás de todo el contenido. */
 .hero-bg-waves { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 78%; pointer-events: none; z-index: 0; }
@@ -1587,9 +1557,6 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .hero-bg-waves path:nth-child(2) { opacity: 0.035; }
 .hero-bg-waves path:nth-child(3) { opacity: 0.04; }
 .hero > :not(.hero-bg-waves) { position: relative; z-index: 1; }
-.hero-wave { position: absolute; left: 0; right: 0; bottom: -1px; width: 100%; height: 30px; display: block; }
-.hero-wave-back { fill: color-mix(in srgb, var(--hero-body) 30%, transparent); }
-.hero-wave-front { fill: var(--hero-body); }
 /* Sólo se dibuja (ver app.js) cuando NO es el mes actual, así que acá no
    hace falta reservarle espacio de antemano. */
 .hero-mtoday { position: relative; display: block; width: 100%; text-align: center; font-size: 11px; margin: 4px 0 0; }
@@ -1844,13 +1811,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 }
 
 @media (max-width: 560px) {
-  .topbar-inner { padding: 10px 14px 6px; }
-  /* El padding-bottom más grande (no 14px parejo) es a propósito: le deja
-     lugar a la barra de navegación fija de abajo, si no el final de cada
-     hoja quedaba tapado detrás de esos botones. */
-  .view { padding: 14px 14px 104px; }
   .tile-value { font-size: 20px; }
-  .brand-sub { display: none; }
   .cal-cell { font-size: 12px; border-radius: 8px; }
 }
 
@@ -2128,10 +2089,6 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .sh-feed-btn svg { color: var(--accent-down); }
 .sh-feed-count { color: var(--muted); font-weight: 600; }
 .card.sh-feed-btn:hover { border-color: var(--border-strong); }
-/* Ojo para ocultar montos, a la izquierda del selector de moneda. */
-.topbar-eye { color: var(--ink-2); }
-.topbar-eye.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-.topbar-eye { width: 32px; height: 32px; border-radius: 50%; flex: none; }
 /* Ajustes → Notificaciones */
 .notif-status { font-weight: 700; margin-bottom: 6px; color: var(--ink-2); }
 .notif-status.on { color: var(--accent-down); }
@@ -2158,3 +2115,26 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .cat-color-dot { width: 20px; height: 20px; border-radius: 50%; background: var(--c); flex: none; }
 .cat-color:has(input:checked) { border-color: var(--c); color: var(--ink); background: color-mix(in srgb, var(--c) 14%, var(--surface)); }
 .cat-color:has(input:focus-visible) { outline: 2px solid var(--c); outline-offset: 2px; }
+
+/* ---------- Cambio de mes animado (View Transitions) ----------
+   changeMonth() en app.js marca la dirección en <html data-slide>: el
+   contenido sale hacia un costado y el mes nuevo entra por el otro. Las
+   barras de arriba y abajo tienen su propio nombre para quedar quietas. */
+.view { view-transition-name: content; }
+::view-transition-group(tabbar) { animation: none; }
+::view-transition-old(tabbar) { display: none; }
+::view-transition-new(tabbar) { animation: none; }
+html[data-slide] ::view-transition-old(content),
+html[data-slide] ::view-transition-new(content) { animation-duration: 0.24s; animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1); animation-fill-mode: both; }
+html[data-slide="next"] ::view-transition-old(content) { animation-name: vt-out-left; }
+html[data-slide="next"] ::view-transition-new(content) { animation-name: vt-in-right; }
+html[data-slide="prev"] ::view-transition-old(content) { animation-name: vt-out-right; }
+html[data-slide="prev"] ::view-transition-new(content) { animation-name: vt-in-left; }
+@keyframes vt-out-left { to { transform: translateX(-28%); opacity: 0; } }
+@keyframes vt-out-right { to { transform: translateX(28%); opacity: 0; } }
+@keyframes vt-in-right { from { transform: translateX(28%); opacity: 0; } }
+@keyframes vt-in-left { from { transform: translateX(-28%); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  button { transition: none; }
+}
