@@ -1403,7 +1403,8 @@
       }
       if (canShare()) {
         const pct = Math.round(Number(draft.sharePct) || 0);
-        const label = draft.shareIt ? `Compartido con ${partnerLabel(partner)} · ${pct}/${100 - pct}` : 'Compartido';
+        // Corto, para que los chips no bajen a una tercera fila.
+        const label = draft.shareIt ? `Con ${partnerLabel(partner)} · ${pct}/${100 - pct}` : 'Compartido';
         out.push(chip('data-share', 'users', label, draft.shareIt));
       }
       out.push(chip('data-panel="note"', 'note', draft.note ? draft.note : 'Nota', !!draft.note || draft.panel === 'note'));
@@ -1594,10 +1595,22 @@
       dlg.innerHTML = sheetHTML();
       const nb = $('[data-shbody]', dlg);
       if (nb) nb.scrollTop = scroll;
+      requestAnimationFrame(fit);
       if (draft.panel === 'note') {
         const n = $('#tx-note', dlg);
         if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
       }
+    }
+
+    // En pantallas bajas, si el contenido no entra arriba del teclado, se
+    // compacta (teclas y monto más chicos) en vez de quedar tapado.
+    function fit() {
+      const nb = $('[data-shbody]', dlg);
+      dlg.classList.remove('fit1', 'fit2');
+      if (!nb || !dlg.open) return;
+      const over = () => nb.scrollHeight > nb.clientHeight + 1;
+      if (over()) dlg.classList.add('fit1');
+      if (over()) dlg.classList.add('fit2');
     }
 
     function setType(t) {
@@ -2438,6 +2451,95 @@
       return `<span class="dl ${up ? 'bt' : 'neg'}">${up ? '▲' : '▼'} ${label}</span>`;
     })();
 
+    // Detalle de cada número de arriba (Ingresos, Gastos, Ahorros) en un
+    // panel. En Gastos se separan los resúmenes de tarjeta que caen en el
+    // mes de los gastos corrientes (débito, efectivo, billeteras).
+    const homeDetail = (kind) => {
+      const chev = spriteIcon('cr').replace('class="ic"', 'class="ic chev"');
+      const shortDate = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+      const groups = []; // { title, rows: [{ icon, color, name, sub, value, txs, go }] }
+      let total = 0, title = '', note = '';
+      if (kind === 'gasto') {
+        title = 'Gastos';
+        total = exp;
+        const list = inMonth.filter((t) => t.type === 'gasto');
+        const cards = [], cur = new Map();
+        const byVto = S().settings.cardMonthBasis === 'vencimiento';
+        for (const m of S().methods.filter((x) => x.kind === 'credito')) {
+          const txsM = list.filter((t) => t.methodId === m.id);
+          if (!txsM.length) continue;
+          const dues = [...new Set(txsM.map((t) => paymentDateOf(t)))].sort();
+          cards.push({ icon: iconSvg(methodIconName(m.id)), color: KIND_COLOR.credito, name: m.name,
+            sub: byVto && cardCycle(m) ? `Resumen que vence el ${shortDate(parseDate(dues[dues.length - 1]))}` : 'Compras del mes',
+            value: sumDisp(txsM), txs: txsM });
+        }
+        for (const t of list) {
+          const m = methodById(t.methodId);
+          if (m && m.kind === 'credito') continue;
+          const k = m ? m.id : (isSavingMethod(t.methodId) ? t.methodId : '__sin');
+          if (!cur.has(k)) cur.set(k, []);
+          cur.get(k).push(t);
+        }
+        const curRows = [...cur.entries()].map(([id, txsM]) => ({
+          icon: id === '__sin' ? spriteIcon('more') : iconSvg(methodIconName(id)),
+          color: (methodById(id) && KIND_COLOR[methodById(id).kind]) || OTROS_COLOR,
+          name: id === '__sin' ? 'Sin medio de pago' : methodName(id), sub: `${txsM.length} movimiento${txsM.length === 1 ? '' : 's'}`,
+          value: sumDisp(txsM), txs: txsM,
+        })).sort((a, b) => b.value - a.value);
+        if (cards.length) groups.push({ title: byVto ? 'Tarjetas · resúmenes del mes anterior' : 'Tarjetas de crédito', rows: cards });
+        if (curRows.length) groups.push({ title: 'Gastos corrientes del mes', rows: curRows });
+      } else if (kind === 'ingreso') {
+        title = 'Ingresos';
+        total = inc;
+        const byCatI = new Map();
+        for (const t of inMonth.filter((x) => x.type === 'ingreso')) {
+          const k = topCategoryOf(t.categoryId) || '__sin';
+          if (!byCatI.has(k)) byCatI.set(k, []);
+          byCatI.get(k).push(t);
+        }
+        groups.push({ title: 'Por categoría', rows: [...byCatI.entries()].map(([id, txsC]) => ({
+          icon: id === '__sin' ? spriteIcon('more') : iconSvg(categoryIconName(id)), color: id === '__sin' ? OTROS_COLOR : catColor(id),
+          name: id === '__sin' ? 'Sin categoría' : catName(id), sub: `${txsC.length} movimiento${txsC.length === 1 ? '' : 's'}`,
+          value: sumDisp(txsC), txs: txsC,
+        })).sort((a, b) => b.value - a.value) });
+      } else {
+        title = 'Ahorros';
+        total = savingsMonth;
+        const first = `${mk}-01`, cutoff = `${addMonthsKey(mk, 1)}-01`;
+        const rows = S().savings.map((sv) => {
+          const es = sv.entries.filter((e) => !e.opening && e.date >= first && e.date < cutoff);
+          const value = es.reduce((a, e) => a + (savingEntryAmountIn(sv, e, disp()) || 0), 0);
+          return { icon: spriteIcon('wallet'), color: 'var(--c-super)', name: sv.name,
+            sub: `${es.length} movimiento${es.length === 1 ? '' : 's'} en ${monthName(mk)}`, value, go: true, n: es.length };
+        }).filter((r) => r.n);
+        if (rows.length) groups.push({ title: 'Por cuenta de ahorro', rows });
+        if (inc > 0) note = `Ahorraste el ${Math.round((savingsMonth / inc) * 100)}% de lo que entró en ${monthName(mk)}.`;
+      }
+      const flat = groups.flatMap((g) => g.rows);
+      const body = `
+        <div class="dt-total"><span class="t2">Total de ${esc(monthName(mk))}</span><span class="num dt-big">${fmtDisp(total)}</span></div>
+        ${note ? `<p class="t2 dt-note">${esc(note)}</p>` : ''}
+        ${groups.map((g) => `
+          <h3 class="ovl dt-h">${esc(g.title)}<span class="num">${fmtDisp(g.rows.reduce((a, r) => a + r.value, 0))}</span></h3>
+          <div class="dt-list">${g.rows.map((r) => `
+            <button type="button" class="dt-row" data-dtrow="${flat.indexOf(r)}">
+              <span class="cic" style="--c:${r.color}">${r.icon}</span>
+              <div class="row-main"><div class="tt">${esc(r.name)}</div><div class="st">${esc(r.sub)}</div></div>
+              <span class="num">${fmtDisp(r.value)}</span>${chev}
+            </button>`).join('')}</div>`).join('')}
+        ${flat.length ? '' : '<div class="empty">Sin movimientos este mes.</div>'}`;
+      openPanel({
+        title, subtitle: monthName(mk).replace(/^./, (c) => c.toUpperCase()), body,
+        onClick(e, dlg) {
+          const b = e.target.closest('[data-dtrow]');
+          if (!b) return;
+          const r = flat[Number(b.dataset.dtrow)];
+          if (r.go) { closeSheet(dlg).then(() => { ui.view = 'ahorros'; render(); }); return; }
+          closeSheet(dlg).then(() => methodPeriodDetailDialog(`${r.name} · ${monthName(mk)}`, r.txs));
+        },
+      });
+    };
+
     // Compartido en una fila neutra (deber plata no es un error).
     const me = Cloud.user() ? sharedMe() : null;
     const sharedPartnerM = Cloud.user() ? sharedPartner() : null;
@@ -2488,9 +2590,9 @@
             </div>
           </div>
           <div class="minis">
-            <div><span class="lbl"><i class="dotic" style="--c:var(--brand)">${spriteIcon('in')}</i>Ingresos</span><span class="num val">${money(inc)}</span>${deltaHTML(inc, isCurMonth ? incPrevCmp : incPrev, true)}</div>
-            <div><span class="lbl"><i class="dotic" style="--c:var(--neg)">${spriteIcon('in').replace('class="ic"', 'class="ic flip"')}</i>Gastos</span><span class="num val">${money(exp)}</span>${deltaHTML(exp, isCurMonth ? expPrevCmp : expPrev, false)}</div>
-            <div><span class="lbl"><i class="dotic" style="--c:var(--c-super)">${spriteIcon('dollar')}</i>Ahorros</span><span class="num val ${savingsMonth < 0 ? 'neg' : ''}">${money(savingsMonth)}</span>${savDeltaHTML}</div>
+            <div role="button" tabindex="0" data-mini="ingreso"><span class="lbl"><i class="dotic" style="--c:var(--brand)">${spriteIcon('in')}</i>Ingresos</span><span class="num val">${money(inc)}</span>${deltaHTML(inc, isCurMonth ? incPrevCmp : incPrev, true)}</div>
+            <div role="button" tabindex="0" data-mini="gasto"><span class="lbl"><i class="dotic" style="--c:var(--neg)">${spriteIcon('in').replace('class="ic"', 'class="ic flip"')}</i>Gastos</span><span class="num val">${money(exp)}</span>${deltaHTML(exp, isCurMonth ? expPrevCmp : expPrev, false)}</div>
+            <div role="button" tabindex="0" data-mini="ahorro"><span class="lbl"><i class="dotic" style="--c:var(--c-super)">${spriteIcon('dollar')}</i>Ahorros</span><span class="num val ${savingsMonth < 0 ? 'neg' : ''}">${money(savingsMonth)}</span>${savDeltaHTML}</div>
           </div>
         </div>
       </div>
@@ -2529,6 +2631,11 @@
         </button>`).join('')}
       </div>` : ''}`;
 
+    $$('[data-mini]', el).forEach((b) => {
+      const open = () => homeDetail(b.dataset.mini);
+      b.addEventListener('click', open);
+      b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    });
     $$('[data-insight-card]', el).forEach((row) => row.addEventListener('click', () => cardAnalysisDialog(row.dataset.insightCard)));
     $$('[data-insight-go]', el).forEach((row) => row.addEventListener('click', () => {
       const go = row.dataset.insightGo;
@@ -2982,7 +3089,7 @@
     const path = (xy) => `M${xy.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L')}`;
     const prevPath = prevXY.length > 1 ? `<path d="${path(prevXY)}" fill="none" stroke-width="1.6" stroke-dasharray="4 4" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--t3)"/>` : '';
     const area = curXY.length > 1 ? `<path d="${path(curXY)} L${curXY[curXY.length - 1][0].toFixed(1)} ${yBase} L${curXY[0][0].toFixed(1)} ${yBase} Z" style="fill:url(#gDia)"/>` : '';
-    const curPath = curXY.length > 1 ? `<path d="${path(curXY)}" fill="none" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--t1)"/>` : '';
+    const curPath = curXY.length > 1 ? `<path d="${path(curXY)}" fill="none" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--c-tel)"/>` : '';
     const hline = (v, color, label, below) => {
       if (!(v > 0)) return '';
       const yy = y(v);
@@ -2994,27 +3101,16 @@
     let today = '';
     if (curPts.length) {
       const [hx, hy] = curXY[curXY.length - 1];
-      const curVal = curPts[curPts.length - 1][1];
       const prevAt = prevPts.length ? prevPts[Math.min(upTo, prevPts.length) - 1][1] : null;
       if (isCurrent) today += `<line x1="${hx.toFixed(1)}" x2="${hx.toFixed(1)}" y1="${hy.toFixed(1)}" y2="${yBase}" stroke-width="1" stroke-dasharray="2 3" style="stroke:var(--t3)"/>`;
       if (prevAt != null) today += `<circle cx="${hx.toFixed(1)}" cy="${y(prevAt).toFixed(1)}" r="3.5" style="fill:var(--t3)"/>`;
-      today += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="9" style="fill:var(--t1);opacity:.12"/><circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="4.5" stroke-width="2.5" style="fill:var(--t1);stroke:var(--s1)"/>`;
-      // Rótulo del día: monto y % contra el mes anterior al mismo día.
-      const pct = prevAt > 0 ? Math.round(((curVal - prevAt) / prevAt) * 100) : null;
-      const right = hx < (x0 + x1) / 2;
-      const lx = right ? hx + 10 : hx - 10;
-      const anchor = right ? 'start' : 'end';
-      const ly = Math.max(yTop + 26, hy - 12);
-      today += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" class="g-halo" style="fill:var(--t1);font-weight:700">${esc(chartMoney(curVal))}</text>`;
-      if (pct != null && !hideAmounts) {
-        today += `<text x="${lx.toFixed(1)}" y="${(ly - 14).toFixed(1)}" text-anchor="${anchor}" class="g-halo" style="fill:${pct > 0 ? 'var(--neg)' : 'var(--brand-text)'};font-weight:600">${pct > 0 ? '▲' : '▼'} ${Math.abs(pct)}% vs. ${esc(prevShort)}</text>`;
-      }
+      today += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="9" style="fill:var(--c-tel);opacity:.18"/><circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="4.5" stroke-width="2.5" style="fill:var(--c-tel);stroke:var(--s1)"/>`;
     }
     const xTicks = [1, 5, 10, 15, 20, 25, daysInMonth].filter((d, i, a) => d <= daysInMonth && a.indexOf(d) === i && !(d !== daysInMonth && daysInMonth - d < 3));
     const xLabels = xTicks.map((d) => `<text x="${x(d).toFixed(1)}" y="170" text-anchor="middle"${isCurrent && d === upTo ? ' class="g-sel"' : ''}>${d}</text>`).join('');
     const aria = `Gastos acumulados día a día${hideAmounts ? '' : `: ${fmtPlain(curPts.length ? curPts[curPts.length - 1][1] : 0)} al día ${upTo}; ${prevLabel} cerró en ${fmtPlain(prevPts.length ? prevPts[prevPts.length - 1][1] : 0)}`}.`;
     return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}">
-      <defs><linearGradient id="gDia" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--t1);stop-opacity:.18"/><stop offset="1" style="stop-color:var(--t1);stop-opacity:0"/></linearGradient></defs>
+      <defs><linearGradient id="gDia" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--c-tel);stop-opacity:.28"/><stop offset="1" style="stop-color:var(--c-tel);stop-opacity:0"/></linearGradient></defs>
       ${gridLines(ticks, y, x0, x1)}
       ${refs}${prevPath}${area}${curPath}${today}${xLabels}
     </svg>`;
@@ -3165,7 +3261,7 @@
             ${diffChip}
           </div>
           <div class="legend">
-            <span><i class="lg-line" style="border-color:var(--t1)"></i>${esc(monthShortLabel(mk))}</span>
+            <span><i class="lg-line" style="border-color:var(--c-tel)"></i>${esc(monthShortLabel(mk))}</span>
             ${hasPrev ? `<span><i class="lg-line lg-dash" style="border-color:var(--t3)"></i>${esc(monthShortLabel(prevMk))}</span>` : ''}
           </div>
           ${refsOff.length ? `<div class="daily-refs">${refsOff.join('')}</div>` : ''}
@@ -7310,7 +7406,12 @@
       </div>
       <div class="group">
         ${row('ajustes', spriteIcon('bolt'), 'var(--t2)', 'Ajustes', 'Tema, cotización y datos')}
-      </div>`;
+      </div>
+      <footer class="brand-mark" aria-hidden="true">
+        <img src="assets/logo.png" alt="" width="44" height="44">
+        <span class="brand-name">FinPep</span>
+        <span class="brand-sub">Tus finanzas, claras</span>
+      </footer>`;
     $$('[data-goview]', el).forEach((b) => b.addEventListener('click', () => {
       ui.view = b.dataset.goview;
       if (ui.view === 'compartido') loadShared();
@@ -7496,6 +7597,7 @@
     const prevScrollY = window.scrollY;
     lastRenderedView = ui.view;
     const grp = groupOf(ui.view);
+    document.body.dataset.grp = grp ? grp.key : '';
     $$('.tabbar [data-group]').forEach((b) => {
       const on = !!grp && b.dataset.group === grp.key;
       b.classList.toggle('active', on);

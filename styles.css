@@ -208,7 +208,7 @@ button::after {
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
   height: var(--tabbar-h);
-  padding: 6px max(6px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(6px, env(safe-area-inset-left));
+  padding: 6px max(6px, env(safe-area-inset-right)) var(--tabbar-pad-b) max(6px, env(safe-area-inset-left));
   display: grid; grid-template-columns: repeat(5, 1fr); align-items: start;
   background: var(--glass);
   -webkit-backdrop-filter: blur(22px) saturate(1.6);
@@ -1948,6 +1948,21 @@ body.sheet-behind .topbar { transform: scale(0.94); border-radius: 14px; }
 [data-theme="light"] .key { background: var(--s1); box-shadow: 0 1px 0 var(--line); }
 [data-theme="light"] .key.op { background: transparent; box-shadow: inset 0 0 0 1.5px var(--s3); }
 .savebar { flex: none; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); display: grid; gap: 8px; }
+/* Pantallas bajas: si el contenido no entra arriba del teclado, se
+   compacta en dos pasos (ver fit() en txForm). */
+.sheet.fit1 .sh-body { gap: 8px; }
+.sheet.fit1 .amount .val { font-size: 38px; }
+.sheet.fit1 .amount { gap: 4px; }
+.sheet.fit1 .chip { height: 32px; }
+.sheet.fit1 .key { height: 37px; }
+.sheet.fit1 .keys { gap: 5px; }
+.sheet.fit1 .savebar { padding-top: 8px; }
+.sheet.fit1 .btn-save { height: 46px; }
+.sheet.fit2 .amount .val { font-size: 32px; }
+.sheet.fit2 .key { height: 33px; font-size: 20px; }
+.sheet.fit2 .catb { gap: 3px; padding: 2px 0; }
+.sheet.fit2 .catb .cic { width: 36px; height: 36px; }
+.sheet.fit2 .cat-head { min-height: 22px; }
 .btn-save { height: 50px; border-radius: 14px; font: 600 16px/1 var(--f-text); }
 .sh-error { font-size: 13px; color: var(--neg); text-align: center; }
 
@@ -2395,3 +2410,37 @@ body.syncing .view-content .big small { color: transparent; }
 }
 .acc-amt { font-size: 16px; font-weight: 600; white-space: nowrap; }
 .acc-reorder { display: inline-flex; gap: 6px; }
+
+/* ---------- Inicio: detalle de Ingresos / Gastos / Ahorros ---------- */
+.minis > [data-mini] { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.minis > [data-mini]:active { transform: scale(.98); }
+.dt-total { display: grid; gap: 2px; padding: 4px 2px 6px; }
+.dt-big { font-size: 30px; font-weight: 600; color: var(--t1); }
+.dt-note { margin: 0 2px 4px; font-size: 13px; }
+.dt-h { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 2px 6px; }
+.dt-h .num { font-size: 13px; color: var(--t2); letter-spacing: 0; }
+.dt-list { display: grid; background: var(--s2); border-radius: 14px; overflow: hidden; }
+.dt-row {
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto 16px; gap: 10px; align-items: center;
+  min-height: 58px; padding: 8px 10px 8px 12px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.dt-row + .dt-row::before { content: ''; position: absolute; top: 0; left: 58px; right: 0; height: 1px; background: var(--line); }
+.dt-row .cic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; }
+.dt-row > .num { font-size: 15px; font-weight: 600; white-space: nowrap; }
+
+/* ---------- Más: todo más arriba y la marca al pie ---------- */
+body[data-grp="mas"] .view { padding-top: 0; gap: 10px; }
+body[data-grp="mas"] .largetitle { margin: 0; font-size: 28px; }
+body[data-grp="mas"] .topbar-inner { min-height: 48px; }
+.brand-mark {
+  display: grid; justify-items: center; gap: 4px; margin: 28px auto 4px; padding-bottom: 8px;
+  opacity: .55; user-select: none; pointer-events: none;
+}
+.brand-mark img { width: 44px; height: 44px; filter: grayscale(1) brightness(1.6); }
+[data-theme="light"] .brand-mark img { filter: grayscale(1) brightness(.9); }
+.brand-name { font: 600 18px/1 var(--f-num); letter-spacing: .02em; color: var(--t2); }
+.brand-sub { font: 500 11px/1.2 var(--f-text); color: var(--t3); }
+/* Con lugar de sobra, la marca queda apoyada arriba de la barra de abajo. */
+@media (min-height: 640px) {
+  .brand-mark { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h) + 20px); margin: 0; z-index: 0; }
+}
