@@ -3382,26 +3382,32 @@
     const total = breakdown.reduce((a, g) => a + g.total, 0);
     const incMonth = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
     const expMonth = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
-    // Cuánto representa un monto sobre los gastos y sobre los ingresos del mes.
-    const pctTxt = (v, base) => (base > 0 ? `${fmtShare((v / base) * 100)}%` : '–');
-    const shareLine = (v, short) => isInc
-      ? `${pctTxt(v, incMonth)} de ${short ? 'los' : 'tus'} ingresos`
-      : short ? `${pctTxt(v, expMonth)} gastos · ${pctTxt(v, incMonth)} ingresos`
-        : `${pctTxt(v, expMonth)} de tus gastos · ${pctTxt(v, incMonth)} de tus ingresos`;
     const pctOf = (v) => (total > 0 ? Math.round((v / total) * 100) : 0);
     // Dona: hasta 5 categorías + "Otras".
     const DONUT_MAX = 5;
     const donutItems = breakdown.slice(0, DONUT_MAX).map((g) => ({ label: g.name, value: g.total, color: g.id === '__sin' ? OTROS_COLOR : catColor(g.id) }));
     const restDonut = breakdown.slice(DONUT_MAX).reduce((a, g) => a + g.total, 0);
     if (restDonut > 0) donutItems.push({ label: 'Otras', value: restDonut, color: OTROS_COLOR });
-    // Variación contra el mes anterior completo. En gastos, subir es malo
-    // (rojo); en ingresos, subir es bueno (verde).
-    const varChip = (cur, prev) => {
-      if (!(prev > 0)) return cur > 0 ? '<span class="dchip flat">nuevo</span>' : '';
-      const pctVar = fmtVarPct(((cur - prev) / prev) * 100);
-      if (pctVar == null) return '<span class="dchip flat">= igual</span>';
-      const up = cur > prev;
-      return `<span class="dchip ${up !== isInc ? 'bad' : 'good'}">${up ? '▲' : '▼'} ${pctVar}%</span>`;
+    // Las mismas cifras, con rótulo, para categorías y subcategorías:
+    // % de los gastos, % de los ingresos y la variación (en % y en pesos)
+    // contra el mes anterior completo.
+    const prevShortM = monthShortLabel(prevMk).toLowerCase();
+    const metricsHTML = (v, prev) => {
+      const sh = (base) => (base > 0 ? `${fmtShare((v / base) * 100)}%` : '–');
+      const cell = (label, value, cls = '') => `<div class="${cls}"><span class="cmet-l">${label}</span><b class="num">${value}</b></div>`;
+      const diff = v - prev;
+      let varVal, varSub = '';
+      if (!(prev > 0)) { varVal = v > 0 ? 'nuevo' : '–'; if (v > 0) varSub = `+${fmtPlain(v)}`; }
+      else {
+        const pctVar = fmtVarPct((diff / prev) * 100);
+        varVal = pctVar == null ? '= igual' : `${diff > 0 ? '▲' : '▼'} ${pctVar}%`;
+        if (pctVar != null) varSub = `${diff > 0 ? '+' : '−'}${fmtPlain(Math.abs(diff))}`;
+      }
+      const varCls = !(prev > 0) || Math.abs(diff) < 1 ? 'flat' : (diff > 0) !== isInc ? 'bad' : 'good';
+      return `<div class="cmet${isInc ? ' cmet-2' : ''}">
+        ${isInc ? cell('% ingresos', sh(incMonth)) : cell('% gastos', sh(expMonth)) + cell('% ingresos', sh(incMonth))}
+        <div class="cmet-var ${varCls}"><span class="cmet-l">vs. ${esc(prevShortM)}</span><b class="num">${varVal}</b>${varSub ? `<span class="num money cmet-sub">${esc(varSub)}</span>` : ''}</div>
+      </div>`;
     };
     const zeroGroups = S().categories.filter((c) => c.type === type && !c.parentId && !breakdown.some((g) => g.id === c.id));
     const rowsHTML = breakdown.map((g) => {
@@ -3411,11 +3417,10 @@
       const icon = g.id === '__sin' ? spriteIcon('more') : iconSvg(categoryIconName(g.id));
       const subs = g.subs.filter((s) => s.value > 0);
       const detail = open ? `
-        <div class="crow sub crow-info"><span class="t2">${esc(shareLine(g.total))}</span></div>
         ${subs.map((s) => `
         <button type="button" class="crow sub" data-catmoves="${esc(g.id)}" data-subid="${esc(s.id)}">
-          <div class="l1"><b>${esc(s.name)}</b><span class="num money t2">${esc(fmtPlain(s.value))}</span></div>
-          <div class="l2"><span class="t3">${esc(shareLine(s.value, true))}</span>${varChip(s.value, prevSubTotals.get(s.id) || 0)}</div>
+          <div class="l1"><b>${esc(s.name)}</b><span class="num money">${esc(fmtPlain(s.value))}</span></div>
+          ${metricsHTML(s.value, prevSubTotals.get(s.id) || 0)}
         </button>`).join('')}
         <div class="crow sub"><button type="button" class="link" data-catmoves="${esc(g.id)}">Ver movimientos de ${esc(g.name)}${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}</button></div>` : '';
       return `
@@ -3424,7 +3429,8 @@
           <span class="cic" style="--c:${color}">${icon}</span>
           <div class="crow-main">
             <div class="l1"><b>${esc(g.name)}</b><span class="num money">${esc(fmtPlain(g.total))}</span></div>
-            <div class="l2"><div class="barline" style="--c:${color}"><i style="width:${Math.max(1, pctOf(g.total))}%"></i></div><span>${pctOf(g.total)}%</span>${varChip(g.total, prevTotals.get(g.id) || 0)}</div>
+            <div class="l2"><div class="barline" style="--c:${color}"><i style="width:${Math.max(1, pctOf(g.total))}%"></i></div></div>
+            ${metricsHTML(g.total, prevTotals.get(g.id) || 0)}
           </div>
           ${spriteIcon('cr').replace('class="ic"', `class="ic chev${open ? ' rot' : ''}"`)}
         </button>${detail}
@@ -3501,7 +3507,8 @@
         </div>
       </section>
 
-      ${breakdown.length || zeroGroups.length ? `<div class="group cat-group">${rowsHTML}${zeroHTML}</div>` : ''}
+      ${breakdown.length || zeroGroups.length ? `${breakdown.length ? `<p class="k-note k-note-out cat-cmp-note">Variación contra ${esc(monthName(prevMk))} completo.</p>` : ''}
+      <div class="group cat-group">${rowsHTML}${zeroHTML}</div>` : ''}
 
       ${methodRows.length ? `
       <section class="k-card">
