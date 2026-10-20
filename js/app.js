@@ -542,7 +542,7 @@
     // (month/fMonth/calMonth) y quedaban desincronizadas entre sí.
     month: curMonth(),
     fAllMonths: false,        // true = ignora el mes, trae todos (filtro de Movimientos)
-    fType: '', fCat: '', fMethod: '',
+    fType: '', fCat: '', fMethod: '', fSearch: '',
     trendTable: false,
     savChart: 'rate',         // Ahorros: gráfico elegido (rate | nominal | cum)
     calSel: null,             // 'YYYY-MM-DD' día seleccionado en el calendario
@@ -1933,31 +1933,97 @@
       && Math.abs(Number(e.amount) - Number(tx.amount)) < 0.01) || null;
   }
 
+  /* Borrar un movimiento (o la compra entera, si es una cuota): sale de
+     la lista enseguida y aparece un aviso con "Deshacer" durante 5
+     segundos, en vez de un diálogo de confirmación. El borrado de verdad
+     (guardar, sacar el retiro de ahorro vinculado y el gasto de
+     Compartido) se hace al terminar ese tiempo, o antes si se borra otra
+     cosa o la app pasa a segundo plano. */
+  let pendingDelete = null;
   function deleteTx(tx) {
-    if (tx.groupId) {
-      const group = S().transactions.filter((t) => t.groupId === tx.groupId);
-      if (!confirm(`Este movimiento es una compra en ${group.length} cuotas. Se eliminarán todas las cuotas.`)) return;
-      // Si alguna cuota tenía un retiro de ahorro vinculado (no debería
-      // pasar hoy — savings+cuotas está bloqueado en el alta — pero una
-      // compra vieja podría tenerlo de antes), se saca junto con ella.
-      for (const t of group) removeLinkedSavingEntry(t.id);
-      S().transactions = S().transactions.filter((t) => t.groupId !== tx.groupId);
-    } else {
-      const linked = linkedSharedExpense(tx);
-      if (!confirm(linked ? '¿Eliminar este movimiento? También se va a borrar de Compartido.' : '¿Eliminar este movimiento?')) return;
-      removeLinkedSavingEntry(tx.id);
-      S().transactions = S().transactions.filter((t) => t.id !== tx.id);
-      if (linked) {
-        // Se borra también el gasto del hogar (y se actualiza la lista).
-        Cloud.deleteSharedExpense(linked.id)
-          .then(() => Cloud.listSharedExpenses(shared.household.id))
-          .then((list) => { shared.expenses = list; render(); })
-          .catch((e) => alert('El movimiento se borró, pero no se pudo borrar de Compartido: ' + friendlyCloudError(e)));
-      }
-    }
-    Store.save();
+    flushPendingDelete();
+    const group = tx.groupId ? S().transactions.filter((t) => t.groupId === tx.groupId) : [tx];
+    const ids = new Set(group.map((t) => t.id));
+    const removed = group.map((t) => ({ t, idx: S().transactions.indexOf(t) })).sort((a, b) => a.idx - b.idx);
+    // El gasto de Compartido se busca ahora, mientras el movimiento existe.
+    const linked = tx.groupId ? null : linkedSharedExpense(tx);
+    S().transactions = S().transactions.filter((t) => !ids.has(t.id));
+    pendingDelete = { removed, linked, timer: setTimeout(flushPendingDelete, 5000) };
+    render();
+    const msg = group.length > 1 ? `Se borró la compra en ${group.length} cuotas`
+      : linked ? 'Se borró el movimiento (también de Compartido)' : 'Se borró el movimiento';
+    showToast(msg, { action: 'Deshacer', onAction: undoDelete, duration: 5000 });
+  }
+  function undoDelete() {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timer);
+    const arr = S().transactions;
+    for (const { t, idx } of pendingDelete.removed) arr.splice(Math.min(idx, arr.length), 0, t);
+    pendingDelete = null;
     render();
   }
+  function flushPendingDelete() {
+    if (!pendingDelete) return;
+    const { removed, linked, timer } = pendingDelete;
+    clearTimeout(timer);
+    pendingDelete = null;
+    for (const { t } of removed) removeLinkedSavingEntry(t.id);
+    Store.save();
+    if (linked) {
+      Cloud.deleteSharedExpense(linked.id)
+        .then(() => Cloud.listSharedExpenses(shared.household.id))
+        .then((list) => { shared.expenses = list; render(); })
+        .catch((e) => alert('El movimiento se borró, pero no se pudo borrar de Compartido: ' + friendlyCloudError(e)));
+    }
+    hideToast();
+    render();
+  }
+
+  /* Aviso breve abajo (arriba de la barra inferior), con una acción
+     opcional como "Deshacer". */
+  let toastTimer = null;
+  function showToast(text, { action, onAction, duration = 4000 } = {}) {
+    hideToast();
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.setAttribute('role', 'status');
+    t.innerHTML = `<span>${esc(text)}</span>${action ? `<button type="button">${esc(action)}</button>` : ''}`;
+    if (action) $('button', t).addEventListener('click', () => { hideToast(); onAction(); });
+    document.body.appendChild(t);
+    toastTimer = setTimeout(hideToast, duration);
+  }
+  function hideToast() {
+    clearTimeout(toastTimer);
+    $$('.toast').forEach((x) => x.remove());
+  }
+
+  /* Panel inferior genérico: agarradera, X, título, un ícono de acción
+     opcional arriba a la derecha (ej. borrar), el contenido y a lo sumo un
+     botón primario abajo. onClick recibe los toques del contenido. */
+  function openPanel({ title, body, primary, action, onClick }) {
+    const dlg = $('#dialog');
+    dlg.className = 'sheet sheet-panel';
+    dlg.innerHTML = `
+      <div class="sh-top" data-drag>
+        <div class="grab" aria-hidden="true"></div>
+        <div class="sh-h">
+          <button type="button" class="icb" data-close aria-label="Cerrar">${spriteIcon('x')}</button>
+          <h2>${esc(title)}</h2>
+          ${action ? `<button type="button" class="icb${action.danger ? ' icb-danger' : ''}" data-action aria-label="${esc(action.label)}">${action.icon}</button>` : '<span></span>'}
+        </div>
+      </div>
+      <div class="sh-body" data-shbody>${body}</div>
+      <div class="savebar${primary ? '' : ' savebar-empty'}">${primary ? `<button type="button" class="btn btn-primary btn-full btn-save" data-primary>${esc(primary.label)}</button>` : ''}</div>`;
+    const click = (e) => {
+      if (e.target.closest('[data-close]')) { closeSheet(dlg); return; }
+      if (action && e.target.closest('[data-action]')) { closeSheet(dlg).then(action.onClick); return; }
+      if (primary && e.target.closest('[data-primary]')) { primary.onClick(dlg); return; }
+      if (onClick) onClick(e, dlg);
+    };
+    openSheet(dlg, { listeners: { click } });
+    return dlg;
+  }
+
 
   /* Diálogo de solo lectura con el resumen de un movimiento (fecha,
      categoría, cuenta, cotización usada en ese momento, si se compartió con
@@ -2010,12 +2076,12 @@
       ${noteRow}`;
 
     const titles = { gasto: 'Detalle del gasto', ingreso: 'Detalle del ingreso', transferencia: 'Detalle de la transferencia' };
-    const dlg = openDialog(titles[tx.type] || 'Detalle', bodyHTML, {
-      submitLabel: 'Editar',
-      footExtra: '<button type="button" class="btn btn-danger" data-del style="margin-right:auto">Eliminar</button>',
-      onSubmit: (data, d) => { d.close(); txForm(tx); return false; },
+    openPanel({
+      title: titles[tx.type] || 'Detalle',
+      body: `<div class="tx-detail">${bodyHTML}</div>`,
+      primary: { label: 'Editar', onClick: (dlg) => closeSheet(dlg).then(() => txForm(tx)) },
+      action: { icon: iconSvg('trash'), label: 'Eliminar', danger: true, onClick: () => deleteTx(tx) },
     });
-    $('[data-del]', dlg).addEventListener('click', () => { dlg.close(); deleteTx(tx); });
   }
 
   /* ================= Vista: Resumen ================= */
@@ -2448,87 +2514,221 @@
   }
 
   /* ================= Vista: Movimientos ================= */
-  function vMovimientos(el) {
-    const txs = S().transactions;
+  // "Ayer · dom 18 oct" / "Miércoles 7 oct": encabezado de cada día.
+  function movDayLabel(dateStr) {
+    const d = parseDate(dateStr);
+    const dayMonth = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short' }).format(d).replace('.', '');
+    const yesterday = dateToStr(addDays(parseDate(todayStr()), -1));
+    if (dateStr === todayStr() || dateStr === yesterday) {
+      const wd = new Intl.DateTimeFormat('es-AR', { weekday: 'short' }).format(d).replace('.', '');
+      return `${dateStr === todayStr() ? 'Hoy' : 'Ayer'} · ${wd} ${dayMonth}`;
+    }
+    const wd = new Intl.DateTimeFormat('es-AR', { weekday: 'long' }).format(d);
+    return `${wd.charAt(0).toUpperCase()}${wd.slice(1)} ${dayMonth}`;
+  }
+  const shortDayLabel = (dateStr) => {
+    const s = new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }).format(parseDate(dateStr)).replace(/\./g, '').replace(',', '');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+  const plainText = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-    let list = txs.slice();
+  /* Una fila de Movimientos: ícono en el color de su categoría, título
+     (nota o categoría), "Categoría · Cuenta · cuota 2/12" abajo, el monto
+     a la derecha (gastos en el color del texto con "−", ingresos en verde
+     con "+") y el equivalente en la otra moneda. Deslizándola hacia la
+     izquierda aparecen Editar y Borrar (scroll-snap, sin JS). */
+  function movRowHTML(t, { scheduled = false } = {}) {
+    const isNew = ui.newTxIds && ui.newTxIds.ids.has(t.id) ? ' is-new' : '';
+    const other = t.currency === 'USD' ? t.arsSnapshot : t.usdSnapshot;
+    const otherCur = t.currency === 'USD' ? 'ARS' : 'USD';
+    const otherLine = other != null ? `<small class="money">${esc(fmtPlain(Math.abs(other), otherCur))}</small>` : '';
+    let icon, color, title, sub = [], sign = '', amtCls = '';
+    if (t.type === 'transferencia') {
+      icon = iconSvg('swap'); color = 'var(--t2)';
+      title = t.note || 'Transferencia';
+      sub.push(`${methodName(t.methodId)} → ${methodName(t.toMethodId)}`);
+    } else {
+      const cat = catById(t.categoryId);
+      icon = iconSvg(categoryIconName(t.categoryId)); color = catColor(t.categoryId);
+      title = t.note || catName(t.categoryId);
+      // Sin nota, el título ya es la categoría: abajo va su grupo (si es una
+      // subcategoría) en vez de repetirla.
+      if (t.note) sub.push(catName(t.categoryId));
+      else if (cat && cat.parentId) sub.push(catName(cat.parentId));
+      sub.push(methodName(t.methodId));
+      if (t.installment) sub.push(`cuota ${t.installment.k}/${t.installment.n}`);
+      if (t.recurringId) sub.push('fijo');
+      else if (t.leftoverGen) sub.push('sobrante');
+      sign = t.type === 'ingreso' ? '+ ' : '− ';
+      amtCls = t.type === 'ingreso' ? ' pos' : '';
+    }
+    if (scheduled) sub.unshift(shortDayLabel(t.date));
+    return `
+      <div class="swipe">
+        <button type="button" class="row mrow${isNew}" data-tx="${esc(t.id)}">
+          <span class="cic" style="--c:${color}">${icon}</span>
+          <div class="row-main"><div class="tt">${esc(title)}</div><div class="st">${esc(sub.join(' · '))}</div></div>
+          <div class="amt"><span class="num money${amtCls}">${esc(sign + fmtPlain(t.amount, t.currency))}</span>${otherLine}</div>
+        </button>
+        <div class="swipe-actions">
+          <button type="button" class="sw-edit" data-edit="${esc(t.id)}" aria-label="Editar ${esc(title)}">${spriteIcon('note')}<span>Editar</span></button>
+          <button type="button" class="sw-del" data-del="${esc(t.id)}" aria-label="Borrar ${esc(title)}">${iconSvg('trash')}<span>Borrar</span></button>
+        </div>
+      </div>`;
+  }
+
+  function movFilteredList() {
+    let list = S().transactions.slice();
     // Por fecha real de carga, no de vencimiento: un gasto con tarjeta
     // aparece en el mes en que se hizo, aunque el balance lo cuente para
     // el mes en que vence el resumen (ver settings.cardMonthBasis).
     if (!ui.fAllMonths) list = list.filter((t) => monthKeyOf(t.date) === ui.month);
     if (ui.fType) list = list.filter((t) => t.type === ui.fType);
     if (ui.fCat) {
-      // Si se eligió un grupo (ej. "Casa"), tiene que traer también los
-      // movimientos cargados en sus subcategorías (ej. "Supermercado") —
-      // antes comparaba el categoryId tal cual, así que elegir un grupo con
-      // subcategorías activas siempre daba "sin movimientos".
+      // Un grupo (ej. "Casa") trae también sus subcategorías.
       const filterCat = catById(ui.fCat);
       list = list.filter((t) => filterCat && !filterCat.parentId
         ? topCategoryOf(t.categoryId) === ui.fCat
         : t.categoryId === ui.fCat);
     }
-    if (ui.fMethod) list = list.filter((t) => t.methodId === ui.fMethod);
-    list.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-
-    // Para resaltar gastos grandes en la lista: relativo al gasto más alto
-    // de lo que se está viendo (con los filtros actuales), no a un monto
-    // fijo, así se adapta a la escala de cada quien.
-    const gastoVals = list.filter((t) => t.type === 'gasto').map((t) => txDispAmount(t)).filter((v) => v > 0);
-    const maxGasto = gastoVals.length ? Math.max(...gastoVals) : 0;
-    const bigClass = (t) => {
-      if (t.type !== 'gasto' || !maxGasto) return '';
-      const ratio = (txDispAmount(t) || 0) / maxGasto;
-      return ratio >= 0.66 ? ' amount-huge' : ratio >= 0.33 ? ' amount-big' : '';
-    };
-
-    el.innerHTML = `
-      <div class="card">
-        <h2 class="card-title">
-          <span>Detalle</span>
-          <label class="subcats-toggle">
-            Todos los meses
-            <input type="checkbox" id="fil-allmonths" ${ui.fAllMonths ? 'checked' : ''}>
-          </label>
-        </h2>
-        <div class="mov-filters">
-          <select id="fil-type" aria-label="Tipo">
-            <option value="">Ingresos y gastos</option>
-            <option value="ingreso" ${ui.fType === 'ingreso' ? 'selected' : ''}>Solo ingresos</option>
-            <option value="gasto" ${ui.fType === 'gasto' ? 'selected' : ''}>Solo gastos</option>
-            <option value="transferencia" ${ui.fType === 'transferencia' ? 'selected' : ''}>Solo transferencias</option>
-          </select>
-          <select id="fil-cat" aria-label="Categoría">
-            <option value="">Todas las categorías</option>
-            ${catFilterOptionsHTML(ui.fCat)}
-          </select>
-          <select id="fil-method" aria-label="Medio de pago" class="mov-filter-full">
-            <option value="">Todos los medios</option>
-            ${selOptions(S().methods, ui.fMethod)}
-            ${S().savings.length ? `<optgroup label="Ahorros">${selOptions(S().savings, ui.fMethod)}</optgroup>` : ''}
-          </select>
-        </div>
-        <button class="btn btn-primary btn-sm mov-add" id="btn-add-tx">+ Movimiento</button>
-
-        ${list.length ? `
-        ${txDayGroupsHTML(list, '', { presorted: true, amountClass: bigClass })}`
-        : '<div class="empty">No hay movimientos con estos filtros. Cargá el primero con “+ Movimiento”.</div>'}
-      </div>`;
-
-    $('#fil-allmonths', el).addEventListener('change', (e) => { ui.fAllMonths = e.target.checked; render(); });
-    $('#fil-type', el).addEventListener('change', (e) => { ui.fType = e.target.value; render(); });
-    $('#fil-cat', el).addEventListener('change', (e) => { ui.fCat = e.target.value; render(); });
-    $('#fil-method', el).addEventListener('change', (e) => { ui.fMethod = e.target.value; render(); });
-    $('#btn-add-tx', el).addEventListener('click', () => txForm(null));
-
-    // Sin ✕ en cada fila (ocupaba lugar en una lista larga): se elimina
-    // desde el detalle que se abre al tocar el movimiento.
-    $$('.tx-card-row', el).forEach((row) => {
-      row.addEventListener('click', () => {
-        const tx = S().transactions.find((t) => t.id === row.dataset.tx);
-        if (tx) txDetailDialog(tx);
+    if (ui.fMethod) list = list.filter((t) => t.methodId === ui.fMethod || t.toMethodId === ui.fMethod);
+    const q = plainText(ui.fSearch).trim();
+    if (q) {
+      const qDigits = q.replace(/[.\s$]/g, '');
+      list = list.filter((t) => {
+        const hay = plainText([t.note, catName(t.categoryId), t.categoryId && catById(t.categoryId) && catById(t.categoryId).parentId ? catName(catById(t.categoryId).parentId) : '',
+          methodName(t.methodId), t.toMethodId ? methodName(t.toMethodId) : ''].join(' '));
+        return hay.includes(q) || (/^\d+$/.test(qDigits) && String(Math.round(t.amount)).includes(qDigits));
       });
+    }
+    return list;
+  }
+
+  function movListHTML() {
+    const list = movFilteredList();
+    if (!list.length) {
+      return `<div class="empty">${ui.fSearch || ui.fType || ui.fCat || ui.fMethod
+        ? 'No hay movimientos con estos filtros.'
+        : 'Todavía no hay movimientos este mes. Cargá uno con el +.'}</div>`;
+    }
+    const today = todayStr();
+    // Cuotas y fijos con fecha futura van aparte: todavía no pasaron.
+    const scheduled = list.filter((t) => t.date > today).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    const past = list.filter((t) => t.date <= today).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    const dayTotal = (items) => {
+      let n = 0;
+      for (const t of items) {
+        if (t.type === 'transferencia') continue;
+        const v = txDispAmount(t);
+        if (v != null) n += t.type === 'ingreso' ? v : -v;
+      }
+      if (Math.abs(n) < 0.5) return '';
+      return `<span class="num money">${esc((n < 0 ? '− ' : '+ ') + fmtPlain(Math.abs(n)))}</span>`;
+    };
+    return `
+      ${scheduled.length ? `
+      <section class="sched">
+        <h3 class="dayh"><span>Programados</span><span class="num">${scheduled.length}</span></h3>
+        <div class="group">${scheduled.map((t) => movRowHTML(t, { scheduled: true })).join('')}</div>
+      </section>` : ''}
+      ${dayGroups(past).map(({ dateStr, items }) => `
+      <section>
+        <h3 class="dayh"><span>${esc(movDayLabel(dateStr))}</span>${dayTotal(items)}</h3>
+        <div class="group">${items.map((t) => movRowHTML(t)).join('')}</div>
+      </section>`).join('')}`;
+  }
+
+  function vMovimientos(el) {
+    const hasTransfers = S().transactions.some((t) => t.type === 'transferencia');
+    const typeChips = [['', 'Todos'], ['gasto', 'Gastos'], ['ingreso', 'Ingresos']];
+    if (hasTransfers) typeChips.push(['transferencia', 'Transferencias']);
+    const cat = ui.fCat ? catById(ui.fCat) : null;
+    el.innerHTML = `
+      <label class="search">
+        ${spriteIcon('search')}
+        <input type="search" id="mov-search" placeholder="Buscar" value="${esc(ui.fSearch || '')}" enterkeyhint="search" autocomplete="off" aria-label="Buscar movimientos">
+      </label>
+      <div class="chips chips-scroll" role="toolbar" aria-label="Filtros">
+        ${typeChips.map(([v, label]) => `<button type="button" class="chip${ui.fType === v ? ' on' : ''}" data-ftype="${v}" aria-pressed="${ui.fType === v}">${label}</button>`).join('')}
+        ${S().methods.map((m) => `<button type="button" class="chip${ui.fMethod === m.id ? ' on' : ''}" data-fmethod="${esc(m.id)}" aria-pressed="${ui.fMethod === m.id}">${esc(m.name)}</button>`).join('')}
+        <button type="button" class="chip${cat ? ' on' : ''}" data-fcat>${esc(cat ? cat.name : 'Categoría')}${spriteIcon('cd')}</button>
+      </div>
+      <div class="mov-list" id="mov-list">${movListHTML()}</div>`;
+
+    const listEl = $('#mov-list', el);
+    $('#mov-search', el).addEventListener('input', (e) => {
+      ui.fSearch = e.target.value;
+      listEl.innerHTML = movListHTML();
+    });
+    el.addEventListener('click', (e) => {
+      let b;
+      if ((b = e.target.closest('[data-ftype]'))) { ui.fType = b.dataset.ftype; render(); return; }
+      if ((b = e.target.closest('[data-fmethod]'))) { ui.fMethod = ui.fMethod === b.dataset.fmethod ? '' : b.dataset.fmethod; render(); return; }
+      if (e.target.closest('[data-fcat]')) { categoryFilterSheet(); return; }
+      const byId = (id) => S().transactions.find((t) => t.id === id);
+      if ((b = e.target.closest('[data-edit]'))) { const tx = byId(b.dataset.edit); if (tx) txForm(tx); return; }
+      if ((b = e.target.closest('[data-del]'))) { const tx = byId(b.dataset.del); if (tx) deleteTx(tx); return; }
+      if ((b = e.target.closest('[data-tx]'))) { const tx = byId(b.dataset.tx); if (tx) txDetailDialog(tx); }
     });
   }
+
+  // Elegir la categoría del filtro (grupo entero o una subcategoría).
+  function categoryFilterSheet() {
+    const row = (id, name, color, icon, on, sub) => `
+      <button type="button" class="pick-row${on ? ' on' : ''}${sub ? ' pick-sub' : ''}" data-pickcat="${esc(id)}">
+        <span class="cic" style="--c:${color}">${icon}</span><span>${esc(name)}</span>${on ? spriteIcon('check') : ''}
+      </button>`;
+    const section = (type, label) => {
+      const groups = S().categories.filter((c) => c.type === type && !c.parentId);
+      if (!groups.length) return '';
+      return `<div class="ovl pick-sep">${label}</div>${groups.map((g) => row(g.id, g.name, catColor(g.id), iconSvg(categoryIconName(g.id)), ui.fCat === g.id, false)
+        + (useSubcats() ? catChildren(g.id).map((c) => row(c.id, c.name, catColor(c.id), iconSvg(categoryIconName(c.id)), ui.fCat === c.id, true)).join('') : '')).join('')}`;
+    };
+    openPanel({
+      title: 'Categoría',
+      body: `<div class="pick-list">
+        ${row('', 'Todas las categorías', 'var(--t2)', spriteIcon('more'), !ui.fCat, false)}
+        ${section('gasto', 'Gastos')}${section('ingreso', 'Ingresos')}
+      </div>`,
+      onClick(e, dlg) {
+        const b = e.target.closest('[data-pickcat]');
+        if (!b) return;
+        ui.fCat = b.dataset.pickcat;
+        closeSheet(dlg).then(render);
+      },
+    });
+  }
+
+  // Elegir el mes (o "Todos los meses", solo para la lista).
+  function monthPickerSheet() {
+    const months = new Set();
+    const cm = curMonth();
+    for (let i = -24; i <= 3; i++) months.add(addMonthsKey(cm, i));
+    for (const t of S().transactions) months.add(monthKeyOf(t.date));
+    const sorted = [...months].sort().reverse();
+    const allowAll = ui.view === 'movimientos';
+    const row = (value, label, on) => `
+      <button type="button" class="pick-row${on ? ' on' : ''}" data-pickmonth="${esc(value)}">
+        <span class="cic" style="--c:var(--t2)">${spriteIcon('cal')}</span><span>${esc(label)}</span>${on ? spriteIcon('check') : ''}
+      </button>`;
+    const dlg = openPanel({
+      title: 'Mes',
+      body: `<div class="pick-list">
+        ${allowAll ? row('all', 'Todos los meses', ui.fAllMonths) : ''}
+        ${sorted.map((m) => row(m, topbarMonthLabel(m) + (m === cm ? ' · actual' : ''), !(allowAll && ui.fAllMonths) && m === ui.month)).join('')}
+      </div>`,
+      onClick(e, d) {
+        const b = e.target.closest('[data-pickmonth]');
+        if (!b) return;
+        if (b.dataset.pickmonth === 'all') ui.fAllMonths = true;
+        else { ui.fAllMonths = false; ui.month = b.dataset.pickmonth; }
+        closeSheet(d).then(render);
+      },
+    });
+    const on = $('.pick-row.on', dlg);
+    if (on) on.scrollIntoView({ block: 'center' });
+  }
+
 
   /* ================= Vista: Categorías (análisis) ================= */
   // A qué "grupo" pertenece un gasto para el análisis: el id del grupo de
@@ -6763,7 +6963,7 @@
     { key: 'mas', views: ['cuotas', 'presupuestos', 'fijos', 'compartido', 'ajustes'] },
   ];
   const VIEW_LABELS = {
-    resumen: 'Resumen', movimientos: 'Movimientos', calendario: 'Calendario',
+    resumen: 'Resumen', movimientos: 'Lista', calendario: 'Calendario',
     categorias: 'Categorías', tarjetas: 'Tarjetas y medios', ahorros: 'Ahorros',
     cuotas: 'Cuotas', presupuestos: 'Presupuestos', fijos: 'Fijos', compartido: 'Compartido', ajustes: 'Ajustes',
   };
@@ -6842,7 +7042,7 @@
     const target = delta ? addMonthsKey(ui.month, delta) : curMonth();
     if (target === ui.month) return;
     const dir = target > ui.month ? 'next' : 'prev';
-    const go = () => { ui.month = target; render(); };
+    const go = () => { ui.month = target; ui.fAllMonths = false; render(); };
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (!document.startViewTransition || reduce) { go(); return; }
     const root = document.documentElement;
@@ -6930,7 +7130,17 @@
         ${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}
       </div>`;
     }
-    el.innerHTML = subtabsHTML + '<div class="view-content"></div>';
+    // Movimientos (Lista, Categorías, Calendario): título grande y chip del
+    // mes arriba del segmentado. El chip abre el selector de mes (con
+    // "Todos los meses" para la lista).
+    const titleBarHTML = grp && grp.key === 'movimientos' ? `
+      <div class="bar">
+        <h1 class="largetitle">Movimientos</h1>
+        <button type="button" class="chip" data-monthchip>${esc(ui.view === 'movimientos' && ui.fAllMonths ? 'Todos los meses' : monthShortLabel(ui.month) + ' ' + ui.month.slice(0, 4))}${spriteIcon('cd')}</button>
+      </div>` : '';
+    el.innerHTML = titleBarHTML + subtabsHTML + '<div class="view-content"></div>';
+    const monthChip = $('[data-monthchip]', el);
+    if (monthChip) monthChip.addEventListener('click', monthPickerSheet);
     if (subIdx >= 0) {
       // Las pestañas miden según su texto (no todas iguales), así que la
       // píldora toma la posición y el ancho reales del botón.
@@ -7070,7 +7280,9 @@
     // chequeo solo corrió una vez, al abrir la app la última vez de cero.
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') maybeRefreshRates();
+      else flushPendingDelete(); // un borrado con "Deshacer" pendiente se hace ya
     });
+    window.addEventListener('pagehide', flushPendingDelete);
   }
 
   document.addEventListener('DOMContentLoaded', init);
