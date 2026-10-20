@@ -1184,7 +1184,9 @@
      cotización del momento, cuotas, compartido, pagar con un ahorro) es
      el mismo de siempre, en onSave(). */
   const TX_TYPE_LABEL = { gasto: 'Gasto', ingreso: 'Ingreso', transferencia: 'Transferencia' };
-  const INST_MAX = 24;
+  const INST_MAX = 60;
+  // Las cantidades de cuotas más comunes; cualquier otra, con "Otra".
+  const INST_PRESETS = [1, 3, 6, 9, 12, 18, 24];
   // Cuenta de la última vez (la del último movimiento cargado de ese tipo),
   // para que el chip de Cuenta ya venga con la que se usa siempre.
   function lastUsedMethodId(type) {
@@ -1352,6 +1354,7 @@
       showAllCats: false,
       note: editing ? (tx.note || '') : (pf && pf.note) || '',
       inst: 1,
+      instCustom: false, // true = eligió "Otra" y escribe la cantidad de cuotas
       // 'total': el monto tipeado es el precio total de la compra (se
       // reparte entre las n cuotas). 'per': el monto tipeado ya es el valor
       // de UNA cuota (se multiplica por n para saber el total).
@@ -1589,9 +1592,15 @@
       const a = instAmounts(n);
       return `
         <div class="cat-head"><span class="ovl">Cuotas</span><button type="button" class="link-btn" data-panelclose>Listo</button></div>
-        <div class="inst-grid">
-          ${Array.from({ length: INST_MAX }, (_, i) => i + 1).map((k) => `<button type="button" class="inst-opt${k === n ? ' sel' : ''}" data-inst="${k}">${k === 1 ? '1 pago' : k}</button>`).join('')}
+        <div class="inst-grid inst-grid-4">
+          ${INST_PRESETS.map((k) => `<button type="button" class="inst-opt${k === n && !draft.instCustom ? ' sel' : ''}" data-inst="${k}">${k === 1 ? '1 pago' : k}</button>`).join('')}
+          <button type="button" class="inst-opt${draft.instCustom ? ' sel' : ''}" data-inst-custom>Otra</button>
         </div>
+        ${draft.instCustom ? `
+        <label class="share-custom">
+          <span>Cantidad de cuotas</span>
+          <input type="number" id="tx-inst-n" min="2" max="${INST_MAX}" step="1" inputmode="numeric" value="${n > 1 ? n : ''}" placeholder="Ej.: 10">
+        </label>` : ''}
         ${n > 1 ? `
         <div class="tseg tseg-small" role="group" aria-label="El monto es">
           <button type="button" class="${draft.instMode !== 'per' ? 'on' : ''}" data-inst-mode="total">Es el total</button>
@@ -1790,7 +1799,14 @@
         paint();
         return;
       }
-      if ((b = q('[data-inst]'))) { draft.inst = Number(b.dataset.inst); paint(); return; }
+      if ((b = q('[data-inst]'))) { draft.inst = Number(b.dataset.inst); draft.instCustom = false; paint(); return; }
+      if (q('[data-inst-custom]')) {
+        draft.instCustom = true;
+        paint();
+        const inp = $('#tx-inst-n', dlg);
+        if (inp) inp.focus();
+        return;
+      }
       if ((b = q('[data-inst-mode]'))) { draft.instMode = b.dataset.instMode; paint(); return; }
       if ((b = q('[data-sharepct]'))) { draft.shareIt = true; draft.sharePct = Number(b.dataset.sharepct); paint(); return; }
       if (q('[data-shareoff]')) { draft.shareIt = false; draft.panel = null; paint(); return; }
@@ -1803,7 +1819,10 @@
     function onInput(e) {
       const t = e.target;
       if (t.id === 'tx-note') draft.note = t.value;
-      else if (t.id === 'tx-share-pct') {
+      else if (t.id === 'tx-inst-n') {
+        const v = parseInt(t.value, 10);
+        if (v >= 1) draft.inst = Math.min(INST_MAX, v);
+      } else if (t.id === 'tx-share-pct') {
         const v = Math.min(100, Math.max(0, parseFloat(t.value)));
         if (isFinite(v)) { draft.sharePct = v; draft.shareIt = true; }
       }
@@ -1811,7 +1830,7 @@
     function onChange(e) {
       const t = e.target;
       if (t.id === 'tx-date-input' && t.value) { draft.date = t.value; paint(); }
-      else if (t.id === 'tx-share-pct' || t.id === 'tx-note') paint();
+      else if (t.id === 'tx-share-pct' || t.id === 'tx-note' || t.id === 'tx-inst-n') paint();
     }
     function onKeydown(e) {
       if (e.target.id === 'tx-note' && e.key === 'Enter') { e.preventDefault(); draft.panel = null; paint(); }
