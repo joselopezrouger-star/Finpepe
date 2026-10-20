@@ -1511,6 +1511,14 @@
         <div class="cat-head"><span class="ovl">Nota</span><button type="button" class="link-btn" data-panelclose>Listo</button></div>
         <input type="text" id="tx-note" maxlength="80" value="${esc(draft.note)}" placeholder="Ej.: cumple de Ana" enterkeyhint="done">`;
     }
+    // Para que nunca haya que scrollear: mientras está abierta la lista de
+    // un chip (cuenta, cuotas, compartido, nota), todas las categorías o
+    // una categoría con muchas subcategorías, el teclado se esconde y esa
+    // lista usa su lugar. Vuelve al cerrarla.
+    function keysHidden() {
+      if (draft.panel || draft.showAllCats) return true;
+      return !!(useSubcats() && draft.catGroupExpand && catChildren(draft.catGroupExpand).length > 7);
+    }
     function lowerHTML() {
       if (draft.panel === 'method' || draft.panel === 'methodTo') return methodPanelHTML(draft.panel);
       if (draft.panel === 'inst' && showInstallments()) return instPanelHTML();
@@ -1558,7 +1566,7 @@
           ${chipsHTML()}
           <div class="sh-lower">${lowerHTML()}</div>
         </div>
-        ${draft.panel === 'note' ? '' : keysHTML()}
+        ${keysHidden() ? '' : keysHTML()}
         <div class="savebar">
           ${draft.error ? `<div class="sh-error" role="alert">${esc(draft.error)}</div>` : ''}
           <button type="button" class="btn btn-primary btn-full btn-save" data-save>${esc(saveLabel())}</button>
@@ -1610,6 +1618,7 @@
       const best = already || [...kids].sort((a, b) => (usage.get(b.id) || 0) - (usage.get(a.id) || 0))[0];
       draft.categoryId = best ? best.id : draft.categoryId;
       draft.catGroupExpand = groupId;
+      draft.showAllCats = false;
       draft.error = '';
       paint();
     }
@@ -1664,7 +1673,7 @@
       if (q('[data-allcats]')) { draft.showAllCats = !draft.showAllCats; paint(); return; }
       if (q('[data-catback]')) { draft.catGroupExpand = null; paint(); return; }
       if ((b = q('[data-catgroup]'))) { pickCategoryGroup(b.dataset.catgroup); return; }
-      if ((b = q('[data-pickid]'))) { draft.categoryId = b.dataset.pickid; draft.error = ''; paint(); return; }
+      if ((b = q('[data-pickid]'))) { draft.categoryId = b.dataset.pickid; draft.showAllCats = false; draft.error = ''; paint(); return; }
       if (q('[data-save]')) { onSave(); }
     }
     function onInput(e) {
@@ -1842,6 +1851,15 @@
     for (const [ev, fn] of Object.entries(listeners)) dlg.addEventListener(ev, fn);
     const onCancel = (e) => { e.preventDefault(); closeSheet(dlg); };
     dlg.addEventListener('cancel', onCancel);
+    // Tocar afuera del panel (el fondo oscuro) es lo mismo que cerrarlo: el
+    // toque en el fondo llega al <dialog> mismo, con coordenadas afuera de
+    // su rectángulo.
+    const onBackdrop = (e) => {
+      if (e.target !== dlg) return;
+      const r = dlg.getBoundingClientRect();
+      if (e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right) closeSheet(dlg);
+    };
+    dlg.addEventListener('click', onBackdrop);
     const drag = sheetDrag(dlg);
     // El evento "close" llega un instante después de cerrar: si este panel
     // se abrió justo al cerrar otro diálogo (ej. detalle → Editar), ese
@@ -1851,6 +1869,7 @@
       dlg.removeEventListener('close', onClose);
       for (const [ev, fn] of Object.entries(listeners)) dlg.removeEventListener(ev, fn);
       dlg.removeEventListener('cancel', onCancel);
+      dlg.removeEventListener('click', onBackdrop);
       drag.off();
       dlg.classList.remove('open');
       dlg.style.transform = '';
@@ -2235,11 +2254,6 @@
       catRows.push({ id: null, name: `Otras ${catRest.length}`, value: catRest.reduce((a, [, v]) => a + v, 0), color: OTROS_COLOR });
     }
     const pctOf = (v) => (catTotal > 0 ? Math.round((v / catTotal) * 100) : 0);
-    // Con "contar tarjetas por vencimiento", el Gastos de arriba y este total
-    // (por fecha de compra) no coinciden: se aclara acá, una sola vez.
-    const basisNote = S().settings.cardMonthBasis === 'vencimiento' && Math.abs(catTotal - exp) >= 1
-      ? `<p class="k-note">Por fecha de compra: ${money(catTotal)}. En Gastos de arriba las tarjetas cuentan por mes de vencimiento.</p>`
-      : '';
 
     // "Para tener en cuenta": avisos de una línea a partir de reglas simples
     // (heurísticas sobre los datos, nada de IA). Solo para el mes EN CURSO:
@@ -2326,7 +2340,7 @@
         }
       }
       if (worstCat) {
-        out.push({ tone: 'neg', severity: 3, icon: 'up', go: 'categorias',
+        out.push({ tone: 'neg', severity: 3, icon: 'up', go: 'categorias', catId: worstCat.id,
           title: `${catName(worstCat.id)} subió ${Math.round(worstCat.pct * 100)}%`,
           sub: `${fmtPlain(Math.max(0, worstCat.diffD))} más que al ${todayDay} de ${prevName}`, money: true });
       }
@@ -2494,7 +2508,7 @@
             <span class="t3 cat-line-pct">${pctOf(r.value)}%</span><span class="num">${money(r.value)}</span>
           </button>`).join('')}
         </div>
-        ${basisNote}` : '<div class="empty">Sin gastos registrados este mes.</div>'}
+        ` : '<div class="empty">Sin gastos registrados este mes.</div>'}
       </section>
 
       <section class="k-card" data-goto-savings role="button" tabindex="0">
@@ -2506,7 +2520,7 @@
       <h2 class="ovl home-ovl">Para tener en cuenta</h2>
       <div class="group">
         ${insights.map((ins) => `
-        <button type="button" class="insight" ${ins.cardId ? `data-insight-card="${esc(ins.cardId)}"` : `data-insight-go="${esc(ins.go || '')}"`}>
+        <button type="button" class="insight" ${ins.cardId ? `data-insight-card="${esc(ins.cardId)}"` : `data-insight-go="${esc(ins.go || '')}"${ins.catId ? ` data-insight-cat="${esc(ins.catId)}"` : ''}`}>
           <span class="cic" style="--c:${INSIGHT_COLOR[ins.tone]}">${spriteIcon(ins.icon)}</span>
           <div class="row-main"><div class="tt">${esc(ins.title)}</div>${ins.sub ? `<div class="st${ins.money ? ' money' : ''}">${esc(ins.sub)}</div>` : ''}</div>
           ${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}
@@ -2516,7 +2530,16 @@
     $$('[data-insight-card]', el).forEach((row) => row.addEventListener('click', () => cardAnalysisDialog(row.dataset.insightCard)));
     $$('[data-insight-go]', el).forEach((row) => row.addEventListener('click', () => {
       const go = row.dataset.insightGo;
-      if (go && VIEWS[go]) { ui.view = go; render(); }
+      if (!go || !VIEWS[go]) return;
+      ui.view = go;
+      // Un aviso de categoría abre Categorías › Gastos con esa categoría
+      // desplegada (no la vista General).
+      if (go === 'categorias') {
+        ui.catKind = 'gasto';
+        const cat = row.dataset.insightCat;
+        if (cat) ui.catOpen = { ...ui.catOpen, ['gasto:' + cat]: true };
+      }
+      render();
     }));
     const gotoSavings = $('[data-goto-savings]', el);
     if (gotoSavings) {
@@ -7248,8 +7271,10 @@
     if (!usesMonth(grp)) {
       // El nombre de la hoja aparece arriba recién cuando el título grande
       // sale de la pantalla al scrollear (ver watchLargeTitle()).
-      const title = grp && grp.list && ui.view !== grp.views[0] ? VIEW_LABELS[ui.view] : ((grp && GROUP_TITLES[grp.key]) || VIEW_LABELS[ui.view] || '');
-      left.innerHTML = `<span class="topbar-title section-title" aria-hidden="true">${esc(title)}</span>`;
+      const inner = grp && grp.list && ui.view !== grp.views[0];
+      const title = inner ? VIEW_LABELS[ui.view] : ((grp && GROUP_TITLES[grp.key]) || VIEW_LABELS[ui.view] || '');
+      // Adentro de una opción de Más: "‹ Volver" arriba a la izquierda.
+      left.innerHTML = `${inner ? `<button type="button" class="back-btn" data-topback>${spriteIcon('cl')}Volver</button>` : ''}<span class="topbar-title section-title" aria-hidden="true">${esc(title)}</span>`;
       return;
     }
     // Fuera del mes actual, el nombre del mes queda en verde y al tocarlo
@@ -7376,19 +7401,16 @@
       // Cada opción de Más: "‹ Más" para volver y, a la derecha, el lugar
       // para un menú propio de la hoja (ver vCompartido).
       titleBarHTML = `
-      <div class="bar">
-        <button type="button" class="back-btn" data-backmas>${spriteIcon('cl')}Más</button>
+      <div class="bar title-row">
+        <h1 class="largetitle">${esc(VIEW_LABELS[ui.view] || '')}</h1>
         <span class="bar-right" id="bar-right"></span>
-      </div>
-      <h1 class="largetitle">${esc(VIEW_LABELS[ui.view] || '')}</h1>`;
+      </div>`;
     } else if (grp && grp.key === 'mas') {
       titleBarHTML = '<h1 class="largetitle">Más</h1>';
     }
     el.innerHTML = titleBarHTML + subtabsHTML + '<div class="view-content"></div>';
     const monthChip = $('[data-monthchip]', el);
     if (monthChip) monthChip.addEventListener('click', monthPickerSheet);
-    const backMas = $('[data-backmas]', el);
-    if (backMas) backMas.addEventListener('click', () => { ui.view = 'mas'; render(); });
     watchLargeTitle(el);
     if (subIdx >= 0) {
       // Las pestañas miden según su texto (no todas iguales), así que la
@@ -7500,6 +7522,7 @@
     $('#btn-fab').addEventListener('click', (e) => { e.currentTarget.blur(); txForm(null); });
     $('#topbar-left').addEventListener('click', (e) => {
       const nav = e.target.closest('[data-mnav]');
+      if (e.target.closest('[data-topback]')) { ui.view = 'mas'; render(); return; }
       if (nav) changeMonth(Number(nav.dataset.mnav));
       else if (e.target.closest('[data-mtoday]')) changeMonth(0);
     });

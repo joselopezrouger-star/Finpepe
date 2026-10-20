@@ -1942,11 +1942,11 @@ body.sheet-behind .topbar { transform: scale(0.94); border-radius: 14px; }
   display: grid; place-items: center; transition: background 0.08s, scale 0.08s;
 }
 .key:active { background: var(--s3); }
-.key.op { background: transparent; color: var(--brand-text); font-size: 24px; }
+.key.op { background: transparent; color: var(--brand-text); font-size: 24px; box-shadow: inset 0 0 0 1.5px var(--s3); }
 .key.key-wide { grid-column: span 2; }
 .key .ic { width: 24px; height: 24px; }
 [data-theme="light"] .key { background: var(--s1); box-shadow: 0 1px 0 var(--line); }
-[data-theme="light"] .key.op { background: transparent; box-shadow: none; }
+[data-theme="light"] .key.op { background: transparent; box-shadow: inset 0 0 0 1.5px var(--s3); }
 .savebar { flex: none; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); display: grid; gap: 8px; }
 .btn-save { height: 50px; border-radius: 14px; font: 600 16px/1 var(--f-text); }
 .sh-error { font-size: 13px; color: var(--neg); text-align: center; }
@@ -2328,3 +2328,9 @@ body.syncing .view-content .big small { color: transparent; }
 .dialog-body .field-row > *, .dialog-body .field { min-width: 0; }
 .dialog-body input:not([type="checkbox"]):not([type="radio"]), .dialog-body select, .dialog-body textarea { width: 100%; min-width: 0; min-height: 44px; }
 .dialog-body .inline-form input, .dialog-body .inline-form select { width: auto; flex: 1; }
+
+/* Opciones de Más: el título va pegado arriba (el "‹ Volver" está en la
+   barra superior). */
+.title-row { min-height: 0; }
+.title-row .largetitle { margin: 0; }
+.topbar .back-btn + .section-title { margin-left: 4px; }
