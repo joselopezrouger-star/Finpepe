@@ -2470,3 +2470,8 @@ body[data-grp="mas"] .topbar-inner, body[data-grp="cuentas"] .topbar-inner { min
 .cmet-var.flat .cmet-sub { color: var(--t2); }
 .zero-drop { color: var(--brand-text); font-weight: 600; }
 .zero-drop.bad { color: var(--neg); }
+
+/* Cuotas: 1 pago, 3, 6, 9 / 12, 18, 24, Otra */
+.inst-grid.inst-grid-4 { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.inst-grid.inst-grid-4 .inst-opt { height: 44px; font-size: 15px; }
+.inst-grid.inst-grid-4 .inst-opt:first-child { grid-column: auto; }
