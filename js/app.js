@@ -1202,7 +1202,102 @@
     return short.charAt(0).toUpperCase() + short.slice(1);
   };
 
-  function txForm(tx) {
+  /* Carga desde un link de otra app: ?nuevo=gasto&monto=40000&moneda=ARS
+     &fecha=2026-10-15&categoria=Supermercado&subcategoria=…&medio=Visa&nota=…
+     Abre el formulario ya completo (no guarda nada solo) y deja la
+     dirección limpia para que recargar no lo vuelva a abrir. */
+  function readLinkPrefill() {
+    let params;
+    try { params = new URLSearchParams(location.search); } catch (e) { return null; }
+    if (!params.has('nuevo')) return null;
+    const keys = ['nuevo', 'monto', 'moneda', 'fecha', 'categoria', 'subcategoria', 'medio', 'nota'];
+    const raw = {};
+    for (const k of keys) raw[k] = (params.get(k) || '').trim();
+    keys.forEach((k) => params.delete(k));
+    const rest = params.toString();
+    try { history.replaceState(history.state, '', location.pathname + (rest ? `?${rest}` : '') + location.hash); } catch (e) { /* sin history */ }
+    const type = raw.nuevo.toLowerCase();
+    if (type !== 'gasto' && type !== 'ingreso') return null;
+    return { ...raw, type };
+  }
+  // "40000", "40.000,50", "40000.5", "1,5" → número (null si no sirve).
+  function parseLinkAmount(str) {
+    let t = String(str || '').replace(/[\s$]/g, '').replace(/^(ARS|USD|US)/i, '');
+    if (!t) return null;
+    const lastDot = t.lastIndexOf('.'), lastComma = t.lastIndexOf(',');
+    if (lastDot >= 0 && lastComma >= 0) {
+      const dec = lastDot > lastComma ? '.' : ',';
+      t = t.split(dec === '.' ? ',' : '.').join('').replace(dec, '.');
+    } else if (lastComma >= 0) {
+      t = (t.split(',').length > 2) ? t.split(',').join('') : t.replace(',', '.');
+    } else if (t.split('.').length > 2) {
+      t = t.split('.').join('');
+    }
+    const n = Number(t);
+    return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+  }
+  const normName = (str) => String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9ñ]+/g, ' ').trim();
+  // Parecido entre dos nombres, de 0 a 1: igual = 1, uno contiene al otro
+  // = 0,85; si no, coincidencia de pares de letras (Dice).
+  function nameScore(a, b) {
+    const x = normName(a), y = normName(b);
+    if (!x || !y) return 0;
+    if (x === y) return 1;
+    if (` ${x} `.includes(` ${y} `) || ` ${y} `.includes(` ${x} `)) return 0.85;
+    if (x.includes(y) || y.includes(x)) return 0.75;
+    const pairs = (w) => { const out = []; for (let i = 0; i < w.length - 1; i++) out.push(w.slice(i, i + 2)); return out; };
+    const px = pairs(x), py = pairs(y);
+    if (!px.length || !py.length) return 0;
+    const pool = py.slice();
+    let hits = 0;
+    for (const pr of px) { const i = pool.indexOf(pr); if (i >= 0) { hits++; pool.splice(i, 1); } }
+    return (2 * hits) / (px.length + py.length);
+  }
+  function bestByName(list, name, min = 0.6) {
+    let best = null, bestScore = -1;
+    for (const it of list) {
+      const sc = nameScore(it.name, name);
+      if (sc >= min && sc > bestScore) { best = it; bestScore = sc; }
+    }
+    return best;
+  }
+  // Lo que se le pasa a txForm como valores iniciales.
+  function linkPrefillToDraft(p) {
+    const out = { type: p.type, note: p.nota.slice(0, 200) };
+    const amount = parseLinkAmount(p.monto);
+    if (amount != null) out.amount = amount;
+    out.currency = p.moneda.toUpperCase() === 'USD' ? 'USD' : 'ARS';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(p.fecha) && !isNaN(parseDate(p.fecha)) && dateToStr(parseDate(p.fecha)) === p.fecha) out.date = p.fecha;
+    // Categoría: primero el grupo por "categoria" y, adentro, la
+    // subcategoría; si no, la más parecida entre todas las del tipo.
+    const cats = S().categories.filter((c) => c.type === p.type);
+    let cat = null;
+    if (p.categoria || p.subcategoria) {
+      const group = p.categoria ? bestByName(cats, p.categoria) : null;
+      if (p.subcategoria) {
+        cat = (group && bestByName(catChildren(group.id), p.subcategoria))
+          || bestByName(cats.filter((c) => c.parentId), p.subcategoria);
+      }
+      if (!cat) cat = group;
+    }
+    if (cat) {
+      if (selectableCats(p.type).some((c) => c.id === cat.id)) out.categoryId = cat.id;
+      else if (!cat.parentId && catChildren(cat.id).length) out.catGroupExpand = cat.id;
+    }
+    // Medio de pago: solo si coincide (sin mayúsculas ni acentos); si no,
+    // queda vacío para elegirlo.
+    if (p.medio) {
+      const opts = S().methods.concat(p.type === 'gasto' ? S().savings : []);
+      const want = normName(p.medio);
+      const exact = opts.find((m) => normName(m.name) === want);
+      const partial = opts.filter((m) => { const n = normName(m.name); return n && (n.includes(want) || want.includes(n)); });
+      out.methodId = exact ? exact.id : partial.length === 1 ? partial[0].id : '';
+    }
+    return out;
+  }
+
+  function txForm(tx, prefill = null) {
     const editing = !!tx;
     // El hogar compartido se carga en segundo plano al abrir la app: si el
     // panel se abría antes de que terminara, la opción "compartido" no
@@ -1217,13 +1312,14 @@
       return !editing && draft.type === 'gasto' && !!partner && !!(shared.household);
     };
 
-    const startType = editing ? tx.type : 'gasto';
+    const pf = !editing && prefill ? prefill : null;
+    const startType = editing ? tx.type : (pf ? pf.type : 'gasto');
     const draft = {
       type: startType,
-      date: editing ? tx.date : todayStr(),
-      currency: editing ? tx.currency : 'ARS',
-      categoryId: editing ? tx.categoryId : '',
-      methodId: editing ? tx.methodId : lastUsedMethodId(startType),
+      date: editing ? tx.date : (pf && pf.date) || todayStr(),
+      currency: editing ? tx.currency : (pf && pf.currency) || 'ARS',
+      categoryId: editing ? tx.categoryId : (pf && pf.categoryId) || '',
+      methodId: editing ? tx.methodId : pf && pf.methodId !== undefined ? pf.methodId : lastUsedMethodId(startType),
       toMethodId: editing ? (tx.toMethodId || '') : '',
       shareIt: false,
       sharePct: 50,
@@ -1231,17 +1327,17 @@
       // calculadora: ⌫ lo corrige de a un dígito y un número nuevo lo pisa.
       acc: null,
       op: null,
-      cur: editing ? (Math.round(tx.amount * 100) / 100).toString() : '',
+      cur: editing ? (Math.round(tx.amount * 100) / 100).toString() : pf && pf.amount ? String(pf.amount) : '',
       // true justo después de presionar "=": el próximo dígito tipeado tiene
       // que arrancar un número nuevo (como una calculadora física), en vez
       // de agregarse al final del resultado que ya se mostró.
-      justEq: editing,
+      justEq: editing || !!(pf && pf.amount),
       // Qué se ve debajo de los chips: null = grilla de categorías; si no,
       // la lista de un chip ('method' | 'methodTo' | 'inst' | 'share' | 'note').
       panel: null,
-      catGroupExpand: null, // grupo cuyas subcategorías se están mostrando en la grilla
+      catGroupExpand: (pf && pf.catGroupExpand) || null, // grupo cuyas subcategorías se están mostrando en la grilla
       showAllCats: false,
-      note: editing ? (tx.note || '') : '',
+      note: editing ? (tx.note || '') : (pf && pf.note) || '',
       inst: 1,
       // 'total': el monto tipeado es el precio total de la compra (se
       // reparte entre las n cuotas). 'per': el monto tipeado ya es el valor
@@ -1557,7 +1653,7 @@
           <div class="grab" aria-hidden="true"></div>
           <div class="sh-h">
             <button type="button" class="icb" data-close aria-label="Cerrar">${spriteIcon('x')}</button>
-            <h2>${editing ? 'Editar movimiento' : 'Nuevo movimiento'}</h2>
+            <h2>${editing ? 'Editar movimiento' : pf ? 'Revisá y guardá' : 'Nuevo movimiento'}</h2>
             ${editing ? `<button type="button" class="icb icb-danger" data-del aria-label="Eliminar movimiento">${iconSvg('trash')}</button>` : '<span></span>'}
           </div>
         </div>
@@ -7797,8 +7893,21 @@
     // Cada guardado local se sube a la nube (si hay sesión activa).
     Store.onSave((state) => Cloud.schedulePush(state));
 
+    // Un link con ?nuevo=… se lee (y se borra de la dirección) antes que
+    // nada; el formulario se abre cuando terminó la sincronización (para
+    // buscar la categoría y el medio en tus datos reales) o a los 5 s.
+    const linkPf = readLinkPrefill();
     render();
-    initCloud();
+    const cloudReady = initCloud();
+    if (linkPf) {
+      const openLink = () => {
+        const dlg = $('#dialog');
+        // Si está abierto el panel de iniciar sesión, espera a que se cierre.
+        if (dlg.open) { dlg.addEventListener('close', () => setTimeout(openLink, 400), { once: true }); return; }
+        txForm(null, linkPrefillToDraft(linkPf));
+      };
+      Promise.race([Promise.resolve(cloudReady).catch(() => {}), new Promise((r) => setTimeout(r, 5000))]).then(openLink);
+    }
     maybeRefreshRates();
     // Volver a la app después de tenerla en segundo plano (cambiar de
     // pestaña/app y volver) no siempre la recarga del todo, así que sin
