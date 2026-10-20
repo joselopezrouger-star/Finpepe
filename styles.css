@@ -520,59 +520,43 @@ select:focus, input:focus, .btn:focus-visible, .icon-btn:focus-visible {
 .field-check { flex-direction: row; align-items: center; gap: 8px; }
 .hint { font-size: 11.5px; color: var(--muted); }
 
+/* Todos los pop-ups son paneles inferiores: pegados abajo, con
+   agarradera, y suben con la misma animación que la carga (ver
+   openSheet() en app.js). Solo scrollea el cuerpo; encabezado y pie quedan
+   fijos. */
 .dialog {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0;
-  width: min(440px, calc(100vw - 32px));
-  /* dvh tiene en cuenta la barra del navegador en el celular; vh se queda
-     como respaldo en navegadores viejos que no entienden dvh. */
-  max-height: calc(100vh - 48px);
-  max-height: calc(100dvh - 48px);
-  background: var(--surface);
-  color: var(--ink);
+  position: fixed; inset: auto 0 0 0;
+  width: 100%; max-width: 560px; margin: 0 auto;
+  max-height: calc(100dvh - env(safe-area-inset-top) - 12px);
+  border: 0; padding: 0;
+  border-radius: 26px 26px 0 0;
+  background: var(--s1); color: var(--t1);
   box-shadow: var(--sheet-shadow);
-  margin: auto;
-  /* Sin esto, cuando el contenido no entraba (ej. el detalle de un
-     resumen con muchos movimientos) el <dialog> entero scrolleaba como un
-     solo bloque — encabezado con la ✕ incluido — así que para cerrarlo
-     había que scrollear todo hacia arriba de nuevo. Ahora solo scrollea
-     el cuerpo (ver .dialog-body más abajo); encabezado y pie quedan fijos.
-     display:flex acá (no solo en .dialog form) es necesario para que
-     .dialog-body pueda resolver flex:1 contra una altura definida: un
-     porcentaje/flex-basis contra un padre con solo max-height (sin height
-     explícito) no se resuelve en block layout, pero sí en flex layout. */
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  display: flex; flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1);
 }
-/* Red de seguridad: si por lo que sea el navegador no promueve el <dialog>
-   a overlay flotante (algunas versiones de iOS Safari lo hacen mal dentro
-   de layouts con "position: sticky"), esto lo fuerza siempre a quedar
-   centrado y flotando en vez de aparecer "adentro" de la página. */
-dialog[open].dialog {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-}
-/* Sin esto, clases como .dialog-tx (que ponen display:flex para su layout
-   interno) le ganan en especificidad a la regla nativa "dialog { display:
-   none }" y el diálogo queda visible -aunque cerrado- flotando al final de
-   la página. Es la causa real del bug "quedó lageado abajo" tras guardar. */
+[data-theme="light"] .dialog { background: var(--bg); }
+.dialog.open { transform: none; }
+.dialog.dragging { transition: none; }
+/* Agarradera */
+.dialog::before { content: ''; display: block; flex: none; width: 38px; height: 5px; border-radius: 9px; background: var(--s3); margin: 8px auto 2px; }
+/* Sin esto, clases que ponen display:flex le ganan a la regla nativa
+   "dialog { display: none }" y el diálogo cerrado queda visible. */
 .dialog:not([open]) {
   display: none !important;
 }
 .dialog::backdrop { background: var(--scrim); }
 .dialog form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .dialog-head {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
-  font-weight: 600;
-  font-size: 15px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex: none;
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center;
+  padding: 4px 10px 8px; flex: none;
 }
+.dialog-head > span:not(.dialog-title):only-child, .dialog-head > span:first-child:not(.dialog-title) { font: 600 17px/1.2 var(--f-text); }
+.dialog-title { text-align: center; font: 600 17px/1.2 var(--f-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sh-menu { display: grid; gap: 6px; padding: 0 16px 10px; flex: none; }
+.sh-menu .btn { width: 100%; justify-content: center; margin: 0 !important; min-height: 44px; }
 /* flex:1 + min-height:0 + overflow-y:auto es lo que hace que SOLO esta
    zona scrollee cuando el contenido no entra, dejando el encabezado (con
    la ✕) y el pie del diálogo siempre fijos y accesibles. */
@@ -580,15 +564,10 @@ dialog[open].dialog {
    dentro de .dialog): sin esto, un hijo ancho (ej. una tabla con scroll
    propio) empuja el ancho "de contenido" en vez de respetarlo y recortar
    — el diálogo entero terminaba más ancho que el viewport. */
-.dialog-body { padding: 16px 18px; display: grid; gap: 12px; flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; }
+.dialog-body { padding: 4px 16px 20px; display: grid; gap: 12px; flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; }
 .dialog-foot {
-  padding: 12px 18px;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid var(--border);
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  flex: none;
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  display: grid; gap: 8px; flex: none;
 }
 
 .tx-row {
@@ -636,7 +615,6 @@ dialog[open].dialog {
 .inst-preview b { color: var(--ink); font-weight: 700; }
 
 /* ---------- Login (pantalla grande) ---------- */
-.dialog-auth { width: min(400px, calc(100vw - 24px)); }
 .auth-hero {
   padding: 28px 24px 6px;
   text-align: center;
@@ -1294,19 +1272,6 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   color: var(--ink);
   padding-bottom: 8px;
 }
-.hero-month-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  background: var(--brand);
-  color: var(--on-brand);
-  padding: 10px 16px;
-  margin-bottom: 4px;
-}
-.hero-month-bar .icon-btn { width: 26px; height: 26px; border: 0; background: color-mix(in srgb, var(--on-brand) 11%, transparent); color: var(--on-brand); }
-.hero-month-bar .icon-btn:hover { background: color-mix(in srgb, var(--on-brand) 19%, transparent); }
-.hero-month-bar-label { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; white-space: nowrap; }
 /* Olas de fondo en el cuerpo de la tarjeta: mismo dibujo que las del
    encabezado pero casi transparentes, detrás de todo el contenido. */
 .hero-bg-waves { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 78%; pointer-events: none; z-index: 0; }
@@ -1524,7 +1489,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   font-size: 13px; font-weight: 700;
   background: var(--surface-2); color: var(--ink);
 }
-.shared-avatar.me { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--brand-text); }
+.shared-avatar.me { background: var(--c-tel); color: var(--bg); }
 .shared-avatar.partner { background: color-mix(in srgb, var(--warn) 28%, var(--surface)); color: var(--warn); }
 
 .agenda-trailing { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
@@ -1772,38 +1737,6 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .sav-det-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 /* ---------- Compartido ---------- */
-.card.sh-hero {
-  background: linear-gradient(135deg, var(--brand), var(--brand-press));
-  border: 0; color: var(--on-brand); display: grid; gap: 4px; padding: 14px 18px 16px;
-}
-.sh-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.sh-hero-label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.9; min-width: 0; }
-.sh-hero-label svg { width: 16px; height: 16px; flex: none; }
-.sh-hero-tools { display: flex; gap: 6px; }
-.sh-icon-btn {
-  width: 30px; height: 30px; border-radius: 50%; border: 0; cursor: pointer;
-  background: color-mix(in srgb, var(--on-brand) 13%, transparent); color: var(--on-brand); font: 600 15px/1 var(--font);
-  display: grid; place-items: center; padding: 0;
-}
-.sh-icon-btn:hover { background: color-mix(in srgb, var(--on-brand) 21%, transparent); }
-.sh-hero-head { margin-top: 6px; font: 700 17px var(--font-heading); }
-.sh-hero-amount { font: 800 32px/1.1 var(--font-heading); letter-spacing: -0.01em; }
-.sh-people { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.sh-person { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--on-brand) 11%, transparent); min-width: 0; }
-.sh-person > div { display: grid; min-width: 0; }
-.sh-person span:not(.shared-avatar) { font-size: 11px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sh-person b { font: 700 14.5px var(--font-heading); white-space: nowrap; }
-.sh-person .shared-avatar { width: 28px; height: 28px; font-size: 12px; flex: none; }
-.sh-split { display: flex; height: 8px; margin-top: 10px; border-radius: 999px; overflow: hidden; gap: 2px; background: color-mix(in srgb, var(--on-brand) 16%, transparent); }
-.sh-split > span { display: block; height: 100%; }
-.sh-split .me { background: color-mix(in srgb, var(--brand) 55%, var(--on-brand)); }
-.sh-split .partner { background: var(--warn); }
-.sh-split-txt { display: flex; justify-content: space-between; font-size: 12px; opacity: 0.95; }
-.sh-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.sh-btn-primary { background: var(--s1); color: var(--brand-text); border-color: var(--on-brand); font-weight: 700; }
-.sh-btn-primary:hover { background: color-mix(in srgb, var(--s1) 90%, var(--brand)); }
-.sh-btn-ghost { background: color-mix(in srgb, var(--on-brand) 11%, transparent); color: var(--on-brand); border-color: color-mix(in srgb, var(--on-brand) 32%, transparent); }
-.sh-btn-ghost:hover { background: color-mix(in srgb, var(--on-brand) 19%, transparent); }
 .tx-list-compact .shared-avatar { width: 26px; height: 26px; font-size: 11.5px; flex: none; }
 #invite-box:empty { display: none; }
 .card.sh-feed-btn {
@@ -2022,7 +1955,7 @@ body.sheet-behind .topbar { transform: scale(0.94); border-radius: 14px; }
 .is-new { animation: nuevo 1.5s ease-out; }
 @keyframes nuevo { from { background: var(--brand-soft); } }
 @media (prefers-reduced-motion: reduce) {
-  dialog.sheet, body .view, body .topbar { transition: none; }
+  dialog.sheet, .dialog, body .view, body .topbar { transition: none; }
   .catgrid.swap .catb, .is-new { animation: none; }
 }
 
@@ -2288,3 +2221,110 @@ body.sheet-behind .topbar { transform: scale(0.94); border-radius: 14px; }
 .ca-section-title { margin: 16px 0 8px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .legend-inline { margin: 0; }
 .legend .lg-line { border-radius: 0; width: 14px; height: 0; }
+.panel-month { justify-content: center; gap: 4px; }
+.panel-month .topbar-title { font-size: 18px; }
+
+/* ---------- Etapa 8 · Compartido ---------- */
+.back-btn {
+  display: inline-flex; align-items: center; gap: 0; height: 44px; padding: 0 4px 0 0;
+  border: 0; background: transparent; color: var(--brand-text); font: 600 16px/1 var(--f-text); cursor: pointer;
+}
+.back-btn .ic { width: 24px; height: 24px; }
+.bar-right, .bar-actions { display: inline-flex; align-items: center; gap: 12px; }
+.sh-card { display: block; }
+.sh-who { display: flex; align-items: center; gap: 10px; }
+.sh-headline { margin: 14px 0 0; font-size: 15px; }
+.sh-big { margin: 4px 0 0; color: var(--t1); }
+.sh-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.sh-actions.single { grid-template-columns: 1fr; }
+.sh-actions .btn { height: 44px; border-radius: 12px; font: 600 15px/1 var(--f-text); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.sh-actions .btn .ic { width: 18px; height: 18px; }
+.sh-paid { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.sh-paid-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.sh-paid-h .num { font-size: 13px; }
+.sh-paid-who { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; font-size: 13.5px; }
+.sh-feed-h { display: flex; justify-content: space-between; align-items: center; padding: 6px 4px 0; min-height: 32px; }
+.sh-row { cursor: pointer; color: inherit; font: inherit; border: 0; text-align: left; }
+.sh-row .cic, .mas-row .cic, .set-row .cic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; }
+.invite-code { margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--s2); font-size: 13px; }
+.invite-code-v { font-size: 28px; letter-spacing: 0.08em; margin-top: 6px; color: var(--t1); }
+.confirm-box { display: grid; gap: 10px; text-align: center; padding: 6px 0 4px; }
+.confirm-box p { margin: 0; }
+.btn-danger-fill { height: 50px; border-radius: 14px; border: 0; background: var(--neg); color: var(--s1); font: 600 16px/1 var(--f-text); }
+[data-theme="light"] .btn-danger-fill { color: white; }
+.btn-ter-danger { color: var(--neg); }
+.pick-danger { color: var(--neg); }
+
+/* ---------- Etapa 9 · Más, Ajustes y pulido ---------- */
+/* Título grande que se achica: el nombre aparece arriba al scrollear. */
+.topbar .section-title { opacity: 0; transition: opacity 0.2s; }
+body.title-collapsed .topbar .section-title { opacity: 1; }
+.mas-row, .set-row { cursor: pointer; color: inherit; font: inherit; border: 0; text-align: left; background: transparent; }
+.set-row { grid-template-columns: auto minmax(0, 1fr) auto auto; min-height: 52px; position: relative; }
+.set-row .tt { font-weight: 500; }
+.st-wrap { white-space: normal; }
+.set-value { font: 400 14px/1.2 var(--f-text); color: var(--t3); white-space: nowrap; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.set-select select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
+.set-h { margin: 14px 4px -2px; }
+.set-h:first-child { margin-top: 2px; }
+.set-foot { margin: -4px 4px 0; font-size: 12.5px; color: var(--t3); line-height: 1.4; }
+.set-account { font-size: 14px; }
+.set-account .card-title { display: none; }
+.set-danger-group { margin-top: 8px; }
+.set-danger { grid-template-columns: 1fr; justify-items: center; min-height: 50px; }
+.set-danger .tt { color: var(--neg); font-weight: 600; }
+/* Interruptor (input type=checkbox switch, con estilo propio para todos
+   los navegadores). */
+.switch {
+  appearance: none; -webkit-appearance: none; flex: none; margin: 0;
+  width: 51px; height: 31px; border-radius: 99px; background: var(--s3); position: relative; cursor: pointer;
+  transition: background 0.2s;
+}
+.switch::before {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
+  background: white; box-shadow: 0 2px 4px var(--scrim); transition: transform 0.2s;
+}
+.switch:checked { background: var(--brand); }
+.switch:checked::before { transform: translateX(20px); }
+.switch:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+/* Filas que se deslizan para borrar, dentro de tarjetas (Presupuestos,
+   Fijos, Resúmenes). */
+.swipe-card { border-radius: 12px; }
+.swipe-card > :first-child { flex: 0 0 100%; scroll-snap-align: start; }
+.swipe-card + .swipe-card { margin-top: 0; }
+.entity-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.entity-reorder { display: flex; gap: 8px; margin-left: auto; }
+.btn-sm.btn-sec { height: 36px; font-size: 13px; border-radius: 10px; padding: 0 12px; }
+/* Estados vacíos con sugerencia */
+.suggest { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; align-items: start; padding: 4px 0; }
+.suggest .cic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; }
+.suggest p { margin: 0 0 10px; font-size: 14px; line-height: 1.4; }
+/* Esqueletos de carga */
+.sk, .skeleton-list i {
+  display: block; border-radius: 8px;
+  background: linear-gradient(90deg, var(--s2) 0%, var(--s3) 50%, var(--s2) 100%); background-size: 200% 100%;
+  animation: sk-shine 1.2s ease-in-out infinite;
+}
+.skeleton-card { display: grid; gap: 12px; }
+.sk-avs { width: 60px; height: 30px; border-radius: 99px; }
+.sk-line { width: 55%; height: 14px; }
+.sk-big { width: 70%; height: 36px; }
+.skeleton-list { display: grid; gap: 1px; padding: 0; }
+.skeleton-list i { height: 60px; border-radius: 0; }
+@keyframes sk-shine { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+/* Mientras se sincroniza con la nube, los montos son esqueletos. */
+body.syncing .view-content .money, body.syncing .view-content .big, body.syncing .view-content .amt .num {
+  color: transparent !important; border-radius: 6px;
+  background: linear-gradient(90deg, var(--s2) 0%, var(--s3) 50%, var(--s2) 100%); background-size: 200% 100%;
+  animation: sk-shine 1.2s ease-in-out infinite;
+}
+body.syncing .view-content .big small { color: transparent; }
+/* Todo respeta "reducir movimiento". */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+.set-row:has(> .switch) { grid-template-columns: auto minmax(0, 1fr) auto; }
+/* Formularios dentro de los paneles: nada más ancho que el panel. */
+.dialog-body .field-row > *, .dialog-body .field { min-width: 0; }
+.dialog-body input:not([type="checkbox"]):not([type="radio"]), .dialog-body select, .dialog-body textarea { width: 100%; min-width: 0; min-height: 44px; }
+.dialog-body .inline-form input, .dialog-body .inline-form select { width: auto; flex: 1; }
