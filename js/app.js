@@ -523,9 +523,22 @@
     'c-impuestos': 'receipt', 'c-otros-g': 'tag',
     'c-sueldo': 'wallet', 'c-free': 'briefcase', 'c-invers': 'trend', 'c-ventas': 'bag', 'c-otros-i': 'dots',
   };
+  const ICON_BY_NAME = [
+    [/^(casa|hogar|vivienda|alquiler|expensas)/, 'home'], [/^(comida|super|almacen|resto|delivery)/, 'food'],
+    [/^(auto|transporte|nafta|movilidad)/, 'car'], [/^(salud|farmacia|medic|prepaga)/, 'heart'],
+    [/^(entret|ocio|salidas|stream)/, 'film'], [/^(ropa|indument)/, 'shirt'], [/^(educ|estudio|curso|facu)/, 'book'],
+    [/^(viaje|vacacion|turismo)/, 'plane'], [/^(impuesto|servicio|tarjeta|banco)/, 'receipt'],
+    [/^(compras|regalo|shopping)/, 'bag'], [/^(sueldo|salario|honorario)/, 'wallet'], [/^(freelance|trabajo|negocio)/, 'briefcase'],
+    [/^(invers|plazo|interes|dividend)/, 'trend'], [/^(venta)/, 'bag'],
+  ];
   function categoryIconName(catId) {
     const top = topCategoryOf(catId);
     if (CAT_ICON[top]) return CAT_ICON[top];
+    // Categorías creadas por cada uno (otro id): el ícono sale del nombre.
+    const g = catById(top);
+    const name = g ? normName(g.name) : '';
+    const hit = name && ICON_BY_NAME.find(([re]) => re.test(name));
+    if (hit) return hit[1];
     const c = catById(catId);
     return c && c.type === 'ingreso' ? 'dots' : 'tag';
   }
@@ -3409,13 +3422,22 @@
         <div class="cmet-var ${varCls}"><span class="cmet-l">vs. ${esc(prevShortM)}</span><b class="num">${varVal}</b>${varSub ? `<span class="num money cmet-sub">${esc(varSub)}</span>` : ''}</div>
       </div>`;
     };
-    const zeroGroups = S().categories.filter((c) => c.type === type && !c.parentId && !breakdown.some((g) => g.id === c.id));
-    const rowsHTML = breakdown.map((g) => {
+    // La lista suma las categorías (y subcategorías) que este mes están en
+    // $ 0 pero el mes pasado tuvieron movimientos: así se ve cuánto bajaron.
+    const listRows = breakdown.map((g) => ({ ...g, subs: g.subs.slice() }));
+    for (const pg of prevBreakdown) {
+      if (!(pg.total > 0)) continue;
+      let g = listRows.find((x) => x.id === pg.id);
+      if (!g) { g = { id: pg.id, name: pg.name, total: 0, subs: [] }; listRows.push(g); }
+      for (const ps of pg.subs) if (ps.value > 0 && !g.subs.some((x) => x.id === ps.id)) g.subs.push({ id: ps.id, name: ps.name, value: 0 });
+    }
+    const zeroGroups = S().categories.filter((c) => c.type === type && !c.parentId && !listRows.some((g) => g.id === c.id));
+    const rowsHTML = listRows.map((g) => {
       const key = `${type}:${g.id}`;
       const open = !!ui.catOpen[key];
       const color = g.id === '__sin' ? OTROS_COLOR : catColor(g.id);
       const icon = g.id === '__sin' ? spriteIcon('more') : iconSvg(categoryIconName(g.id));
-      const subs = g.subs.filter((s) => s.value > 0);
+      const subs = g.subs.filter((s) => s.value > 0 || prevSubTotals.get(s.id) > 0);
       const detail = open ? `
         ${subs.map((s) => `
         <button type="button" class="crow sub" data-catmoves="${esc(g.id)}" data-subid="${esc(s.id)}">
@@ -3507,7 +3529,7 @@
         </div>
       </section>
 
-      ${breakdown.length || zeroGroups.length ? `${breakdown.length ? `<p class="k-note k-note-out cat-cmp-note">Variación contra ${esc(monthName(prevMk))} completo.</p>` : ''}
+      ${listRows.length || zeroGroups.length ? `${listRows.length ? `<p class="k-note k-note-out cat-cmp-note">Variación contra ${esc(monthName(prevMk))} completo.</p>` : ''}
       <div class="group cat-group">${rowsHTML}${zeroHTML}</div>` : ''}
 
       ${methodRows.length ? `
@@ -3557,7 +3579,7 @@
       }
       if ((b = e.target.closest('[data-catmoves]'))) {
         const gid = b.dataset.catmoves, subId = b.dataset.subid;
-        const g = breakdown.find((x) => x.id === gid);
+        const g = listRows.find((x) => x.id === gid);
         const label = subId ? ((g && g.subs.find((s) => s.id === subId)) || {}).name || catName(gid) : (g ? g.name : catName(gid));
         categoryCompareDialog(label, mk, forRow(monthAll, gid, subId), prevMk, forRow(inPrevFull, gid, subId));
         return;

@@ -65,6 +65,7 @@ const Store = (() => {
       cardMonthBasis: 'compra', // 'compra' | 'vencimiento' — en qué mes cuenta un gasto con tarjeta de crédito
       autoLeftoverIncome: false, // true = acredita el Balance del mes anterior (si dio positivo) como Ingreso al empezar cada mes
       leftoverLastGen: null,     // 'YYYY-MM' del último mes ya acreditado — ver generateLeftoverIncome() en app.js
+      catColorsV2: true,        // ya se repartieron los colores entre todas las categorías (ver migrate)
       methodsSortedOnce: false, // true = ya se hizo el ordenamiento automático de tarjetas primero (una sola vez), ver sortMethodsOnce() en app.js
     },
     categories: assignCategoryColors(seedCategories()),
@@ -95,27 +96,39 @@ const Store = (() => {
     [/^telefono|^celular/, 'tel'],
     [/^super/, 'super'],
   ];
-  // Las de ingreso no comparten gráficos con las de gasto: van tomando los
-  // colores en orden, para que la torta y las líneas de ingresos no queden
-  // todas grises.
+  // Las de ingreso no comparten gráficos con las de gasto: cada tipo
+  // reparte los colores por su lado.
   const INCOME_COLOR_ORDER = ['tel', 'super', 'auto', 'compras', 'comida', 'casa'];
+  const GASTO_COLOR_ORDER = ['casa', 'compras', 'comida', 'auto', 'tel', 'super'];
+  const plainName = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  // Primero las que se reconocen por nombre (Casa, Comida, Auto…); el
+  // resto toma el color menos usado de su tipo, así ninguna queda gris
+  // salvo las "Otros…". Con más de 6 categorías algún color se repite.
   function assignCategoryColors(categories) {
-    const plain = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-    let incomeIdx = categories.filter((c) => c.parentId === null && c.type === 'ingreso' && c.color).length;
-    for (const c of categories) {
-      if (c.parentId !== null || CATEGORY_COLORS.includes(c.color)) continue;
-      if (c.type === 'ingreso') {
-        c.color = /^otro/.test(plain(c.name)) ? 'otros' : (INCOME_COLOR_ORDER[incomeIdx++] || 'otros');
-      } else {
-        const hit = COLOR_BY_NAME.find(([re]) => re.test(plain(c.name)));
-        c.color = hit ? hit[1] : 'otros';
+    for (const type of ['gasto', 'ingreso']) {
+      const order = type === 'ingreso' ? INCOME_COLOR_ORDER : GASTO_COLOR_ORDER;
+      const groups = categories.filter((c) => c.parentId === null && c.type === type);
+      const used = new Map(order.map((k) => [k, 0]));
+      const take = (c, k) => { c.color = k; if (used.has(k)) used.set(k, used.get(k) + 1); };
+      for (const c of groups) if (used.has(c.color)) used.set(c.color, used.get(c.color) + 1);
+      const pending = groups.filter((c) => !CATEGORY_COLORS.includes(c.color));
+      const rest = [];
+      for (const c of pending) {
+        const name = plainName(c.name);
+        if (/^otro/.test(name)) { take(c, 'otros'); continue; }
+        const hit = type === 'gasto' && COLOR_BY_NAME.find(([re]) => re.test(name));
+        if (hit) take(c, hit[1]); else rest.push(c);
       }
+      for (const c of rest) take(c, order.reduce((best, k) => (used.get(k) < used.get(best) ? k : best), order[0]));
     }
     return categories;
   }
 
   function migrate(s) {
     const d = defaults();
+    // Antes, toda categoría que no se reconocía por nombre quedaba gris
+    // ("otros") para siempre. Una sola vez, esas vuelven a repartirse.
+    const fixColors = !(s.settings && s.settings.catColorsV2);
     // Completa claves faltantes sin pisar datos existentes.
     for (const k of Object.keys(d)) if (s[k] === undefined) s[k] = d[k];
     for (const k of Object.keys(d.settings)) {
@@ -123,6 +136,12 @@ const Store = (() => {
     }
     // Categorías creadas antes de las subcategorías: quedan como grupo (sin padre).
     for (const c of s.categories) if (c.parentId === undefined) c.parentId = null;
+    if (fixColors) {
+      for (const c of s.categories) {
+        if (c.parentId === null && c.color === 'otros' && !/^otro/.test(plainName(c.name))) delete c.color;
+      }
+      s.settings.catColorsV2 = true;
+    }
     assignCategoryColors(s.categories);
     return s;
   }
