@@ -32,6 +32,8 @@
     if (!(a >= 0.05)) return null;
     return a < 0.95 ? a.toFixed(1).replace('.', ',') : String(Math.round(a));
   };
+  // Participación sobre un total: un decimal debajo de 10% ("4,5%"), entero arriba.
+  const fmtShare = (pct) => (pct < 9.95 ? pct.toFixed(1).replace('.', ',') : String(Math.round(pct)));
   const dateToStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const todayStr = () => dateToStr(new Date());
   const parseDate = (str) => {
@@ -2635,7 +2637,10 @@
     // Por fecha real de carga, no de vencimiento: un gasto con tarjeta
     // aparece en el mes en que se hizo, aunque el balance lo cuente para
     // el mes en que vence el resumen (ver settings.cardMonthBasis).
-    if (!ui.fAllMonths) list = list.filter((t) => monthKeyOf(t.date) === ui.month);
+    if (!ui.fAllMonths) {
+      const months = new Set(ui.fMonths && ui.fMonths.length > 1 ? ui.fMonths : [ui.month]);
+      list = list.filter((t) => months.has(monthKeyOf(t.date)));
+    }
     if (ui.fType) list = list.filter((t) => t.type === ui.fType);
     if (ui.fCat) {
       // Un grupo (ej. "Casa") trae también sus subcategorías.
@@ -2692,19 +2697,18 @@
   }
 
   function vMovimientos(el) {
-    const hasTransfers = S().transactions.some((t) => t.type === 'transferencia');
-    const typeChips = [['', 'Todos'], ['gasto', 'Gastos'], ['ingreso', 'Ingresos']];
-    if (hasTransfers) typeChips.push(['transferencia', 'Transferencias']);
     const cat = ui.fCat ? catById(ui.fCat) : null;
+    const TYPE_LABEL = { '': 'Tipo', gasto: 'Gastos', ingreso: 'Ingresos', transferencia: 'Transferencias' };
+    const methodLabel = ui.fMethod ? (methodById(ui.fMethod) || savingById(ui.fMethod) || {}).name : '';
     el.innerHTML = `
       <label class="search">
         ${spriteIcon('search')}
         <input type="search" id="mov-search" placeholder="Buscar" value="${esc(ui.fSearch || '')}" enterkeyhint="search" autocomplete="off" aria-label="Buscar movimientos">
       </label>
-      <div class="chips chips-scroll" role="toolbar" aria-label="Filtros">
-        ${typeChips.map(([v, label]) => `<button type="button" class="chip${ui.fType === v ? ' on' : ''}" data-ftype="${v}" aria-pressed="${ui.fType === v}">${label}</button>`).join('')}
-        ${S().methods.map((m) => `<button type="button" class="chip${ui.fMethod === m.id ? ' on' : ''}" data-fmethod="${esc(m.id)}" aria-pressed="${ui.fMethod === m.id}">${esc(m.name)}</button>`).join('')}
-        <button type="button" class="chip${cat ? ' on' : ''}" data-fcat>${esc(cat ? cat.name : 'Categoría')}${spriteIcon('cd')}</button>
+      <div class="filter-row" role="toolbar" aria-label="Filtros">
+        <button type="button" class="chip${ui.fType ? ' on' : ''}" data-ftypesheet><span>${esc(TYPE_LABEL[ui.fType] || 'Tipo')}</span>${spriteIcon('cd')}</button>
+        <button type="button" class="chip${ui.fMethod ? ' on' : ''}" data-fmethodsheet><span>${esc(methodLabel || 'Cuenta')}</span>${spriteIcon('cd')}</button>
+        <button type="button" class="chip${cat ? ' on' : ''}" data-fcat><span>${esc(cat ? cat.name : 'Categoría')}</span>${spriteIcon('cd')}</button>
       </div>
       <div class="mov-list" id="mov-list">${movListHTML()}</div>`;
 
@@ -2715,8 +2719,8 @@
     });
     el.addEventListener('click', (e) => {
       let b;
-      if ((b = e.target.closest('[data-ftype]'))) { ui.fType = b.dataset.ftype; render(); return; }
-      if ((b = e.target.closest('[data-fmethod]'))) { ui.fMethod = ui.fMethod === b.dataset.fmethod ? '' : b.dataset.fmethod; render(); return; }
+      if (e.target.closest('[data-ftypesheet]')) { typeFilterSheet(); return; }
+      if (e.target.closest('[data-fmethodsheet]')) { methodFilterSheet(); return; }
       if (e.target.closest('[data-fcat]')) { categoryFilterSheet(); return; }
       const byId = (id) => S().transactions.find((t) => t.id === id);
       if ((b = e.target.closest('[data-edit]'))) { const tx = byId(b.dataset.edit); if (tx) txForm(tx); return; }
@@ -2753,34 +2757,96 @@
   }
 
   // Elegir el mes (o "Todos los meses", solo para la lista).
+  /* Elegir el mes. En la lista de Movimientos se pueden elegir varios
+     meses juntos, o "Todos los meses"; en Categorías y Calendario, uno. */
   function monthPickerSheet() {
     const months = new Set();
     const cm = curMonth();
     for (let i = -24; i <= 3; i++) months.add(addMonthsKey(cm, i));
     for (const t of S().transactions) months.add(monthKeyOf(t.date));
     const sorted = [...months].sort().reverse();
-    const allowAll = ui.view === 'movimientos';
+    const multi = ui.view === 'movimientos';
+    let all = multi && ui.fAllMonths;
+    const sel = new Set(multi && ui.fMonths && ui.fMonths.length > 1 ? ui.fMonths : [ui.month]);
     const row = (value, label, on) => `
-      <button type="button" class="pick-row${on ? ' on' : ''}" data-pickmonth="${esc(value)}">
+      <button type="button" class="pick-row${on ? ' on' : ''}" data-pickmonth="${esc(value)}" aria-pressed="${on}">
         <span class="cic" style="--c:var(--t2)">${spriteIcon('cal')}</span><span>${esc(label)}</span>${on ? spriteIcon('check') : ''}
       </button>`;
+    const listHTML = () => `<div class="pick-list">
+        ${multi ? row('all', 'Todos los meses', all) : ''}
+        ${sorted.map((m) => row(m, topbarMonthLabel(m) + (m === cm ? ' · actual' : ''), !all && sel.has(m))).join('')}
+      </div>`;
+    const applyLabel = () => (all ? 'Ver todos los meses' : sel.size > 1 ? `Ver ${sel.size} meses` : 'Ver el mes');
     const dlg = openPanel({
-      title: 'Mes',
-      body: `<div class="pick-list">
-        ${allowAll ? row('all', 'Todos los meses', ui.fAllMonths) : ''}
-        ${sorted.map((m) => row(m, topbarMonthLabel(m) + (m === cm ? ' · actual' : ''), !(allowAll && ui.fAllMonths) && m === ui.month)).join('')}
-      </div>`,
+      title: multi ? 'Meses' : 'Mes',
+      subtitle: multi ? 'Tocá uno o varios' : '',
+      body: listHTML(),
+      primary: multi ? {
+        label: applyLabel(),
+        onClick: (d) => {
+          if (all) { ui.fAllMonths = true; ui.fMonths = null; }
+          else {
+            const list = [...sel].sort();
+            ui.fAllMonths = false;
+            ui.month = list[list.length - 1];
+            ui.fMonths = list.length > 1 ? list : null;
+          }
+          closeSheet(d).then(render);
+        },
+      } : null,
       onClick(e, d) {
         const b = e.target.closest('[data-pickmonth]');
         if (!b) return;
-        if (b.dataset.pickmonth === 'all') ui.fAllMonths = true;
-        else { ui.fAllMonths = false; ui.month = b.dataset.pickmonth; }
-        closeSheet(d).then(render);
+        const v = b.dataset.pickmonth;
+        if (!multi) { ui.month = v; closeSheet(d).then(render); return; }
+        if (v === 'all') { all = !all; if (!all && !sel.size) sel.add(ui.month); }
+        else {
+          if (all) { all = false; sel.clear(); }
+          if (sel.has(v) && sel.size > 1) sel.delete(v); else sel.add(v);
+        }
+        const body = $('[data-shbody]', d);
+        const top = body.scrollTop;
+        body.innerHTML = listHTML();
+        body.scrollTop = top;
+        $('[data-primary]', d).textContent = applyLabel();
       },
     });
     const on = $('.pick-row.on', dlg);
     if (on) on.scrollIntoView({ block: 'center' });
   }
+
+  // Filtros de Movimientos en paneles desde abajo.
+  function filterSheet(title, options, current, apply) {
+    openPanel({
+      title,
+      body: `<div class="pick-list">${options.map((o) => `
+        <button type="button" class="pick-row${o.sub ? ' pick-child' : ''}${o.value === current ? ' on' : ''}" data-pickf="${esc(o.value)}">
+          <span class="cic" style="--c:${o.color || 'var(--t2)'}">${o.icon}</span><span>${esc(o.label)}</span>${o.value === current ? spriteIcon('check') : ''}
+        </button>`).join('')}</div>`,
+      onClick(e, dlg) {
+        const b = e.target.closest('[data-pickf]');
+        if (!b) return;
+        apply(b.dataset.pickf);
+        closeSheet(dlg).then(render);
+      },
+    });
+  }
+  function typeFilterSheet() {
+    const opts = [
+      { value: '', label: 'Todos', icon: spriteIcon('moves') },
+      { value: 'gasto', label: 'Gastos', icon: spriteIcon('up') },
+      { value: 'ingreso', label: 'Ingresos', icon: spriteIcon('down'), color: 'var(--brand-text)' },
+    ];
+    if (S().transactions.some((t) => t.type === 'transferencia')) opts.push({ value: 'transferencia', label: 'Transferencias', icon: spriteIcon('swap') });
+    filterSheet('Tipo', opts, ui.fType, (v) => { ui.fType = v; });
+  }
+  function methodFilterSheet() {
+    const opts = [{ value: '', label: 'Todas las cuentas', icon: spriteIcon('card') }]
+      .concat(S().methods.map((m) => ({ value: m.id, label: m.name, icon: iconSvg(methodIconName(m.id)), color: KIND_COLOR[m.kind] })))
+      .concat(S().savings.map((sv) => ({ value: sv.id, label: sv.name, icon: spriteIcon('wallet') })));
+    filterSheet('Cuenta', opts, ui.fMethod, (v) => { ui.fMethod = v; });
+  }
+
 
 
   /* ================= Vista: Categorías (análisis) ================= */
@@ -2838,25 +2904,22 @@
     const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * pow;
     return { top: Math.ceil(max / step) * step, step };
   }
-  // Unidad de un gráfico de montos: millones ("3,82") si llega al millón,
-  // miles ("850") si no. Los ejes dicen "1 M" / "500 k".
-  function moneyUnit(max) {
-    if (max >= 1e6) return { div: 1e6, dec: 2, axis: 'M', note: 'en millones' };
-    return { div: 1e3, dec: 0, axis: 'k', note: 'en miles' };
-  }
-  const unitNum = (v, u) => (hideAmounts ? '•••' : (v / u.div).toFixed(u.dec).replace('.', ','));
-  const unitAxis = (v, u) => (v === 0 ? '0' : `${(v / u.div).toLocaleString('es-AR', { maximumFractionDigits: 1 })} ${u.axis}`);
+  // Montos de los gráficos siempre en nominal ("$ 3.820.000"), sin
+  // abreviar en millones ni miles. Con el ojo activado, "•••".
+  const chartMoney = (v) => (hideAmounts ? '•••' : fmtPlain(v));
+  // Solo las líneas de la grilla (sin rótulos en el eje: cada punto ya
+  // lleva su monto).
+  const gridLines = (ticks, y, x0, x1) => ticks.map((v, i) =>
+    `<line x1="${x0}" x2="${x1}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="g-grid"${i ? ' stroke-dasharray="2 4"' : ''}/>`).join('');
 
   /* ---------- Movimientos › Categorías › General ---------- */
   // Ingresos y gastos por mes (los últimos 4 hasta el elegido): dos líneas
-  // suaves con marcadores y el valor arriba/abajo de cada punto. Si el
-  // último mes está en curso, ese tramo de gastos va punteado (el mes no
-  // terminó) y el área entre las dos líneas muestra lo que quedó.
+  // suaves con marcadores y el monto de cada punto. Si el último mes está
+  // en curso, ese tramo de gastos va punteado (el mes no terminó).
   function incomeExpenseChartSvg(rows, inProgress) {
     const G = Charts.g;
-    const W = 320, H = 156, x0 = 50, x1 = 290, yTop = 14, yBase = 130;
+    const W = 320, H = 156, x0 = 52, x1 = 268, yTop = 22, yBase = 130;
     const max = Math.max(1, ...rows.map((r) => Math.max(r.inc, r.exp)));
-    const u = moneyUnit(max);
     const { top, step } = niceScale(max, 4);
     const ticks = [];
     for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
@@ -2877,110 +2940,116 @@
         : G.marcador(exp[i][0], exp[i][1], 'var(--t1)', false);
       return G.marcador(inc[i][0], inc[i][1], 'var(--brand)', isLast) + expMk;
     }).join('');
-    // Ingresos arriba de su punto; gastos abajo (o arriba si gastó más).
     const labels = rows.map((r, i) => {
       const incAbove = r.inc >= r.exp;
       const iy = incAbove ? inc[i][1] - 10 : inc[i][1] + 18;
       const ey = incAbove ? exp[i][1] + 18 : exp[i][1] - 10;
-      return `<text x="${inc[i][0].toFixed(1)}" y="${Math.max(10, iy).toFixed(1)}" text-anchor="middle" class="g-lab"${i === last ? ' style="fill:var(--brand-text)"' : ''}>${unitNum(r.inc, u)}</text>
-        <text x="${exp[i][0].toFixed(1)}" y="${Math.min(yBase - 2, ey).toFixed(1)}" text-anchor="middle" class="g-lab">${unitNum(r.exp, u)}</text>`;
+      return `<text x="${inc[i][0].toFixed(1)}" y="${Math.max(11, iy).toFixed(1)}" text-anchor="middle" class="g-lab"${i === last ? ' style="fill:var(--brand-text)"' : ''}>${esc(chartMoney(r.inc))}</text>
+        <text x="${exp[i][0].toFixed(1)}" y="${Math.min(yBase - 2, ey).toFixed(1)}" text-anchor="middle" class="g-lab">${esc(chartMoney(r.exp))}</text>`;
     }).join('');
     const months = rows.map((r, i) => `<text x="${x(i).toFixed(1)}" y="148" text-anchor="middle"${i === last ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`).join('');
     const aria = `Ingresos y gastos por mes: ${rows.map((r, i) => `${r.label} ${hideAmounts ? '' : `${fmtPlain(r.inc)} y ${fmtPlain(r.exp)}`}${i === last && inProgress ? ' (en curso)' : ''}`).join('; ')}`;
-    return { unit: u, svg: `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}">
-      ${G.grillaY(ticks, y, 36, 306, (v) => unitAxis(v, u))}
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}">
+      ${gridLines(ticks, y, 8, 312)}
       ${area}${incLine}${expSolid}${expDash}${markers}${labels}${months}
-    </svg>` };
+    </svg>`;
   }
 
-  // Gastos acumulados día a día del mes elegido (escalones hasta hoy)
-  // contra el mes anterior completo (punteado), con los ingresos del mes y
-  // los ingresos − ahorro como líneas horizontales, la línea "Hoy" y la
-  // diferencia contra el mes anterior al mismo día.
-  function dailySpendChartSvg({ cur, prev, daysInMonth, upTo, income, incomeMinusSav, isCurrent, prevLabel }) {
+  // Gastos acumulados día a día: el mes elegido como una línea limpia (con
+  // degradé debajo) hasta hoy, el mes anterior completo punteado, los
+  // ingresos del mes y los ingresos − ahorro como referencias, y en el día
+  // de hoy el monto y la diferencia en % contra el mes anterior.
+  function dailySpendChartSvg({ cur, prev, daysInMonth, upTo, income, incomeMinusSav, isCurrent, prevLabel, prevShort }) {
     const G = Charts.g;
-    const W = 320, H = 176, x0 = 40, x1 = 304, yTop = 20, yBase = 150;
+    const W = 320, H = 180, x0 = 12, x1 = 300, yTop = 26, yBase = 150;
     const curPts = G.acumulado(cur, upTo);
     const prevDays = Object.keys(prev).length ? Math.max(...Object.keys(prev).map(Number)) : 0;
-    const prevPts = G.acumulado(prev, Math.max(prevDays, 1));
-    const max = Math.max(1, income, incomeMinusSav, ...curPts.map((p) => p[1]), ...prevPts.map((p) => p[1]));
-    const u = moneyUnit(max);
-    const { top, step } = niceScale(max * 1.04, 4);
+    const prevPts = prevDays ? G.acumulado(prev, prevDays) : [];
+    // La escala la marcan los gastos; las referencias de ingresos solo se
+    // dibujan si quedan cerca (si no, aplastan la curva contra el piso).
+    const spendMax = Math.max(1, ...curPts.map((p) => p[1]), ...prevPts.map((p) => p[1]));
+    const fits = (v) => v > 0 && v <= spendMax * 1.5;
+    const max = Math.max(spendMax, ...[income, incomeMinusSav].filter(fits));
+    const { top, step } = niceScale(max * 1.06, 4);
     const ticks = [];
     for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
     const x = G.escala([1, daysInMonth], [x0, x1]);
     const y = G.escala([0, top], [yBase, yTop]);
-    const curXY = curPts.map(([d, v]) => [x(d), y(v)]);
-    const prevXY = prevPts.map(([d, v]) => [x(Math.min(d, daysInMonth)), y(v)]);
-    const prevPath = prevXY.length > 1 ? `<path d="M${prevXY.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L')}" fill="none" stroke-width="1.6" stroke-dasharray="4 3" stroke-linejoin="round" style="stroke:var(--t3)"/>` : '';
-    const steps = curXY.length ? G.escalones(curXY) : '';
-    const area = curXY.length > 1 ? `<path d="${steps} L${curXY[curXY.length - 1][0].toFixed(1)} ${yBase} L${curXY[0][0].toFixed(1)} ${yBase} Z" style="fill:url(#gDia)"/>` : '';
-    const curPath = curXY.length ? `<path d="${steps}" fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--t1)"/>` : '';
-    const hline = (v, color, label, labelColor, below) => {
+    // Arranca en 0 el día 1, así la línea no empieza "en el aire".
+    const line = (pts) => [[x(1), y(0)], ...pts.map(([d, v]) => [x(Math.min(d, daysInMonth)), y(v)])];
+    const curXY = curPts.length ? line(curPts) : [];
+    const prevXY = prevPts.length ? line(prevPts) : [];
+    const path = (xy) => `M${xy.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L')}`;
+    const prevPath = prevXY.length > 1 ? `<path d="${path(prevXY)}" fill="none" stroke-width="1.6" stroke-dasharray="4 4" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--t3)"/>` : '';
+    const area = curXY.length > 1 ? `<path d="${path(curXY)} L${curXY[curXY.length - 1][0].toFixed(1)} ${yBase} L${curXY[0][0].toFixed(1)} ${yBase} Z" style="fill:url(#gDia)"/>` : '';
+    const curPath = curXY.length > 1 ? `<path d="${path(curXY)}" fill="none" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--t1)"/>` : '';
+    const hline = (v, color, label, below) => {
       if (!(v > 0)) return '';
       const yy = y(v);
-      return `<line x1="${x0}" x2="${x1}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke-width="1.5" stroke-dasharray="5 4" style="stroke:${color}"/>
-        <text x="${below ? x0 + 2 : x1}" y="${(below ? yy + 13 : yy - 5).toFixed(1)}" text-anchor="${below ? 'start' : 'end'}" style="fill:${labelColor};font-weight:600">${esc(label)} ${unitNum(v, u)} ${u.axis}</text>`;
+      return `<line x1="${x0}" x2="${x1}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke-width="1.2" stroke-dasharray="5 4" style="stroke:${color};opacity:.85"/>
+        <text x="${below ? x0 : x1}" y="${(below ? yy + 13 : yy - 5).toFixed(1)}" text-anchor="${below ? 'start' : 'end'}" style="fill:${color};font-weight:600">${esc(label)} ${esc(chartMoney(v))}</text>`;
     };
-    const incLines = hline(income, 'var(--brand)', 'Ingresos', 'var(--brand-text)', false)
-      + (Math.abs(income - incomeMinusSav) >= 1 ? hline(incomeMinusSav, 'var(--c-super)', 'Ingresos − ahorro', 'var(--c-super)', true) : '');
+    const refs = (fits(income) ? hline(income, 'var(--brand-text)', 'Ingresos', false) : '')
+      + (fits(incomeMinusSav) && Math.abs(income - incomeMinusSav) >= 1 ? hline(incomeMinusSav, 'var(--c-super)', 'Ingresos − ahorro', true) : '');
     let today = '';
-    if (curXY.length) {
+    if (curPts.length) {
       const [hx, hy] = curXY[curXY.length - 1];
-      const prevAt = prevPts[Math.min(upTo, prevPts.length) - 1];
       const curVal = curPts[curPts.length - 1][1];
-      // "Hoy" va justo arriba del punto más alto de ese día (el de este mes
-      // o el del anterior), para no pisarse con las líneas de ingresos.
-      const prevAtY = prevAt && prevDays ? y(prevAt[1]) : hy;
-      const hoyY = Math.max(yTop + 10, Math.min(hy, prevAtY) - 14);
-      today = (isCurrent ? `<line x1="${hx.toFixed(1)}" x2="${hx.toFixed(1)}" y1="${(hoyY + 4).toFixed(1)}" y2="${yBase}" stroke-width="1" stroke-dasharray="2 3" style="stroke:var(--t3)"/>
-        <text x="${hx.toFixed(1)}" y="${hoyY.toFixed(1)}" text-anchor="middle" style="fill:var(--t2);font-weight:600">Hoy</text>` : '');
-      if (prevAt && prevDays) {
-        const py = y(prevAt[1]);
-        const diff = curVal - prevAt[1];
-        today += `<circle cx="${hx.toFixed(1)}" cy="${py.toFixed(1)}" r="4" stroke-width="2" style="fill:var(--s1);stroke:var(--t3)"/>`;
-        if (Math.abs(py - hy) > 14 && !hideAmounts) {
-          const lx = hx + 9 > x1 - 70 ? hx - 9 : hx + 9;
-          const anchor = lx < hx ? 'end' : 'start';
-          const color = diff > 0 ? 'var(--neg)' : 'var(--brand-text)';
-          today += `<line x1="${lx.toFixed(1)}" x2="${lx.toFixed(1)}" y1="${(Math.min(py, hy) + 2).toFixed(1)}" y2="${(Math.max(py, hy) - 2).toFixed(1)}" stroke-width="1.5" style="stroke:${color}"/>
-            <text x="${(anchor === 'start' ? lx + 5 : lx - 5).toFixed(1)}" y="${((py + hy) / 2 + 4).toFixed(1)}" text-anchor="${anchor}" style="fill:${color};font-weight:700">≈ ${unitNum(Math.abs(diff), u)} ${u.axis} ${diff > 0 ? 'más' : 'menos'}</text>`;
-        }
+      const prevAt = prevPts.length ? prevPts[Math.min(upTo, prevPts.length) - 1][1] : null;
+      if (isCurrent) today += `<line x1="${hx.toFixed(1)}" x2="${hx.toFixed(1)}" y1="${hy.toFixed(1)}" y2="${yBase}" stroke-width="1" stroke-dasharray="2 3" style="stroke:var(--t3)"/>`;
+      if (prevAt != null) today += `<circle cx="${hx.toFixed(1)}" cy="${y(prevAt).toFixed(1)}" r="3.5" style="fill:var(--t3)"/>`;
+      today += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="9" style="fill:var(--t1);opacity:.12"/><circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="4.5" stroke-width="2.5" style="fill:var(--t1);stroke:var(--s1)"/>`;
+      // Rótulo del día: monto y % contra el mes anterior al mismo día.
+      const pct = prevAt > 0 ? Math.round(((curVal - prevAt) / prevAt) * 100) : null;
+      const right = hx < (x0 + x1) / 2;
+      const lx = right ? hx + 10 : hx - 10;
+      const anchor = right ? 'start' : 'end';
+      const ly = Math.max(yTop + 26, hy - 12);
+      today += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" class="g-halo" style="fill:var(--t1);font-weight:700">${esc(chartMoney(curVal))}</text>`;
+      if (pct != null && !hideAmounts) {
+        today += `<text x="${lx.toFixed(1)}" y="${(ly - 14).toFixed(1)}" text-anchor="${anchor}" class="g-halo" style="fill:${pct > 0 ? 'var(--neg)' : 'var(--brand-text)'};font-weight:600">${pct > 0 ? '▲' : '▼'} ${Math.abs(pct)}% vs. ${esc(prevShort)}</text>`;
       }
-      today += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="5" stroke-width="2.5" style="fill:var(--t1);stroke:var(--s1)"/>`;
     }
     const xTicks = [1, 5, 10, 15, 20, 25, daysInMonth].filter((d, i, a) => d <= daysInMonth && a.indexOf(d) === i && !(d !== daysInMonth && daysInMonth - d < 3));
-    const xLabels = xTicks.map((d) => `<text x="${x(d).toFixed(1)}" y="168" text-anchor="middle">${d}</text>`).join('');
+    const xLabels = xTicks.map((d) => `<text x="${x(d).toFixed(1)}" y="170" text-anchor="middle"${isCurrent && d === upTo ? ' class="g-sel"' : ''}>${d}</text>`).join('');
     const aria = `Gastos acumulados día a día${hideAmounts ? '' : `: ${fmtPlain(curPts.length ? curPts[curPts.length - 1][1] : 0)} al día ${upTo}; ${prevLabel} cerró en ${fmtPlain(prevPts.length ? prevPts[prevPts.length - 1][1] : 0)}`}.`;
     return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}">
-      <defs><linearGradient id="gDia" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--t1);stop-opacity:.16"/><stop offset="1" style="stop-color:var(--t1);stop-opacity:0"/></linearGradient></defs>
-      ${G.grillaY(ticks, y, 36, 306, (v) => unitAxis(v, u))}
-      ${incLines}${prevPath}${area}${curPath}${today}${xLabels}
+      <defs><linearGradient id="gDia" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--t1);stop-opacity:.18"/><stop offset="1" style="stop-color:var(--t1);stop-opacity:0"/></linearGradient></defs>
+      ${gridLines(ticks, y, x0, x1)}
+      ${refs}${prevPath}${area}${curPath}${today}${xLabels}
     </svg>`;
   }
 
   // Evolución de una categoría por mes: línea suave en su color, con el
-  // valor de cada mes y el último destacado.
-  function categoryEvoSvg(rows, color) {
+  // valor de cada mes (en pesos o en %) y el último destacado.
+  function categoryEvoSvg(rows, color, isPct) {
     const G = Charts.g;
-    const W = 320, H = 140, x0 = 44, x1 = 290, yTop = 22, yBase = 112;
-    const max = Math.max(1, ...rows.map((r) => r.value));
-    const u = moneyUnit(max);
+    const W = 320, H = 140, x0 = 40, x1 = 280, yTop = 24, yBase = 112;
+    const vals = rows.map((r) => r.value).filter((v) => v != null);
+    const max = Math.max(isPct ? 1 : 1, ...vals);
     const { top, step } = niceScale(max, 3);
     const ticks = [];
     for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
     const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
     const y = G.escala([0, top], [yBase, yTop]);
-    const pts = rows.map((r, i) => [x(i), y(r.value)]);
+    const pts = rows.map((r, i) => (r.value == null ? null : [x(i), y(r.value)]));
+    const solid = pts.filter(Boolean);
     const last = rows.length - 1;
-    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(rows.map((r) => `${r.label} ${hideAmounts ? '' : fmtPlain(r.value)}`).join(', '))}">
-      ${G.grillaY(ticks, y, 34, 312, (v) => unitAxis(v, u))}
-      ${pts.length > 1 ? `<path d="${G.lineaSuave(pts)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:${color}"/>` : ''}
-      ${pts.map((p, i) => G.marcador(p[0], p[1], color, i === last)).join('')}
-      ${rows.map((r, i) => `<text x="${pts[i][0].toFixed(1)}" y="${(pts[i][1] - 10).toFixed(1)}" text-anchor="middle" class="g-lab">${unitNum(r.value, u)}</text>`).join('')}
-      ${rows.map((r, i) => `<text x="${pts[i][0].toFixed(1)}" y="132" text-anchor="middle"${i === last ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`).join('')}
+    const lab = (v) => (v == null ? '' : isPct ? `${v.toFixed(v < 10 ? 1 : 0).replace('.', ',')}%` : chartMoney(v));
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(rows.map((r) => `${r.label} ${hideAmounts && !isPct ? '' : lab(r.value)}`).join(', '))}">
+      ${gridLines(ticks, y, 8, 312)}
+      ${solid.length > 1 ? `<path d="${G.lineaSuave(solid)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:${color}"/>` : ''}
+      ${pts.map((p, i) => (p ? G.marcador(p[0], p[1], color, i === last) : '')).join('')}
+      ${pts.map((p, i) => {
+        // En pesos con muchos meses los rótulos no entran en una fila:
+        // se alternan arriba y abajo de la línea (el último, siempre arriba).
+        const below = !isPct && rows.length > 4 && (last - i) % 2 === 1;
+        return p ? `<text x="${p[0].toFixed(1)}" y="${(below ? p[1] + 19 : p[1] - 10).toFixed(1)}" text-anchor="middle" class="g-lab g-halo"${i === last ? ' style="fill:var(--t1);font-weight:700"' : ''}>${esc(lab(rows[i].value))}</text>` : '';
+      }).join('')}
+      ${rows.map((r, i) => `<text x="${x(i).toFixed(1)}" y="132" text-anchor="middle"${i === last ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`).join('')}
     </svg>`;
   }
+
 
   // Dona plana con el % de la categoría más grande en el centro.
   function donutSvg(items, total) {
@@ -3065,23 +3134,26 @@
       const savMonth = savingsAtEndOf(mk, { excludeOpening: true }) - savingsAtEndOf(prevMk, { excludeOpening: true });
       const hasPrev = inPrevFull.some((t) => t.type === 'gasto');
       const diff = spentToDate - prevAtSameDay;
-      // Misma unidad que el gráfico de abajo (M o k), para que se lean igual.
-      const prevMonthTotal = sumDisp(inPrevFull.filter((t) => t.type === 'gasto'));
-      const uDiff = moneyUnit(Math.max(incomeMonth, spentToDate, prevMonthTotal, 1));
+      // Ingresos que no entran en la escala del gráfico: van acá como dato.
+      const spendMax = Math.max(1, spentToDate, sumDisp(inPrevFull.filter((t) => t.type === 'gasto')));
+      const refsOff = [];
+      if (incomeMonth > spendMax * 1.5) refsOff.push(`<span>Ingresos <b class="num money pos">${esc(fmtPlain(incomeMonth))}</b></span>`);
+      if (Math.abs(savMonth) >= 1 && incomeMonth - savMonth > spendMax * 1.5) refsOff.push(`<span>Ingresos − ahorro <b class="num money">${esc(fmtPlain(incomeMonth - savMonth))}</b></span>`);
+      const prevShort = isCurrent ? `${todayDay} ${monthShortLabel(prevMk).toLowerCase()}` : monthShortLabel(prevMk).toLowerCase();
+      const diffPct = prevAtSameDay > 0 ? fmtVarPct((diff / prevAtSameDay) * 100) : null;
       const diffChip = hasPrev && Math.abs(diff) >= 1
-        ? `<span class="dchip ${diff > 0 ? 'bad' : 'good'}">${diff > 0 ? '▲' : '▼'} ≈ ${unitNum(Math.abs(diff), uDiff)} ${uDiff.axis} vs. ${esc(monthShortLabel(prevMk).toLowerCase())}</span>` : '';
+        ? `<span class="dchip ${diff > 0 ? 'bad' : 'good'}">${diff > 0 ? '▲' : '▼'} ${diffPct != null ? `${diffPct}% · ` : ''}<span class="money">${esc(fmtPlain(Math.abs(diff)))}</span> ${diff > 0 ? 'más' : 'menos'} que al ${esc(prevShort)}</span>` : '';
 
       el.innerHTML = `${chipsHTML}
         <section class="k-card">
-          <div class="k-card-h k-card-h-tight"><h2>Ingresos y gastos por mes</h2>${chart ? `<span class="t3 k-card-note">${chart.unit.note}</span>` : ''}</div>
+          <div class="k-card-h k-card-h-tight"><h2>Ingresos y gastos por mes</h2>${chart ? `<button type="button" class="link" data-iedetail>Ver detalle${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}</button>` : ''}</div>
           ${chart ? `
           <div class="legend">
             <span><i class="lg-line" style="border-color:var(--brand)"></i>Ingresos</span>
             <span><i class="lg-line" style="border-color:var(--t1)"></i>Gastos</span>
             ${isCurrent ? `<span><i class="lg-line lg-dash" style="border-color:var(--t1)"></i>${esc(monthShortLabel(mk))} en curso</span>` : ''}
           </div>
-          ${chart.svg}
-          <p class="k-note">Lo sombreado es lo que quedó entre lo que entró y lo que salió cada mes.</p>`
+          <div class="ie-tap" data-iedetail role="button" tabindex="0" aria-label="Ver los totales de cada mes">${chart}</div>`
           : '<div class="empty">Todavía no hay movimientos para comparar meses.</div>'}
         </section>
 
@@ -3096,9 +3168,11 @@
             <span><i class="lg-line" style="border-color:var(--t1)"></i>${esc(monthShortLabel(mk))}</span>
             ${hasPrev ? `<span><i class="lg-line lg-dash" style="border-color:var(--t3)"></i>${esc(monthShortLabel(prevMk))}</span>` : ''}
           </div>
-          ${dailySpendChartSvg({ cur: curDaily, prev: hasPrev ? prevDaily : {}, daysInMonth: daysInMk, upTo: cutDay, income: incomeMonth, incomeMinusSav: incomeMonth - savMonth, isCurrent, prevLabel: monthName(prevMk) })}
+          ${refsOff.length ? `<div class="daily-refs">${refsOff.join('')}</div>` : ''}
+          ${dailySpendChartSvg({ cur: curDaily, prev: hasPrev ? prevDaily : {}, daysInMonth: daysInMk, upTo: cutDay, income: incomeMonth, incomeMinusSav: incomeMonth - savMonth, isCurrent, prevLabel: monthName(prevMk), prevShort })}
         </section>`;
       wireCatKindChips(el);
+      $$('[data-iedetail]', el).forEach((b) => b.addEventListener('click', () => incomeExpenseDetail(mk)));
       return;
     }
 
@@ -3106,18 +3180,27 @@
     const isInc = kind === 'ingreso';
     const type = isInc ? 'ingreso' : 'gasto';
     const breakdown = categoryBreakdown(inMonth.filter((t) => t.type === type)).filter((g) => g.total > 0);
-    const prevBreakdown = categoryBreakdown(inPrevSameDay.filter((t) => t.type === type));
+    // Acá la variación va contra el mes anterior COMPLETO.
+    const prevBreakdown = categoryBreakdown(inPrevFull.filter((t) => t.type === type));
     const prevTotals = new Map(prevBreakdown.map((g) => [g.id, g.total]));
+    const prevSubTotals = new Map(prevBreakdown.flatMap((g) => g.subs.map((sb) => [sb.id, sb.value])));
     const total = breakdown.reduce((a, g) => a + g.total, 0);
     const incMonth = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
+    const expMonth = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
+    // Cuánto representa un monto sobre los gastos y sobre los ingresos del mes.
+    const pctTxt = (v, base) => (base > 0 ? `${fmtShare((v / base) * 100)}%` : '–');
+    const shareLine = (v, short) => isInc
+      ? `${pctTxt(v, incMonth)} de ${short ? 'los' : 'tus'} ingresos`
+      : short ? `${pctTxt(v, expMonth)} gastos · ${pctTxt(v, incMonth)} ingresos`
+        : `${pctTxt(v, expMonth)} de tus gastos · ${pctTxt(v, incMonth)} de tus ingresos`;
     const pctOf = (v) => (total > 0 ? Math.round((v / total) * 100) : 0);
     // Dona: hasta 5 categorías + "Otras".
     const DONUT_MAX = 5;
     const donutItems = breakdown.slice(0, DONUT_MAX).map((g) => ({ label: g.name, value: g.total, color: g.id === '__sin' ? OTROS_COLOR : catColor(g.id) }));
     const restDonut = breakdown.slice(DONUT_MAX).reduce((a, g) => a + g.total, 0);
     if (restDonut > 0) donutItems.push({ label: 'Otras', value: restDonut, color: OTROS_COLOR });
-    // Variación contra el mismo día del mes anterior. En gastos, subir es
-    // malo (rojo); en ingresos, subir es bueno (verde).
+    // Variación contra el mes anterior completo. En gastos, subir es malo
+    // (rojo); en ingresos, subir es bueno (verde).
     const varChip = (cur, prev) => {
       if (!(prev > 0)) return cur > 0 ? '<span class="dchip flat">nuevo</span>' : '';
       const pctVar = fmtVarPct(((cur - prev) / prev) * 100);
@@ -3133,11 +3216,12 @@
       const icon = g.id === '__sin' ? spriteIcon('more') : iconSvg(categoryIconName(g.id));
       const subs = g.subs.filter((s) => s.value > 0);
       const detail = open ? `
+        <div class="crow sub crow-info"><span class="t2">${esc(shareLine(g.total))}</span></div>
         ${subs.map((s) => `
         <button type="button" class="crow sub" data-catmoves="${esc(g.id)}" data-subid="${esc(s.id)}">
           <div class="l1"><b>${esc(s.name)}</b><span class="num money t2">${esc(fmtPlain(s.value))}</span></div>
+          <div class="l2"><span class="t3">${esc(shareLine(s.value, true))}</span>${varChip(s.value, prevSubTotals.get(s.id) || 0)}</div>
         </button>`).join('')}
-        ${!isInc && incMonth > 0 ? `<div class="crow sub crow-info"><span class="t2">Es el ${Math.round((g.total / incMonth) * 100)}% de lo que entró en ${esc(monthName(mk))}</span></div>` : ''}
         <div class="crow sub"><button type="button" class="link" data-catmoves="${esc(g.id)}">Ver movimientos de ${esc(g.name)}${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}</button></div>` : '';
       return `
       <div class="${open ? 'expanded' : ''}">
@@ -3180,22 +3264,37 @@
     const methodRows = [...byMethod.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
       .map(([id, value], i) => ({ id, value, name: id === '__sin' ? 'Sin medio de pago' : methodName(id), color: NEUTRAL_PALETTE[Math.min(i + 1, NEUTRAL_PALETTE.length - 1)] }));
 
-    // Evolución de una categoría en los últimos 6 meses.
+    // Evolución de una categoría (o subcategoría) en los últimos 6 meses:
+    // en pesos, en % de los gastos o en % de los ingresos de cada mes.
     const evoMonths = [];
     for (let i = 5; i >= 0; i--) evoMonths.push(addMonthsKey(mk, -i));
-    const evoOptions = S().categories.filter((c) => c.type === type && !c.parentId)
-      .filter((c) => txs.some((t) => t.type === type && topCategoryOf(t.categoryId) === c.id && evoMonths.includes(monthKeyOf(t.date))));
+    const evoTxs = txs.filter((t) => t.type === type && evoMonths.includes(monthKeyOf(t.date)));
+    const evoOptions = [];
+    for (const c of S().categories.filter((x) => x.type === type && !x.parentId)) {
+      if (!evoTxs.some((t) => topCategoryOf(t.categoryId) === c.id)) continue;
+      evoOptions.push({ id: c.id, name: c.name, top: c.id });
+      for (const sc of S().categories.filter((x) => x.parentId === c.id)) {
+        if (evoTxs.some((t) => t.categoryId === sc.id)) evoOptions.push({ id: sc.id, name: sc.name, top: c.id, sub: true });
+      }
+    }
     const evoKey = isInc ? 'catEvoInc' : 'catEvoExp';
-    if (!evoOptions.some((c) => c.id === ui[evoKey])) ui[evoKey] = breakdown[0] && breakdown[0].id !== '__sin' ? breakdown[0].id : (evoOptions[0] ? evoOptions[0].id : null);
-    const evoId = ui[evoKey];
-    const evoRows = evoId ? evoMonths.map((m) => {
+    if (!evoOptions.some((o) => o.id === ui[evoKey])) ui[evoKey] = breakdown[0] && breakdown[0].id !== '__sin' ? breakdown[0].id : (evoOptions[0] ? evoOptions[0].id : null);
+    const evoOpt = evoOptions.find((o) => o.id === ui[evoKey]);
+    const evoId = evoOpt ? evoOpt.id : null;
+    const evoMode = ['nom', 'gastos', 'ingresos'].includes(ui.catEvoMode) ? ui.catEvoMode : 'nom';
+    const evoRows = evoOpt ? evoMonths.map((m) => {
       const cut = m === curMonth() ? todayDay : 99;
-      return {
-        label: monthShortLabel(m).toLowerCase(),
-        value: sumDisp(txs.filter((t) => t.type === type && monthKeyOf(t.date) === m && Number(t.date.slice(8, 10)) <= cut && topCategoryOf(t.categoryId) === evoId)),
-      };
+      const list = txs.filter((t) => monthKeyOf(t.date) === m && Number(t.date.slice(8, 10)) <= cut);
+      const v = sumDisp(list.filter((t) => t.type === type && (evoOpt.sub ? t.categoryId === evoOpt.id : topCategoryOf(t.categoryId) === evoOpt.id)));
+      let value = v;
+      if (evoMode !== 'nom') {
+        const base = sumDisp(list.filter((t) => t.type === (evoMode === 'gastos' ? 'gasto' : 'ingreso')));
+        value = base > 0 ? (v / base) * 100 : null;
+      }
+      return { label: monthShortLabel(m).toLowerCase(), value, raw: v };
     }) : [];
-    const evoFirst = evoRows.findIndex((r) => r.value > 0);
+    const evoFirst = evoRows.findIndex((r) => r.raw > 0);
+    const evoParent = evoOpt && evoOpt.sub ? catName(evoOpt.top) : '';
 
     el.innerHTML = `${chipsHTML}
       <section class="k-card donut-card">
@@ -3207,8 +3306,7 @@
         </div>
       </section>
 
-      ${breakdown.length || zeroGroups.length ? `<div class="group cat-group">${rowsHTML}${zeroHTML}</div>
-      ${breakdown.length ? `<p class="k-note k-note-out">Variación contra el ${isCurrent ? `${todayDay} de ${esc(monthName(prevMk))}` : esc(monthName(prevMk))}.</p>` : ''}` : ''}
+      ${breakdown.length || zeroGroups.length ? `<div class="group cat-group">${rowsHTML}${zeroHTML}</div>` : ''}
 
       ${methodRows.length ? `
       <section class="k-card">
@@ -3226,10 +3324,15 @@
       ${evoOptions.length ? `
       <section class="k-card">
         <div class="k-card-h"><h2>Evolución por categoría</h2></div>
-        <div class="chips chips-scroll evo-chips">
-          ${evoOptions.map((c) => `<button type="button" class="chip${c.id === evoId ? ' on' : ''}" data-evo="${esc(c.id)}">${esc(c.name)}</button>`).join('')}
+        <button type="button" class="evo-pick" data-evopick>
+          <span class="cic" style="--c:${catColor(evoOpt.top)}">${iconSvg(categoryIconName(evoOpt.top))}</span>
+          <span class="evo-pick-name">${evoParent ? `<small class="t3">${esc(evoParent)} ›</small> ` : ''}${esc(evoOpt.name)}</span>
+          ${spriteIcon('cd').replace('class="ic"', 'class="ic chev"')}
+        </button>
+        <div class="tseg tseg-small evo-mode" role="tablist" aria-label="Mostrar en">
+          ${[['nom', 'En $'], ['gastos', '% de gastos'], ['ingresos', '% de ingresos']].map(([k, l]) => `<button type="button" role="tab" class="${evoMode === k ? 'on' : ''}" aria-selected="${evoMode === k}" data-evomode="${k}">${l}</button>`).join('')}
         </div>
-        ${evoFirst >= 0 ? categoryEvoSvg(evoRows.slice(evoFirst), catColor(evoId)) : '<div class="empty">Sin movimientos en los últimos meses.</div>'}
+        ${evoFirst >= 0 ? categoryEvoSvg(evoRows.slice(evoFirst), catColor(evoOpt.top), evoMode !== 'nom') : '<div class="empty">Sin movimientos en los últimos meses.</div>'}
       </section>` : ''}`;
 
     wireCatKindChips(el);
@@ -3263,7 +3366,43 @@
         categoryCompareDialog(id === '__sin' ? 'Sin medio de pago' : methodName(id), mk, pick(monthAll), prevMk, pick(inPrevFull));
         return;
       }
-      if ((b = e.target.closest('[data-evo]'))) { ui[evoKey] = b.dataset.evo; render(); }
+      if ((b = e.target.closest('[data-evomode]'))) { ui.catEvoMode = b.dataset.evomode; render(); return; }
+      if (e.target.closest('[data-evopick]')) {
+        filterSheet('Categoría', evoOptions.map((o) => ({
+          value: o.id, label: o.name, sub: o.sub,
+          icon: o.sub ? '' : iconSvg(categoryIconName(o.id)), color: catColor(o.top),
+        })), evoId, (v) => { ui[evoKey] = v; });
+      }
+    });
+  }
+  // Totales de ingresos y gastos de cada mes (los últimos 12 con datos).
+  function incomeExpenseDetail(mk) {
+    const txs = S().transactions;
+    const rows = [];
+    for (let i = 0; i < 12; i++) {
+      const m = addMonthsKey(mk, -i);
+      const list = txs.filter((t) => monthKeyOf(t.date) === m && (m !== curMonth() || t.date <= todayStr()));
+      const inc = sumDisp(list.filter((t) => t.type === 'ingreso'));
+      const exp = sumDisp(list.filter((t) => t.type === 'gasto'));
+      if (inc > 0 || exp > 0) rows.push({ m, inc, exp });
+    }
+    const tot = rows.reduce((a, r) => ({ inc: a.inc + r.inc, exp: a.exp + r.exp }), { inc: 0, exp: 0 });
+    const line = (label, inc, exp, cls = '') => {
+      const d = inc - exp;
+      return `<div class="ie-row${cls}">
+        <div class="ie-m">${label}</div>
+        <span class="num money ie-d${d < 0 ? ' neg' : ''}">${d < 0 ? '−' : ''}${esc(fmtPlain(Math.abs(d)))}</span>
+        <div class="ie-sub"><span>Entró <b class="num money pos">+${esc(fmtPlain(inc))}</b></span><span>Salió <b class="num money">−${esc(fmtPlain(exp))}</b></span></div>
+      </div>`;
+    };
+    openPanel({
+      title: 'Ingresos y gastos',
+      subtitle: rows.length ? `Últimos ${rows.length} ${rows.length === 1 ? 'mes' : 'meses'}` : '',
+      body: rows.length ? `<div class="ie-table">
+        <div class="ie-row ie-head"><span>Mes</span><span>Quedó</span></div>
+        ${rows.map((r) => line(`${esc(monthShortLabel(r.m))}${r.m === curMonth() ? '<small class="t3"> en curso</small>' : ''}`, r.inc, r.exp)).join('')}
+        ${rows.length > 1 ? line('Total', tot.inc, tot.exp, ' ie-total') : ''}
+      </div>` : '<div class="empty">Sin movimientos.</div>',
     });
   }
   function wireCatKindChips(el) {
@@ -3823,54 +3962,64 @@
     const methods = S().methods;
     // Reordenar va en un modo "Editar" aparte; borrar y editar, detrás del ⋯.
     const editMode = !!ui.editMethods;
+    const chev = spriteIcon('cr').replace('class="ic"', 'class="ic chev"');
+    // A la derecha de cada cuenta: el ⋯ (editar, borrar) o, en modo
+    // Ordenar, las flechas para moverla.
+    const tail = (m) => {
+      const i = methods.indexOf(m);
+      return editMode ? `<span class="acc-reorder">
+          <button type="button" class="icb" data-move="${esc(m.id)}:-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir ${esc(m.name)}">${spriteIcon('up')}</button>
+          <button type="button" class="icb" data-move="${esc(m.id)}:1" ${i === methods.length - 1 ? 'disabled' : ''} aria-label="Bajar ${esc(m.name)}">${spriteIcon('down')}</button>
+        </span>`
+        : `<button type="button" class="icb ghost" data-more="${esc(m.id)}" aria-label="Opciones de ${esc(m.name)}">${spriteIcon('more')}</button>`;
+    };
+    const cards = methods.filter((m) => m.kind === 'credito');
+    const others = methods.filter((m) => m.kind !== 'credito');
+    const monthLabel = new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(new Date());
+    const cardHTML = (m) => {
+      const cy = cardCycle(m);
+      const nOv = Object.keys(m.overrides || {}).length;
+      return `<section class="k-card acc-card">
+        <div class="acc-head">
+          <span class="cic" style="--c:${KIND_COLOR[m.kind] || OTROS_COLOR}">${iconSvg(methodIconName(m.id))}</span>
+          <div class="row-main"><div class="tt">${esc(m.name)}</div><div class="st">Tarjeta de crédito${nOv ? ` · ${nOv} resumen${nOv === 1 ? '' : 'es'} cargado${nOv === 1 ? '' : 's'}` : ''}</div></div>
+          ${tail(m)}
+        </div>
+        ${cardCycleTimeline(m)}
+        ${cy ? `<div class="acc-lines">
+          <button type="button" class="acc-line" data-detail="cur:${esc(m.id)}"><span>Resumen en curso</span><span class="num">${fmtDisp(cardPeriodTotal(m.id, cy.prevClose || new Date(0), cy.close))}</span>${chev}</button>
+          ${cy.prevPrevClose ? `<button type="button" class="acc-line" data-detail="last:${esc(m.id)}"><span>Último resumen</span><span class="num">${fmtDisp(cardPeriodTotal(m.id, cy.prevPrevClose, cy.prevClose))}</span>${chev}</button>` : ''}
+        </div>` : ''}
+        <div class="acc-actions">
+          <button type="button" class="btn btn-sm btn-sec" data-adjust="${esc(m.id)}">Resúmenes</button>
+          ${cy ? `<button type="button" class="link" data-analysis="${esc(m.id)}">Cómo vengo${chev}</button>` : ''}
+        </div>
+      </section>`;
+    };
+    const otherRow = (m) => {
+      const monthTotal = sumDisp(S().transactions.filter(
+        (t) => t.methodId === m.id && t.type === 'gasto' && monthKeyOf(t.date) === curMonth()));
+      return `<div class="row acc-row">
+        <button type="button" class="acc-row-main" data-detail="month:${esc(m.id)}">
+          <span class="cic" style="--c:${KIND_COLOR[m.kind] || OTROS_COLOR}">${iconSvg(methodIconName(m.id))}</span>
+          <div class="row-main"><div class="tt">${esc(m.name)}</div><div class="st">Gastado en ${esc(monthLabel)}</div></div>
+          <span class="num acc-amt">${fmtDisp(monthTotal)}</span>
+        </button>
+        ${tail(m)}
+      </div>`;
+    };
     el.innerHTML = `
-      <div class="bar">
-        <h2 class="ovl">Tarjetas y medios</h2>
+      <div class="bar acc-bar">
+        <h2 class="ovl">Tarjetas de crédito</h2>
         <span class="bar-actions">
           ${methods.length > 1 ? `<button type="button" class="link" id="btn-edit-methods">${editMode ? 'Listo' : 'Ordenar'}</button>` : ''}
           <button type="button" class="link" id="btn-add-method">${spriteIcon('plus')}Agregar</button>
         </span>
       </div>
-      <div class="entity-grid">
-        ${methods.map((m, i) => {
-          let details = '';
-          if (m.kind === 'credito') {
-            const cy = cardCycle(m);
-            const nOv = Object.keys(m.overrides || {}).length;
-            const totalsHTML = cy
-              ? `<dl>
-                  <dt>Resumen en curso</dt><dd><button type="button" class="dd-link" data-detail="cur:${esc(m.id)}">${fmtDisp(cardPeriodTotal(m.id, cy.prevClose || new Date(0), cy.close))}</button></dd>
-                  ${cy.prevPrevClose ? `<dt>Último resumen</dt><dd><button type="button" class="dd-link" data-detail="last:${esc(m.id)}">${fmtDisp(cardPeriodTotal(m.id, cy.prevPrevClose, cy.prevClose))}</button></dd>` : ''}
-                  ${nOv ? `<dt>Resúmenes cargados</dt><dd>${nOv}</dd>` : ''}
-                </dl>`
-              : '';
-            details = `${cardCycleTimeline(m)}${totalsHTML}
-              ${cy ? `<button type="button" class="link-btn ca-open" data-analysis="${esc(m.id)}">Ver cómo vengo con esta tarjeta ›</button>` : ''}`;
-          } else {
-            const monthTotal = sumDisp(S().transactions.filter(
-              (t) => t.methodId === m.id && t.type === 'gasto' && monthKeyOf(t.date) === curMonth()));
-            details = `<dl><dt>Gastado este mes</dt><dd><button type="button" class="dd-link" data-detail="month:${esc(m.id)}">${fmtDisp(monthTotal)}</button></dd></dl>`;
-          }
-          const kindColor = KIND_COLOR[m.kind] || OTROS_COLOR;
-          return `<div class="entity entity-method" style="--kind-color:${kindColor}">
-            <div class="entity-head">
-              <span class="entity-name">${esc(m.name)}</span>
-              <span class="entity-kind">${KIND_LABEL[m.kind] || m.kind}</span>
-            </div>
-            ${details}
-            <div class="entity-actions">
-              ${editMode ? `<div class="entity-reorder">
-                <button type="button" class="icb" data-move="${esc(m.id)}:-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir ${esc(m.name)}">${spriteIcon('up')}</button>
-                <button type="button" class="icb" data-move="${esc(m.id)}:1" ${i === methods.length - 1 ? 'disabled' : ''} aria-label="Bajar ${esc(m.name)}">${spriteIcon('down')}</button>
-              </div>` : `
-              ${m.kind === 'credito' ? `<button class="btn btn-sm btn-sec" data-adjust="${esc(m.id)}">Resúmenes</button>` : '<span></span>'}
-              <button type="button" class="icb" data-more="${esc(m.id)}" aria-label="Opciones de ${esc(m.name)}">${spriteIcon('more')}</button>`}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-      ${methods.some((m) => m.kind === 'credito') ? '' :
-        '<div class="card"><div class="empty">Todavía no cargaste ninguna tarjeta de crédito. Agregala y después cargá el cierre y vencimiento de tu resumen actual con "Resúmenes".</div></div>'}`;
+      ${cards.length ? cards.map(cardHTML).join('')
+        : '<div class="k-card"><div class="empty">Todavía no cargaste ninguna tarjeta de crédito. Agregala y después cargá el cierre y vencimiento con "Resúmenes".</div></div>'}
+      ${others.length ? `<h2 class="ovl set-h">Otras cuentas</h2>
+      <div class="group">${others.map(otherRow).join('')}</div>` : ''}`;
 
     $('#btn-add-method', el).addEventListener('click', () => methodForm(null));
     const editBtn = $('#btn-edit-methods', el);
@@ -3923,7 +4072,6 @@
         (t) => t.type === 'gasto' && t.methodId === id && t.date > a && t.date <= bStr);
       methodPeriodDetailDialog(`${m.name} · ${kind === 'cur' ? 'Resumen en curso' : 'Último resumen'}`, txs);
     }));
-;
   }
 
   /* Una fila de movimiento, igual en Movimientos y en todos los pop-ups
@@ -7297,7 +7445,7 @@
     const target = delta ? addMonthsKey(ui.month, delta) : curMonth();
     if (target === ui.month) return;
     const dir = target > ui.month ? 'next' : 'prev';
-    const go = () => { ui.month = target; ui.fAllMonths = false; render(); };
+    const go = () => { ui.month = target; ui.fAllMonths = false; ui.fMonths = null; render(); };
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (!document.startViewTransition || reduce) { go(); return; }
     const root = document.documentElement;
@@ -7393,7 +7541,7 @@
       titleBarHTML = `
       <div class="bar">
         <h1 class="largetitle">Movimientos</h1>
-        <button type="button" class="chip" data-monthchip>${esc(ui.view === 'movimientos' && ui.fAllMonths ? 'Todos los meses' : monthShortLabel(ui.month) + ' ' + ui.month.slice(0, 4))}${spriteIcon('cd')}</button>
+        <button type="button" class="chip" data-monthchip>${esc(ui.view === 'movimientos' && ui.fAllMonths ? 'Todos los meses' : ui.view === 'movimientos' && ui.fMonths && ui.fMonths.length > 1 ? `${ui.fMonths.length} meses` : monthShortLabel(ui.month) + ' ' + ui.month.slice(0, 4))}${spriteIcon('cd')}</button>
       </div>`;
     } else if (grp && grp.key === 'cuentas') {
       titleBarHTML = '<h1 class="largetitle">Cuentas</h1>';

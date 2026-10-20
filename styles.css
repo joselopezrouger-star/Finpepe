@@ -2334,3 +2334,64 @@ body.syncing .view-content .big small { color: transparent; }
 .title-row { min-height: 0; }
 .title-row .largetitle { margin: 0; }
 .topbar .back-btn + .section-title { margin-left: 4px; }
+.filter-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.filter-row .chip { justify-content: space-between; min-width: 0; height: 40px; }
+.filter-row .chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Categorías: detalle por mes y evolución ---------- */
+.ie-tap { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ie-table { display: grid; }
+.ie-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline;
+  padding: 12px 2px; border-top: 1px solid var(--line);
+}
+.ie-m { font: 600 15px/1.2 var(--f-text); min-width: 0; }
+.ie-m small { font-weight: 500; font-size: 12px; }
+.ie-d { font-size: 16px; font-weight: 600; text-align: right; white-space: nowrap; }
+.ie-d.neg { color: var(--neg); }
+.ie-sub { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--t2); }
+.ie-sub b { font-weight: 600; color: var(--t1); }
+.ie-sub b.pos { color: var(--brand-text); }
+.ie-head { border-top: 0; padding-top: 0; font: 600 11px/1 var(--f-text); color: var(--t3); text-transform: uppercase; letter-spacing: .04em; }
+.ie-total { border-top: 1.5px solid var(--s3); }
+.ie-total .ie-m { font-weight: 700; }
+.daily-refs { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 2px 0 4px; font-size: 12.5px; color: var(--t2); }
+.daily-refs b { font-weight: 600; color: var(--t1); }
+.daily-refs b.pos { color: var(--brand-text); }
+.gchart .g-halo { paint-order: stroke; stroke: var(--s1); stroke-width: 4px; stroke-linejoin: round; }
+.evo-pick {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 6px 10px 6px 6px; margin-bottom: 10px;
+  border: 0; border-radius: 12px; background: var(--s2); color: var(--t1); font: 600 15px/1.2 var(--f-text); text-align: left; cursor: pointer;
+}
+.evo-pick .cic { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+.evo-pick-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evo-pick-name small { font-size: 12px; font-weight: 500; }
+.evo-mode { margin-bottom: 8px; }
+.pick-row.pick-child { padding-left: 30px; min-height: 44px; font-size: 14px; color: var(--t2); }
+.pick-row.pick-child .cic { width: 8px; height: 8px; background: var(--c); }
+.crow.sub .l2 { margin-top: 4px; }
+
+/* ---------- Cuentas (rediseño) ---------- */
+.acc-bar { margin-bottom: -2px; }
+.acc-card { display: grid; gap: 12px; }
+.acc-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.acc-head .cic, .acc-row .cic { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; }
+.acc-card .cycle-card { background: var(--s2); border-radius: 14px; }
+.acc-card .cycle-days { color: var(--t1); }
+.acc-lines { display: grid; }
+.acc-line {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; gap: 8px; align-items: center; min-height: 44px;
+  padding: 0 2px; border: 0; background: transparent; color: var(--t2); font: 500 14px/1.2 var(--f-text); text-align: left; cursor: pointer;
+}
+.acc-line + .acc-line { border-top: 1px solid var(--line); }
+.acc-line .num { color: var(--t1); font-size: 16px; font-weight: 600; }
+.acc-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.acc-actions .link .chev { margin-left: 2px; }
+.acc-row { grid-template-columns: minmax(0, 1fr) auto; padding: 0 6px 0 0; gap: 0; }
+.acc-row + .acc-row::before { content: ''; position: absolute; top: 0; left: 66px; right: 0; height: 1px; background: var(--line); }
+.acc-row-main {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 64px;
+  padding: 10px 4px 10px 14px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0;
+}
+.acc-amt { font-size: 16px; font-weight: 600; white-space: nowrap; }
+.acc-reorder { display: inline-flex; gap: 6px; }
