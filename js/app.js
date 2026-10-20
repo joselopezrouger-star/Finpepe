@@ -2000,7 +2000,7 @@
   /* Panel inferior genérico: agarradera, X, título, un ícono de acción
      opcional arriba a la derecha (ej. borrar), el contenido y a lo sumo un
      botón primario abajo. onClick recibe los toques del contenido. */
-  function openPanel({ title, body, primary, action, onClick }) {
+  function openPanel({ title, subtitle, body, primary, action, onClick }) {
     const dlg = $('#dialog');
     dlg.className = 'sheet sheet-panel';
     dlg.innerHTML = `
@@ -2008,7 +2008,7 @@
         <div class="grab" aria-hidden="true"></div>
         <div class="sh-h">
           <button type="button" class="icb" data-close aria-label="Cerrar">${spriteIcon('x')}</button>
-          <h2>${esc(title)}</h2>
+          <div class="sh-title"><h2>${esc(title)}</h2>${subtitle ? `<div class="sh-sub">${esc(subtitle)}</div>` : ''}</div>
           ${action ? `<button type="button" class="icb${action.danger ? ' icb-danger' : ''}" data-action aria-label="${esc(action.label)}">${action.icon}</button>` : '<span></span>'}
         </div>
       </div>
@@ -3517,132 +3517,205 @@
     };
   }
 
+  /* "Cómo vengo" con una tarjeta, en un panel inferior: primero la
+     respuesta (veredicto y proyección al cierre), después el detalle. */
   function cardAnalysisDialog(cardId) {
     const card = methodById(cardId);
     if (!card) return;
     const A = cardAnalysis(card);
     const short = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
     if (!A) {
-      openDialog(`${card.name} · cómo vengo`, '<div class="empty">Cargá al menos el resumen anterior y el actual desde "Resúmenes" para ver cómo venís con esta tarjeta.</div>', { submitLabel: 'Cerrar', viewOnly: true });
+      openPanel({
+        title: 'Cómo vengo', subtitle: card.name,
+        body: '<div class="empty">Cargá al menos el resumen anterior y el actual desde "Resúmenes" para ver cómo venís con esta tarjeta.</div>',
+      });
       return;
     }
     const { cy, history, verdict } = A;
+    // Montos cortos para las etiquetas de la barra y del gráfico ("$ 1,04 M").
+    const shortMoney = (v) => (Math.abs(v) >= 1e6
+      ? `${disp() === 'USD' ? 'US$' : '$'} ${(v / 1e6).toFixed(2).replace('.', ',')} M`
+      : fmtPlain(v));
+    const llevas = A.spent + A.committed;
+    const extra = Math.max(0, A.projected - llevas);
     const last = history[0];
-    const varPct = (cur, prev) => {
-      if (!(prev > 0)) return '';
-      const p = ((cur - prev) / prev) * 100;
-      const lbl = fmtVarPct(p);
-      if (lbl == null) return '<span class="cat-mom-pct flat">=</span>';
-      return `<span class="cat-mom-pct ${p > 0 ? 'up' : 'down'}">${p > 0 ? '▲' : '▼'}${lbl}%</span>`;
-    };
+    const isCap = A.capOwn != null;
+    // de/del, a/al según la referencia ("tu tope" / "el promedio de…").
+    const refWith = (prep) => (A.refLabel.startsWith('el ') ? `${prep}l ${A.refLabel.slice(3)}` : `${prep} ${A.refLabel}`);
 
-    // Barra del resumen en curso: gastado + ya cargado a futuro + proyección, contra la referencia.
-    // La barra termina un poco después del resumen anterior (marcado en
-    // gris), para leer de un vistazo cuánto representa lo de este ciclo
-    // contra el último; si la proyección o la referencia lo pasan, la
-    // escala se estira para que entren.
-    const prevTotal = last ? last.total : 0;
-    const scale = Math.max(prevTotal * 1.1, A.projected * 1.04, (A.ref || 0) * 1.04, 1);
-    const w = (v) => `${Math.max(0, Math.min(100, (v / scale) * 100))}%`;
-    const extra = Math.max(0, A.projected - A.spent - A.committed);
-    const meter = `
-      <div class="ca-meter">
-        <span class="ca-seg ca-spent" style="width:${w(A.spent)}"></span><span class="ca-seg ca-committed" style="width:${w(A.committed)}"></span><span class="ca-seg ca-proj" style="width:${w(extra)}"></span>
-        ${prevTotal > 0 ? `<span class="ca-prev" style="left:${w(prevTotal)}"></span>` : ''}
-        ${A.ref ? `<span class="ca-ref" style="left:${w(A.ref)}"></span>` : ''}
-      </div>
-      <div class="ca-legend">
-        <span><i class="ca-spent"></i>Gastado ${fmtDisp(A.spent)}</span>
-        ${A.committed > 0 ? `<span><i class="ca-committed"></i>Ya cargado (cuotas/fijos) ${fmtDisp(A.committed)}</span>` : ''}
-        ${extra > 0 ? `<span><i class="ca-proj"></i>Proyectado ${fmtDisp(extra)}</span>` : ''}
-        ${prevTotal > 0 ? `<span><i class="ca-prev-key"></i>Resumen anterior ${fmtDisp(prevTotal)}</span>` : ''}
-        ${A.ref ? `<span><i class="ca-ref-key"></i>Referencia ${fmtDisp(A.ref)}</span>` : ''}
+    // 1. Veredicto.
+    const TONE = {
+      ok: { label: 'Vas bien', color: 'var(--brand-text)', soft: 'var(--brand-soft)', icon: 'check' },
+      warn: { label: 'Ojo', color: 'var(--warn)', soft: 'var(--warn-soft)', icon: 'bolt' },
+      crit: { label: 'Te estás pasando', color: 'var(--neg)', soft: 'var(--neg-soft)', icon: 'up' },
+      none: { label: 'Resumen en curso', color: 'var(--t2)', soft: 'var(--s2)', icon: 'card' },
+    };
+    const tone = verdict ? verdict.tone : 'none';
+    const T = TONE[tone];
+    let cmp = '';
+    if (A.ref != null) {
+      const d = A.projected - A.ref;
+      cmp = Math.abs(d) < 1 ? `Igual que ${A.refLabel}` : `${fmtPlain(Math.abs(d))} ${d < 0 ? 'menos' : 'más'} que ${A.refLabel}`;
+    } else {
+      cmp = 'Todavía no hay resúmenes cerrados para comparar.';
+    }
+    const statusHTML = `
+      <div class="statusbox" style="--tone:${T.color};--tone-soft:${T.soft}">
+        <span class="k">${spriteIcon(T.icon)}${T.label}</span>
+        <span class="t2">Al ritmo actual cerrás en</span>
+        <span class="num money statusbox-big">${esc(fmtPlain(A.projected))}</span>
+        <span class="t2 money statusbox-cmp">${esc(cmp)}</span>
       </div>`;
 
-    // "de el promedio" → "del promedio", "a el promedio" → "al promedio".
-    const withPrep = (prep) => (A.refLabel.startsWith('el ') ? `${prep}l ${A.refLabel.slice(3)}` : `${prep} ${A.refLabel}`);
-    let verdictHTML = '';
-    if (verdict) {
-      const nextDay = new Date(cy.close.getTime() + DAY_MS);
-      if (verdict.tone === 'crit') {
-        verdictHTML = `<div class="ca-verdict crit"><b>Conviene dejar de usarla ya.</b> Con lo gastado y lo que ya está cargado superás ${esc(A.refLabel)} por ${fmtDisp(-verdict.room)}. Lo que compres desde el ${esc(short(nextDay))} entra recién en el resumen siguiente.</div>`;
-      } else if (verdict.tone === 'warn') {
-        verdictHTML = `<div class="ca-verdict warn"><b>Dejá de usarla a partir del ${esc(short(verdict.hit))}.</b> Al ritmo actual ese día llegás ${esc(withPrep('a'))}, y el resumen cierra el ${esc(short(cy.close))}. Para no pasarte, gastá como mucho ${fmtDisp(verdict.perDay)} por día.</div>`;
-      } else {
-        verdictHTML = `<div class="ca-verdict ok"><b>Vas bien.</b> Al ritmo actual cerrás en ${fmtDisp(A.projected)}, ${fmtDisp(A.ref - A.projected)} por debajo ${esc(withPrep('de'))}. Te quedan ${fmtDisp(verdict.room)} hasta el cierre (${fmtDisp(verdict.perDay)} por día).</div>`;
-      }
-    } else {
-      verdictHTML = '<div class="ca-verdict">Todavía no hay resúmenes cerrados para comparar. Podés ponerle un tope a la tarjeta para saber cuándo dejar de usarla.</div>';
+    // 2. Barra del resumen en curso con las marcas rotuladas directamente.
+    const scale = Math.max(llevas, A.projected, A.ref || 0, last ? last.total : 0, 1) * 1.04;
+    const pctOf = (v) => Math.max(0, Math.min(100, (v / scale) * 100));
+    const marks = [
+      { key: 'llevas', label: 'Llevás', v: llevas, row: 'top', bar: false },
+      { key: 'ref', label: isCap ? 'Tope' : 'Promedio', v: A.ref, row: 'top', bar: true, color: 'var(--t2)' },
+      { key: 'proj', label: 'Proyectado', v: A.projected, row: 'bottom', bar: false },
+      { key: 'last', label: 'Último', v: last ? last.total : null, row: 'bottom', bar: true, color: 'var(--t3)' },
+    ].filter((m) => m.v != null && m.v > 0 && !(m.key === 'proj' && Math.abs(A.projected - llevas) < 1));
+    // Que las etiquetas no se pisen aunque los montos sean altos: cada una
+    // se centra en su marca, o se alinea a un lado, o pasa a la otra fila;
+    // si no entra en ningún lado, queda solo la marca (el monto está en la
+    // leyenda de abajo).
+    const LW = 27; // ancho estimado de una etiqueta, en % de la barra
+    const rows = { top: [], bottom: [] };
+    for (const m of marks) {
+      const p = m.key === 'llevas' ? 0 : pctOf(m.v);
+      const txs = m.key === 'llevas' ? [0] : [-50, 0, -100];
+      const tryRow = (row) => {
+        for (const tx of txs) {
+          const s0 = p + (tx * LW) / 100, s1 = s0 + LW;
+          if (s0 < -1 || s1 > 101) continue;
+          if (rows[row].every((q) => s0 >= q.s1 + 1 || s1 <= q.s0 - 1)) {
+            rows[row].push({ m, p, tx, s0, s1 });
+            return true;
+          }
+        }
+        return false;
+      };
+      if (!tryRow(m.row)) tryRow(m.row === 'top' ? 'bottom' : 'top');
     }
+    const labelsHTML = ['top', 'bottom'].flatMap((row) => rows[row].map(({ m, p, tx }) =>
+      `<span class="ml ml-${row}" style="left:${p.toFixed(1)}%;transform:translateX(${tx}%)">${m.label}<b class="money">${esc(shortMoney(m.v))}</b></span>`)).join('');
+    const gaugeAria = marks.map((m) => `${m.label} ${hideAmounts ? '' : fmtPlain(m.v)}`).join(', ');
+    const gaugeHTML = `
+      <section class="k-card" style="--tone:${tone === 'none' ? 'var(--brand)' : T.color}">
+        <span class="ovl">Resumen en curso</span>
+        <div class="gauge" role="img" aria-label="${esc(gaugeAria)}">
+          ${labelsHTML}
+          <div class="track">
+            <i style="width:${pctOf(A.spent).toFixed(2)}%;background:var(--tone)"></i><i style="width:${pctOf(A.committed).toFixed(2)}%;background:color-mix(in srgb,var(--tone) 50%,transparent)"></i><i class="hatch" style="width:${pctOf(extra).toFixed(2)}%"></i>
+          </div>
+          ${marks.filter((m) => m.bar).map((m) => `<span class="mk" style="left:${pctOf(m.v).toFixed(1)}%;background:${m.color}"></span>`).join('')}
+        </div>
+        <div class="legend gauge-legend">
+          <span><i style="background:var(--tone)"></i>Gastado <b class="money">${esc(fmtPlain(A.spent))}</b></span>
+          ${A.committed > 0 ? `<span><i style="background:color-mix(in srgb,var(--tone) 50%,transparent)"></i>Cuotas y fijos <b class="money">${esc(fmtPlain(A.committed))}</b></span>` : ''}
+          ${extra > 0 ? `<span><i class="hatch"></i>Proyección <b class="money">${esc(fmtPlain(extra))}</b></span>` : ''}
+        </div>
+      </section>`;
 
-    const histRows = history.map((h, i) => {
-      const prev = history[i + 1];
-      return `<tr class="rowlink" data-hist="${i}">
-        <td>${esc(short(h.to))}</td>
-        <td>${h.due ? esc(short(h.due)) : '—'}</td>
-        <td class="num">${fmtDisp(h.total)}</td>
-        <td class="num">${prev ? varPct(h.total, prev.total) : ''}</td>
-      </tr>`;
+    // 3. Tres datos.
+    const kpisHTML = `
+      <div class="kpis">
+        ${verdict ? `<div><span>Podés gastar</span><span class="num money">${esc(fmtPlain(verdict.perDay))}</span><small>por día</small></div>` : ''}
+        <div><span>Venís gastando</span><span class="num money">${esc(fmtPlain(A.pace))}</span><small>por día${A.paceFromPrev ? ' (ciclo anterior)' : ''}</small></div>
+        <div><span>Ciclo</span><span class="num">Día ${Math.min(A.elapsed, A.totalDays)}</span><small>de ${A.totalDays}</small></div>
+      </div>
+      ${verdict ? `<p class="k-note k-note-out">${verdict.room > 0
+        ? `Te quedan <b class="money">${esc(fmtPlain(verdict.room))}</b> hasta el cierre${tone === 'warn' ? `; al ritmo actual llegás ${esc(refWith('a'))} el ${esc(short(verdict.hit))}` : ''}.`
+        : `Ya superás ${esc(A.refLabel)} por <b class="money">${esc(fmtPlain(-verdict.room))}</b>. Lo que compres desde el ${esc(short(new Date(cy.close.getTime() + DAY_MS)))} entra en el resumen siguiente.`}</p>` : ''}`;
+
+    // 4. En qué se va.
+    const partsTotal = A.parts.consumos + A.parts.cuotas + A.parts.fijos;
+    const PARTS = [
+      ['Consumos', A.parts.consumos, 'var(--brand)'],
+      ['Cuotas', A.parts.cuotas, 'color-mix(in srgb,var(--brand) 50%,transparent)'],
+      ['Fijos', A.parts.fijos, 'var(--s3)'],
+    ];
+    const partsHTML = `
+      <section class="k-card">
+        <div class="k-card-h"><h2>En qué se va</h2></div>
+        <div class="stack">${partsTotal > 0 ? PARTS.filter(([, v]) => v > 0).map(([, v, c]) => `<i style="width:${((v / partsTotal) * 100).toFixed(2)}%;background:${c}"></i>`).join('') : ''}</div>
+        <div class="legend">${PARTS.map(([l, v, c]) => `<span><i style="background:${c}"></i>${l} <b class="money">${esc(fmtPlain(v))}</b></span>`).join('')}</div>
+      </section>`;
+
+    // 5. Últimos resúmenes: barras grises de los cerrados y el en curso con
+    // lo gastado sólido y la proyección rayada; línea punteada de la
+    // referencia.
+    const closed = history.slice(0, 5).reverse();
+    const bars = [...closed.map((h) => ({ label: `Cierre ${short(h.to)}`, value: h.total })), { label: 'En curso', value: llevas, proj: A.projected, current: true }];
+    const W = 320, H = 150, base = 120, topY = 22;
+    const maxV = Math.max(1, ...bars.map((b) => Math.max(b.value, b.proj || 0)), A.ref || 0);
+    const yv = (v) => base - (v / maxV) * (base - topY);
+    const slot = W / bars.length;
+    const bw = Math.min(48, slot * 0.55);
+    const barsSvg = bars.map((b, i) => {
+      const cx = slot * i + slot / 2, x = cx - bw / 2;
+      const lab = hideAmounts ? '•••' : shortMoney(b.current ? b.proj : b.value).replace(/^US?\$ /, '');
+      const body = b.current
+        ? `${b.proj > b.value ? `<rect x="${x.toFixed(1)}" y="${yv(b.proj).toFixed(1)}" width="${bw.toFixed(1)}" height="${(base - yv(b.proj)).toFixed(1)}" rx="6" style="fill:url(#hatch)"/>` : ''}
+           <rect x="${x.toFixed(1)}" y="${yv(b.value).toFixed(1)}" width="${bw.toFixed(1)}" height="${(base - yv(b.value)).toFixed(1)}" rx="4" style="fill:var(--brand)"/>`
+        : `<rect x="${x.toFixed(1)}" y="${yv(b.value).toFixed(1)}" width="${bw.toFixed(1)}" height="${(base - yv(b.value)).toFixed(1)}" rx="6" style="fill:var(--s3)"/>`;
+      const topV = b.current ? Math.max(b.value, b.proj) : b.value;
+      return `${body}
+        <text x="${cx.toFixed(1)}" y="${(yv(topV) - 7).toFixed(1)}" text-anchor="middle" class="g-lab"${b.current ? ' style="fill:var(--brand-text)"' : ''}>${esc(lab)}</text>
+        <text x="${cx.toFixed(1)}" y="138" text-anchor="middle"${b.current ? ' class="g-sel"' : ''}>${esc(bars.length > 4 && !b.current ? b.label.replace('Cierre ', '') : b.label)}</text>`;
     }).join('');
-
-    const body = `
-      <div class="ca-head">
-        <div class="ca-head-top">
-          <span>Resumen en curso · cierra ${esc(short(cy.close))}</span>
-          <span class="ca-days">${A.remaining > 0 ? `faltan ${A.remaining} día${A.remaining === 1 ? '' : 's'}` : 'cierra hoy'}</span>
+    // La referencia se rotula en el encabezado de la tarjeta (no adentro
+    // del gráfico, donde se pisaba con las barras altas).
+    const refLine = A.ref ? `<line x1="4" x2="316" y1="${yv(A.ref).toFixed(1)}" y2="${yv(A.ref).toFixed(1)}" style="stroke:var(--brand-text)" stroke-width="1.5" stroke-dasharray="4 4"/>` : '';
+    const varChip = (cur, prev) => {
+      if (!(prev > 0)) return '';
+      const lbl = fmtVarPct(((cur - prev) / prev) * 100);
+      if (lbl == null) return '<span class="dchip flat">=</span>';
+      return `<span class="dchip ${cur > prev ? 'bad' : 'good'}">${cur > prev ? '▲' : '▼'} ${lbl}%</span>`;
+    };
+    const histHTML = history.length ? `
+      <section class="k-card">
+        <div class="k-card-h"><h2>Últimos resúmenes</h2>${A.ref ? `<span class="legend legend-inline"><span><i class="lg-line lg-dash" style="border-color:var(--brand-text)"></i>${isCap ? 'Tope' : 'Promedio'} <b class="money">${esc(shortMoney(A.ref))}</b></span></span>` : ''}</div>
+        <svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(bars.map((b) => `${b.label} ${hideAmounts ? '' : fmtPlain(b.current ? b.proj : b.value)}${b.current ? ' proyectado' : ''}`).join(', '))}">
+          <defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" style="fill:var(--brand-soft)"/><line x1="0" y1="0" x2="0" y2="5" style="stroke:var(--brand)" stroke-width="2.4"/></pattern></defs>
+          <line x1="0" x2="320" y1="${base}" y2="${base}" class="g-grid"/>
+          ${barsSvg}${refLine}
+        </svg>
+        <div class="stmt-table">
+          <div class="stmt-row stmt-head"><span>Cierre</span><span>Vence</span><span>Total</span><span></span></div>
+          ${history.map((h, i) => `
+          <button type="button" class="stmt-row" data-hist="${i}">
+            <span>${esc(short(h.to))}</span><span class="t2">${h.due ? esc(short(h.due)) : '—'}</span>
+            <span class="num money">${esc(fmtPlain(h.total))}</span><span>${history[i + 1] ? varChip(h.total, history[i + 1].total) : ''}</span>
+          </button>`).join('')}
         </div>
-        <div class="ca-kpis">
-          <div><span class="ca-k">Llevás</span><b class="ca-v">${fmtDisp(A.spent + A.committed)}</b></div>
-          <div><span class="ca-k">Proyectado al cierre</span><b class="ca-v">${fmtDisp(A.projected)}</b></div>
-          <div><span class="ca-k">vs. último</span><b class="ca-v">${last ? varPct(A.projected, last.total) || '—' : '—'}</b></div>
-        </div>
-        ${meter}
-        <div class="ca-note">Día ${Math.min(A.elapsed, A.totalDays)} de ${A.totalDays} del ciclo. Ritmo de consumos: ${fmtDisp(A.pace)} por día${A.paceFromPrev ? ' (del resumen anterior, recién arranca el ciclo)' : ''}.</div>
-      </div>
-      ${verdictHTML}
-      <div class="ca-ref-row">
-        <span>Referencia: ${A.capOwn != null ? `tu tope de ${fmtMoney(card.cap.amount, card.cap.currency)}` : (A.avg != null ? `${esc(A.refLabel)} (${fmtDisp(A.avg)})` : 'sin datos')}</span>
-        <button type="button" class="link-btn" id="ca-cap">${A.capOwn != null ? 'Cambiar tope' : 'Poner un tope'}</button>
-      </div>
+        <p class="k-note">Según lo cargado en la app (sin impuestos ni cargos del banco).</p>
+      </section>` : '';
 
-      <div class="ca-section-title">En qué se va este resumen</div>
-      <div class="ca-parts">
-        <div><span>Consumos</span><b>${fmtDisp(A.parts.consumos)}</b></div>
-        <div><span>Cuotas</span><b>${fmtDisp(A.parts.cuotas)}</b></div>
-        <div><span>Fijos</span><b>${fmtDisp(A.parts.fijos)}</b></div>
-      </div>
-      <button type="button" class="link-btn" id="ca-cur-detail">Ver los movimientos del resumen en curso ›</button>
-
-      ${history.length ? `
-      <div class="ca-section-title">Últimos resúmenes</div>
-      <div id="chart-card-stmts"></div>
-      <div class="table-scroll"><table class="data ca-hist">
-        <thead><tr><th>Cierre</th><th>Vence</th><th class="num">Total</th><th class="num">vs. ant.</th></tr></thead>
-        <tbody>${histRows}</tbody>
-      </table></div>
-      <div class="hint">Según lo cargado en la app (sin impuestos ni cargos del banco). Tocá un resumen para ver sus movimientos.</div>` : ''}`;
-
-    const dlg = openDialog(`${card.name} · cómo vengo`, body, { submitLabel: 'Cerrar', viewOnly: true });
-    const chartEl = $('#chart-card-stmts', dlg);
-    if (chartEl) {
-      const rows = history.slice().reverse().map((h) => ({ label: short(h.to), value: h.total }));
-      rows.push({ label: 'En curso', value: A.spent + A.committed, extra: extra, current: true });
-      Charts.statementBars(chartEl, rows, {
-        ref: A.ref || 0, refLabel: A.ref ? (A.capOwn != null ? 'Tope' : 'Promedio') : '',
-        fmt: (v) => (!hideAmounts && Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1).replace('.', ',')} M` : Charts.compact(v)),
-        ariaLabel: `Total de los últimos resúmenes de ${card.name} y proyección del actual`,
-      });
-    }
-    $$('[data-hist]', dlg).forEach((row) => row.addEventListener('click', () => {
-      const h = history[Number(row.dataset.hist)];
-      dlg.close();
-      methodPeriodDetailDialog(`${card.name} · resumen ${short(h.to)}`, h.txs);
-    }));
-    $('#ca-cur-detail', dlg).addEventListener('click', () => {
-      dlg.close();
-      methodPeriodDetailDialog(`${card.name} · resumen en curso`, A.curTxs);
+    const days = A.remaining > 0 ? `faltan ${A.remaining} día${A.remaining === 1 ? '' : 's'}` : 'cierra hoy';
+    openPanel({
+      title: 'Cómo vengo',
+      subtitle: `${card.name} · cierra ${short(cy.close)} · ${days}`,
+      body: `<div class="como">
+        ${statusHTML}${gaugeHTML}${kpisHTML}${partsHTML}${histHTML}
+        <button type="button" class="btn btn-full btn-sec" data-cap>${spriteIcon('target')}${isCap ? 'Cambiar el tope' : 'Poner un tope'}</button>
+        <button type="button" class="btn-ter" data-curmoves>Ver los movimientos del resumen</button>
+      </div>`,
+      onClick(e, dlg) {
+        let b;
+        if ((b = e.target.closest('[data-hist]'))) {
+          const h = history[Number(b.dataset.hist)];
+          closeSheet(dlg).then(() => methodPeriodDetailDialog(`${card.name} · resumen ${short(h.to)}`, h.txs));
+          return;
+        }
+        if (e.target.closest('[data-curmoves]')) {
+          closeSheet(dlg).then(() => methodPeriodDetailDialog(`${card.name} · resumen en curso`, A.curTxs));
+          return;
+        }
+        if (e.target.closest('[data-cap]')) closeSheet(dlg).then(() => cardCapForm(card.id));
+      },
     });
-    $('#ca-cap', dlg).addEventListener('click', () => { dlg.close(); cardCapForm(card.id); });
   }
 
   /* Tope propio por tarjeta para el pop-up "Cómo vengo" (vacío = usar el

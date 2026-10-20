@@ -1697,37 +1697,6 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 
 /* Tarjetas: pop-up "Cómo vengo" */
 .ca-open { display: block; margin-top: 6px; font-size: 12.5px; font-weight: 600; }
-.ca-head { display: grid; gap: 10px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
-.ca-head-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--ink-2); font-weight: 600; }
-.ca-days { font-size: 11.5px; color: var(--muted); font-weight: 500; white-space: nowrap; }
-.ca-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.ca-kpis > div { display: grid; gap: 2px; min-width: 0; }
-.ca-k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; font-weight: 650; }
-.ca-v { font: 700 15px var(--font-heading); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ca-v .cat-mom-pct { font-size: 12px; }
-.ca-meter { position: relative; display: flex; height: 12px; border-radius: 999px; background: var(--border); overflow: visible; }
-.ca-meter .ca-seg { display: block; height: 100%; }
-.ca-meter .ca-seg:first-child { border-radius: 999px 0 0 999px; }
-.ca-spent { background: var(--crit); }
-.ca-committed { background: color-mix(in srgb, var(--crit) 55%, var(--surface)); }
-.ca-proj { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--crit) 45%, transparent) 0 3px, transparent 3px 6px); }
-.ca-ref { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--accent); border-radius: 2px; }
-.ca-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--ink-2); }
-.ca-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
-.ca-legend i.ca-ref-key { background: var(--accent); width: 3px; }
-.ca-note { font-size: 11.5px; color: var(--muted); }
-.ca-verdict { margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; color: var(--ink); background: var(--surface-2); border-left: 4px solid var(--muted); }
-.ca-verdict.ok { border-left-color: var(--income); background: color-mix(in srgb, var(--income) 10%, var(--surface)); }
-.ca-verdict.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
-.ca-verdict.crit { border-left-color: var(--crit); background: var(--danger-bg); }
-.ca-ref-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
-.ca-ref-row .link-btn { font-size: 12px; white-space: nowrap; }
-.ca-section-title { margin: 16px 0 8px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-.ca-parts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
-.ca-parts > div { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); min-width: 0; }
-.ca-parts span { font-size: 11px; color: var(--muted); }
-.ca-parts b { font: 700 13.5px var(--font-heading); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ca-hist td, .ca-hist th { padding: 7px 6px; }
 /* En un pop-up largo (que scrollea), una tabla con scroll lateral
    (.table-scroll, overflow-x) es un contenedor de scroll y el grid del
    cuerpo le daba una fila de 0 de alto: quedaba "tapada" por lo de
@@ -1736,8 +1705,6 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .insight-row.rowlink { cursor: pointer; }
 .insight-row.rowlink:hover .insight-text { color: var(--ink); }
 .insight-go { margin-left: auto; padding-left: 6px; color: var(--muted); font-weight: 700; align-self: center; }
-.ca-prev { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink-2); border-radius: 2px; }
-.ca-legend i.ca-prev-key { background: var(--ink-2); width: 3px; }
 
 /* ---------- Ahorros ---------- */
 /* Bloque principal con el mismo degradé verde del encabezado de Inicio. */
@@ -2275,3 +2242,49 @@ body.sheet-behind .topbar { transform: scale(0.94); border-radius: 14px; }
 .chev.rot { transform: rotate(90deg); }
 .chev.rot180 { transform: rotate(180deg); }
 .evo-chips { margin-bottom: 8px; }
+
+/* ---------- Cómo vengo (rediseño) ---------- */
+.sh-title { min-width: 0; text-align: center; }
+.sh-sub { font-size: 12.5px; color: var(--t2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.como { display: flex; flex-direction: column; gap: 12px; padding-top: 6px; }
+.statusbox { border-radius: 18px; padding: 16px; background: var(--tone-soft); display: grid; gap: 6px; }
+.statusbox .k { display: flex; align-items: center; gap: 6px; font: 700 12px/1 var(--f-text); letter-spacing: 0.06em; text-transform: uppercase; color: var(--tone); }
+.statusbox .k .ic { width: 16px; height: 16px; }
+.statusbox .t2 { font-size: 14px; }
+.statusbox-big { font-size: 34px; line-height: 1; }
+.statusbox .statusbox-cmp { font-size: 13px; }
+.gauge { position: relative; height: 92px; margin-top: 4px; }
+.gauge .track { position: absolute; left: 0; right: 0; top: 38px; height: 14px; border-radius: 99px; background: var(--s2); overflow: hidden; display: flex; }
+.gauge .track i { display: block; height: 100%; flex: none; }
+.hatch { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--tone, var(--brand)) 70%, transparent) 0 2px, transparent 2px 5px); }
+.gauge .mk { position: absolute; top: 30px; width: 2px; height: 30px; margin-left: -1px; border-radius: 2px; }
+.gauge .ml { position: absolute; font: 500 11.5px/1.25 var(--f-text); color: var(--t2); white-space: nowrap; }
+.gauge .ml-top { top: 0; }
+.gauge .ml-bottom { top: 62px; }
+.gauge .ml b { display: block; color: var(--t1); font: 600 12.5px/1.2 var(--f-num); font-variant-numeric: tabular-nums; }
+.gauge-legend { margin-top: 10px; }
+.gauge-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.stack + .legend { margin-top: 10px; }
+.gauge-legend b, .legend b { color: var(--t1); font-weight: 600; font-variant-numeric: tabular-nums; }
+.kpis { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
+.kpis > div { background: var(--s2); border-radius: 12px; padding: 10px; display: grid; gap: 4px; min-width: 0; }
+[data-theme="light"] .kpis > div { background: var(--s1); box-shadow: var(--card-shadow); }
+.kpis span { font: 500 11.5px/1.2 var(--f-text); color: var(--t2); }
+.kpis .num { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--t1); }
+.kpis small { font-size: 11.5px; color: var(--t3); }
+.legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.stmt-table { display: grid; margin-top: 8px; }
+.stmt-row {
+  display: grid; grid-template-columns: 1fr 1fr 1.4fr 64px; gap: 8px; align-items: center; min-height: 44px;
+  padding: 0 2px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--t1);
+  font: 400 14px/1.2 var(--f-text); text-align: left; cursor: pointer;
+}
+.stmt-row > :nth-child(3) { text-align: right; }
+.stmt-row > :nth-child(4) { justify-self: end; }
+.stmt-head { border-top: 0; min-height: 28px; cursor: default; font: 600 11px/1 var(--f-text); letter-spacing: 0.06em; text-transform: uppercase; color: var(--t2); }
+.btn-sec { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 50px; border-radius: 14px; border: 0; background: var(--s2); color: var(--t1); font: 600 16px/1 var(--f-text); }
+.btn-sec .ic { width: 18px; height: 18px; }
+.btn-ter { height: 44px; border: 0; background: transparent; color: var(--brand-text); font: 600 15px/1 var(--f-text); cursor: pointer; }
+.ca-section-title { margin: 16px 0 8px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.legend-inline { margin: 0; }
+.legend .lg-line { border-radius: 0; width: 14px; height: 0; }
