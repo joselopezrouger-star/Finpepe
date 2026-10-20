@@ -67,7 +67,7 @@ const Store = (() => {
       leftoverLastGen: null,     // 'YYYY-MM' del último mes ya acreditado — ver generateLeftoverIncome() en app.js
       methodsSortedOnce: false, // true = ya se hizo el ordenamiento automático de tarjetas primero (una sola vez), ver sortMethodsOnce() en app.js
     },
-    categories: seedCategories(),
+    categories: assignCategoryColors(seedCategories()),
     methods: seedMethods(),
     // {id, date:'YYYY-MM-DD', type:'ingreso'|'gasto', amount, currency,
     //  categoryId, methodId, note, groupId?, installment?:{k,n}, recurringId?,
@@ -81,6 +81,39 @@ const Store = (() => {
     recurring: [],
   });
 
+  // Color fijo de cada grupo de categorías (las subcategorías heredan el de
+  // su grupo): una clave de los tokens --c-* de tokens.css. Se asigna una
+  // sola vez, por nombre, y después queda guardado — así una categoría
+  // tiene el mismo color en todas las pantallas y en todos los
+  // dispositivos. Ninguna es verde (el verde es de la marca y los ingresos).
+  const CATEGORY_COLORS = ['casa', 'compras', 'comida', 'auto', 'tel', 'super', 'otros'];
+  const COLOR_BY_NAME = [
+    [/^casa|^hogar/, 'casa'],
+    [/^compras/, 'compras'],
+    [/^comida/, 'comida'],
+    [/^auto|^transporte/, 'auto'],
+    [/^telefono|^celular/, 'tel'],
+    [/^super/, 'super'],
+  ];
+  // Las de ingreso no comparten gráficos con las de gasto: van tomando los
+  // colores en orden, para que la torta y las líneas de ingresos no queden
+  // todas grises.
+  const INCOME_COLOR_ORDER = ['tel', 'super', 'auto', 'compras', 'comida', 'casa'];
+  function assignCategoryColors(categories) {
+    const plain = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    let incomeIdx = categories.filter((c) => c.parentId === null && c.type === 'ingreso' && c.color).length;
+    for (const c of categories) {
+      if (c.parentId !== null || CATEGORY_COLORS.includes(c.color)) continue;
+      if (c.type === 'ingreso') {
+        c.color = /^otro/.test(plain(c.name)) ? 'otros' : (INCOME_COLOR_ORDER[incomeIdx++] || 'otros');
+      } else {
+        const hit = COLOR_BY_NAME.find(([re]) => re.test(plain(c.name)));
+        c.color = hit ? hit[1] : 'otros';
+      }
+    }
+    return categories;
+  }
+
   function migrate(s) {
     const d = defaults();
     // Completa claves faltantes sin pisar datos existentes.
@@ -90,6 +123,7 @@ const Store = (() => {
     }
     // Categorías creadas antes de las subcategorías: quedan como grupo (sin padre).
     for (const c of s.categories) if (c.parentId === undefined) c.parentId = null;
+    assignCategoryColors(s.categories);
     return s;
   }
 
@@ -117,6 +151,8 @@ const Store = (() => {
   // Guardado del usuario: persiste en localStorage y notifica a los hooks
   // (por ejemplo, la sincronización con la nube).
   function save() {
+    // Categorías creadas en el camino (importar CSV, etc.) toman su color acá.
+    assignCategoryColors(state.categories);
     state._updatedAt = Date.now();
     persist();
     for (const h of saveHooks) {
@@ -174,5 +210,6 @@ const Store = (() => {
   return {
     get state() { return state; },
     uid, save, saveLocal, onSave, replace, applyRemote, reset, exportJSON, defaults,
+    CATEGORY_COLORS, assignCategoryColors,
   };
 })();

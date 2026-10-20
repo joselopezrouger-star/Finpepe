@@ -12,13 +12,9 @@
   // Comillado CSV (RFC 4180): usado tanto al exportar como al armar la
   // plantilla de importación.
   const csvQuote = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  // Un color hex a rgba() con alfa bajo, para teñir de fondo sin tapar el
-  // texto (usado para pintar cada fila de categoría con su propio color).
-  const hexToRgba = (hex, a) => {
-    const h = hex.replace('#', '');
-    const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
-    return `rgba(${r},${g},${b},${a})`;
-  };
+  // Un color (hex o var(--…)) con alfa bajo, para teñir de fondo sin tapar
+  // el texto (usado para pintar cada fila de categoría con su propio color).
+  const tint = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
   // Vibración cortita al tocar el teclado numérico (feedback táctil). No
   // todos los navegadores exponen navigator.vibrate (iOS Safari no), así
   // que es un no-op silencioso ahí.
@@ -115,6 +111,11 @@
     ? `${cur === 'USD' ? 'US$' : '$'} ${MASK}`
     : (cur === 'USD' ? nfUSD : nfARS).format(n));
   const nfHero = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+  // Monto sin ocultar, para las pantallas del rediseño: ahí el ojo no
+  // reemplaza el número por puntos sino que lo desenfoca (.money dentro de
+  // body.hide-amounts), así no cambia el ancho ni se mueve nada.
+  const fmtPlain = (n, cur) => ((cur || disp()) === 'USD' ? nfUSD : nfARS).format(n);
+  const money = (n, cur) => `<span class="money">${esc(fmtPlain(n, cur))}</span>`;
 
   /* Puntos de miles en vivo para inputs de monto sueltos (presupuesto,
      movimiento fijo) — la calculadora de "+ Movimiento" ya los mostraba a
@@ -284,35 +285,6 @@
     return arsSnapshotFor(amount, currency);
   }
 
-  // Encabezado verde con el mes (a la izquierda), flechas redondas (a la
-  // derecha) y borde de ola: el mismo en Inicio y arriba de Movimientos /
-  // Categorías / Calendario. Los botones usan data-mnav (cada vista los
-  // conecta a su propio cambio de mes).
-  function heroHeadHTML(mk) {
-    return `<div class="hero-head">
-          <span class="hero-head-label">${iconSvg('calendar')}<span>${esc(monthLabel(mk))}</span></span>
-          <span class="hero-head-nav">
-            <button class="hero-head-btn" data-mnav="-1" aria-label="Mes anterior">${iconSvg('chevLeft')}</button>
-            <button class="hero-head-btn" data-mnav="1" aria-label="Mes siguiente">${iconSvg('chevRight')}</button>
-          </span>
-          <svg class="hero-wave" viewBox="0 0 400 36" preserveAspectRatio="none" aria-hidden="true">
-            <path class="hero-wave-back" d="M0 24 C 70 8, 150 8, 230 20 S 350 30, 400 10 V36 H0 Z"/>
-            <path class="hero-wave-front" d="M0 30 C 90 12, 170 34, 260 26 S 360 14, 400 22 V36 H0 Z"/>
-          </svg>
-        </div>`;
-  }
-
-  // Número protagonista (ej. Patrimonio neto): sin decimales, como el resto
-  // de los montos de la app.
-  function heroMoneyHTML(n, cur) {
-    if (n == null || !isFinite(n)) return '—';
-    const symbol = cur === 'USD' ? 'US$' : '$';
-    const sign = n < 0 ? '−' : '';
-    return `<span class="hero-amount">
-      <span class="hero-amount-sym">${symbol}</span>${hideAmounts ? '' : sign}<span class="hero-amount-int">${hideAmounts ? MASK : esc(nfHero.format(Math.abs(n)))}</span>
-    </span>`;
-  }
-
   /* Suma una lista de transacciones en la moneda de visualización.
      Las que no se pueden convertir (sin cotización) se omiten. */
   function sumDisp(txs) {
@@ -381,8 +353,8 @@
   // en "Tarjetas y medios" (fondo tenue + borde), tomados de la misma
   // paleta que las categorías.
   const KIND_COLOR = {
-    efectivo: '#f5d142', debito: '#5b8def', caja_ahorro: '#08d59d', credito: '#c77dff', billetera: '#4dd0e1',
-    ahorro: '#ff8a5c',
+    efectivo: 'var(--c-super)', debito: 'var(--c-casa)', caja_ahorro: 'var(--brand)', credito: 'var(--c-auto)', billetera: 'var(--c-tel)',
+    ahorro: 'var(--c-comida)',
   };
 
   /* ================= Iconos (SVG propios, sin depender de una librería externa) ================= */
@@ -410,6 +382,7 @@
     expand: '<path d="M7 3H3v4M13 3h4v4M3 13v4h4M17 13v4h-4"/>',
     arrowDown: '<path d="M10 4v12M5 11l5 5 5-5"/>',
     arrowUp: '<path d="M10 16V4M5 9l5-5 5 5"/>',
+    trash: '<path d="M4 6h12"/><path d="M8 6V4h4v2"/><path d="M5.5 6l.8 10.2a1 1 0 0 0 1 .8h5.4a1 1 0 0 0 1-.8L14.5 6"/>',
     minus: '<path d="M5 10h10"/>',
     chevLeft: '<path d="M12 4.5 6.5 10l5.5 5.5"/>',
     chevRight: '<path d="M8 4.5 13.5 10 8 15.5"/>',
@@ -426,39 +399,8 @@
     <path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.68 9c0-.593.102-1.17.284-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"/>
     <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"/>
   </svg>`;
-  // Engranaje de verdad (dientes, no rayos): el ícono anterior -un círculo
-  // con líneas radiales- se confundía con el típico ícono de "sol" para
-  // cambiar a modo claro. Este es el clásico ícono de ajustes (viewBox
-  // propio de 24x24, no encaja en el sistema de 20x20 de ICON_PATHS).
-  const EYE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
-  const EYE_OFF_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.7 17.7 0 0 1-2.6 3.6M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a10 10 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>';
-  const SETTINGS_GEAR_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-    <circle cx="12" cy="12" r="3"/>
-  </svg>`;
-  // Anillo doble: aro externo = % del ingreso que todavía no se gastó, aro
-  // interno = % del mes que todavía falta transcurrir. Comparar los dos de
-  // un vistazo muestra si el ritmo de gasto va por delante o por detrás del
-  // calendario (ej. "me queda 50% de plata pero 70% del mes", voy flojo).
-  function ringSvg2(pctOuter, pctInner, size) {
-    size = size || 76;
-    const arc = (r, stroke, pct, colorVar) => {
-      const c = 2 * Math.PI * r;
-      const p = Math.max(0, Math.min(100, pct));
-      const off = c * (1 - p / 100);
-      return `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(--border)" stroke-width="${stroke}"/>
-        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(${colorVar})" stroke-width="${stroke}"
-          stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
-          transform="rotate(-90 ${size / 2} ${size / 2})"/>`;
-    };
-    const strokeO = 9.5, strokeI = 8.5, gap = 3;
-    const rO = size / 2 - strokeO / 2 - 1;
-    const rI = rO - strokeO / 2 - gap - strokeI / 2;
-    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-      ${arc(rO, strokeO, pctOuter, '--accent')}
-      ${arc(rI, strokeI, pctInner, '--warn')}
-    </svg>`;
-  }
+  // Íconos del sprite de index.html (docs/rediseno/iconos.svg).
+  const spriteIcon = (id) => `<svg class="ic" aria-hidden="true"><use href="#i-${id}"/></svg>`;
   // Tendencia de la tasa de ahorro (media tarjeta del Resumen): curva suave
   // con marcador en cada mes y relleno en degradé debajo. Sin eje numérico:
   // los valores los dan las etiquetas. rows: [{label, rate}] (rate en %,
@@ -555,7 +497,24 @@
   // Paleta fija para diferenciar categorías en "Gastos por categoría" (barras
   // + anillo de participación): distinta de los colores semánticos
   // (ingreso/gasto/acento), que ya están reservados para otras cosas.
-  const CAT_PALETTE = ['#08d59d', '#f5d142', '#ff8a5c', '#5b8def', '#c77dff', '#ff5e5b', '#4dd0e1', '#94a3b8'];
+  // Colores de categoría: fijos y guardados en cada grupo (c.color, una
+  // clave de los tokens --c-* de tokens.css; ver Store.assignCategoryColors).
+  // Las subcategorías usan el de su grupo. Así una categoría tiene el mismo
+  // color en todas las pantallas, sin depender de su lugar en el ranking.
+  const CAT_COLOR_LABELS = {
+    casa: 'Azul', compras: 'Rosa', comida: 'Naranja', auto: 'Violeta', tel: 'Celeste', super: 'Amarillo', otros: 'Gris',
+  };
+  const OTROS_COLOR = 'var(--c-otros)';
+  function catColorKey(catId) {
+    const g = catById(topCategoryOf(catId));
+    return g && Store.CATEGORY_COLORS.includes(g.color) ? g.color : 'otros';
+  }
+  const catColor = (catId) => `var(--c-${catColorKey(catId)})`;
+  // Para series que no son categorías (cuentas de ahorro): los mismos tonos
+  // de los tokens, sin el gris de "Otros".
+  const SERIES_PALETTE = ['var(--c-casa)', 'var(--c-tel)', 'var(--c-auto)', 'var(--c-comida)', 'var(--c-compras)', 'var(--c-super)'];
+  // Medios de pago: no son categorías, van en grises para no confundirse.
+  const NEUTRAL_PALETTE = ['var(--t1)', 'var(--t2)', 'var(--t3)', 'color-mix(in srgb, var(--t3) 55%, var(--bg))', 'var(--s3)'];
   const CAT_ICON = {
     'c-casa': 'home', 'c-comida': 'food', 'c-auto': 'car', 'c-salud': 'heart',
     'c-entret': 'film', 'c-ropa': 'shirt', 'c-educ': 'book', 'c-viajes': 'plane',
@@ -583,12 +542,12 @@
     // (month/fMonth/calMonth) y quedaban desincronizadas entre sí.
     month: curMonth(),
     fAllMonths: false,        // true = ignora el mes, trae todos (filtro de Movimientos)
-    fType: '', fCat: '', fMethod: '',
+    fType: '', fCat: '', fMethod: '', fSearch: '',
     trendTable: false,
     savChart: 'rate',         // Ahorros: gráfico elegido (rate | nominal | cum)
     calSel: null,             // 'YYYY-MM-DD' día seleccionado en el calendario
-    catAnalysisId: null,      // categoría elegida para el gráfico de evolución
-    catKind: 'gasto',         // Categorías: sección Gastos o Ingresos
+    catKind: 'general',       // Categorías: General, Gastos o Ingresos
+    catEvoExp: null, catEvoInc: null, // Categorías: categoría elegida en "Evolución"
     catOpen: {},              // Categorías: grupo -> true si sus subcategorías están desplegadas
   };
 
@@ -1079,14 +1038,17 @@
 
   /* ================= Tema claro / oscuro ================= */
   const THEME_KEY = 'finpepe:theme';
+  // Oscuro por defecto (tokens.css); el claro se activa con data-theme="light".
   function currentTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
   }
   function toggleTheme() {
     const next = currentTheme() === 'dark' ? 'light' : 'dark';
-    if (next === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    if (next === 'light') document.documentElement.setAttribute('data-theme', 'light');
     else document.documentElement.removeAttribute('data-theme');
     localStorage.setItem(THEME_KEY, next);
+    const meta = $('#meta-theme-color');
+    if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
     render(); // Repinta los gráficos con los colores del nuevo tema.
   }
 
@@ -1109,7 +1071,9 @@
   // atrás mientras el modal está abierto (se nota sobre todo con el
   // formulario de movimiento, que es el más alto). El listener de 'close'
   // que restaura el overflow se registra una sola vez, en init().
-  function openModal(dlg) {
+  // Todos los pop-ups de la app son paneles inferiores (ver openSheet()).
+  function openModal(dlg) { openSheet(dlg); }
+  function showModalBase(dlg) {
     document.body.style.overflow = 'hidden';
     dlg.showModal();
   }
@@ -1120,28 +1084,34 @@
   // 'Cerrar' igual, así que el pie terminaba con "Cancelar" Y "Cerrar" una
   // al lado de la otra haciendo exactamente lo mismo. Acá el pie queda con
   // un solo botón.
+  // Panel genérico con formulario: agarradera, X, título, un solo botón
+  // primario abajo (sin "Cancelar"). Lo destructivo que se pase en
+  // footExtra (ej. "Eliminar") va detrás de un menú ⋯ arriba a la derecha.
+  // viewOnly: true es para paneles de solo lectura (sin botón abajo).
   function openDialog(title, bodyHTML, { submitLabel = 'Guardar', onSubmit, footExtra = '', viewOnly = false } = {}) {
     const dlg = $('#dialog');
-    dlg.className = 'dialog'; // por si quedó una clase de txForm/authDialog de un uso anterior
+    dlg.className = 'dialog'; // por si quedó una clase de otro uso anterior
     dlg.innerHTML = `
       <form novalidate="false">
         <div class="dialog-head">
-          <span>${esc(title)}</span>
-          <button type="button" class="row-del" data-close aria-label="Cerrar">✕</button>
+          <button type="button" class="icb" data-close aria-label="Cerrar">${spriteIcon('x')}</button>
+          <span class="dialog-title">${esc(title)}</span>
+          ${footExtra ? `<button type="button" class="icb" data-more aria-label="Más opciones" aria-expanded="false">${spriteIcon('dots-v')}</button>` : '<span></span>'}
         </div>
+        ${footExtra ? `<div class="sh-menu" hidden>${footExtra}</div>` : ''}
         <div class="dialog-body">${bodyHTML}</div>
-        <div class="dialog-foot">
-          ${footExtra}
-          ${viewOnly
-            ? `<button type="button" class="btn btn-primary" data-close>${esc(submitLabel)}</button>`
-            : `<button type="button" class="btn" data-close>Cancelar</button>
-               <button type="submit" class="btn btn-primary">${esc(submitLabel)}</button>`}
-        </div>
+        ${viewOnly ? '' : `<div class="dialog-foot"><button type="submit" class="btn btn-primary btn-full btn-save">${esc(submitLabel)}</button></div>`}
       </form>`;
-    $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => dlg.close()));
+    $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => closeSheet(dlg)));
+    const more = $('[data-more]', dlg);
+    if (more) more.addEventListener('click', () => {
+      const menu = $('.sh-menu', dlg);
+      menu.hidden = !menu.hidden;
+      more.setAttribute('aria-expanded', String(!menu.hidden));
+    });
     $('form', dlg).addEventListener('submit', (e) => {
       e.preventDefault();
-      if (viewOnly) { dlg.close(); return; }
+      if (viewOnly) { closeSheet(dlg); return; }
       const form = e.target;
       if (!form.reportValidity()) return;
       const data = {};
@@ -1154,6 +1124,7 @@
     openModal(dlg);
     return dlg;
   }
+
 
   const selOptions = (items, sel) => items
     .map((i) => `<option value="${esc(i.id)}" ${i.id === sel ? 'selected' : ''}>${esc(i.name)}</option>`)
@@ -1189,13 +1160,50 @@
 
   /* ================= Formulario de movimiento ================= */
 
-  /* Carga de movimientos: una sola pantalla con calculadora para el importe
-     y listas que se despliegan ahí mismo para categoría/cuenta (sin navegar
-     a otra hoja: se abren y cierran en el lugar). */
+  /* Carga y edición de movimientos en un panel que sube desde abajo, todo
+     en una sola pantalla: tipo, monto con calculadora (teclado propio, el
+     del sistema nunca aparece), chips con valores por defecto (fecha,
+     cuenta, cuotas, compartido, nota) y la grilla de categorías, que al
+     tocar una con subcategorías pasa a mostrar sus subcategorías en los
+     mismos círculos. Lo que cambia es la interfaz: el guardado (moneda,
+     cotización del momento, cuotas, compartido, pagar con un ahorro) es
+     el mismo de siempre, en onSave(). */
+  const TX_TYPE_LABEL = { gasto: 'Gasto', ingreso: 'Ingreso', transferencia: 'Transferencia' };
+  const INST_MAX = 24;
+  // Cuenta de la última vez (la del último movimiento cargado de ese tipo),
+  // para que el chip de Cuenta ya venga con la que se usa siempre.
+  function lastUsedMethodId(type) {
+    const txs = S().transactions;
+    for (let i = txs.length - 1; i >= 0; i--) {
+      const t = txs[i];
+      if (type && t.type !== type) continue;
+      if (methodById(t.methodId) || (type === 'gasto' && isSavingMethod(t.methodId))) return t.methodId;
+    }
+    if (type) return lastUsedMethodId(null);
+    return S().methods[0] ? S().methods[0].id : '';
+  }
+  // Cuántas veces se usó cada categoría (contando por grupo y por hoja).
+  function categoryUsage(type) {
+    const counts = new Map();
+    for (const t of S().transactions) {
+      if (t.type !== type || !t.categoryId) continue;
+      counts.set(t.categoryId, (counts.get(t.categoryId) || 0) + 1);
+      const top = topCategoryOf(t.categoryId);
+      if (top !== t.categoryId) counts.set(top, (counts.get(top) || 0) + 1);
+    }
+    return counts;
+  }
+  const relDayLabel = (dateStr) => {
+    const short = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short' }).format(parseDate(dateStr)).replace('.', '');
+    if (dateStr === todayStr()) return `Hoy, ${short}`;
+    if (dateStr === dateToStr(addDays(parseDate(todayStr()), -1))) return `Ayer, ${short}`;
+    return short.charAt(0).toUpperCase() + short.slice(1);
+  };
+
   function txForm(tx) {
     const editing = !!tx;
     // El hogar compartido se carga en segundo plano al abrir la app: si el
-    // formulario se abría antes de que terminara, la opción "compartido" no
+    // panel se abría antes de que terminara, la opción "compartido" no
     // aparecía hasta cerrar y volver a abrir. Ahora se vuelve a mirar en
     // cada repintado y, si todavía está cargando, se repinta al terminar.
     let partner = sharedPartner();
@@ -1207,40 +1215,41 @@
       return !editing && draft.type === 'gasto' && !!partner && !!(shared.household);
     };
 
+    const startType = editing ? tx.type : 'gasto';
     const draft = {
-      type: editing ? tx.type : 'gasto',
+      type: startType,
       date: editing ? tx.date : todayStr(),
       currency: editing ? tx.currency : 'ARS',
       categoryId: editing ? tx.categoryId : '',
-      methodId: editing ? tx.methodId : (S().methods[0] ? S().methods[0].id : ''),
+      methodId: editing ? tx.methodId : lastUsedMethodId(startType),
       toMethodId: editing ? (tx.toMethodId || '') : '',
       shareIt: false,
       sharePct: 50,
-      acc: editing ? tx.amount : null,
+      // Al editar, el monto guardado queda como "resultado" de la
+      // calculadora: ⌫ lo corrige de a un dígito y un número nuevo lo pisa.
+      acc: null,
       op: null,
-      cur: '',
+      cur: editing ? (Math.round(tx.amount * 100) / 100).toString() : '',
       // true justo después de presionar "=": el próximo dígito tipeado tiene
       // que arrancar un número nuevo (como una calculadora física), en vez
       // de agregarse al final del resultado que ya se mostró.
-      justEq: false,
-      expand: null, // null | 'category' | 'method' | 'methodTo' — qué lista está desplegada
-      catGroupExpand: null, // id del grupo de categoría "abierto" en la grilla, o null (nivel superior)
+      justEq: editing,
+      // Qué se ve debajo de los chips: null = grilla de categorías; si no,
+      // la lista de un chip ('method' | 'methodTo' | 'inst' | 'share' | 'note').
+      panel: null,
+      catGroupExpand: null, // grupo cuyas subcategorías se están mostrando en la grilla
+      showAllCats: false,
       note: editing ? (tx.note || '') : '',
       inst: 1,
-      // 'total': el monto tipeado arriba es el precio total de la compra (se
+      // 'total': el monto tipeado es el precio total de la compra (se
       // reparte entre las n cuotas). 'per': el monto tipeado ya es el valor
       // de UNA cuota (se multiplica por n para saber el total).
       instMode: 'total',
-      // Al cargar un movimiento nuevo se pide de a una cosa por vez (tipo,
-      // fecha, monto, categoría, cuenta...) en vez de mostrar todo el
-      // formulario junto; wstep es el índice dentro de wizardSteps(). Editar
-      // uno existente sigue siendo un formulario único (ahí sí conviene ver
-      // todo para poder corregir cualquier campo sin pasos de por medio).
-      wstep: 0,
+      error: '',
     };
 
     const dlg = $('#dialog');
-    dlg.className = editing ? 'dialog dialog-tx' : 'dialog dialog-tx dialog-tx-wiz';
+    dlg.className = 'sheet sheet-tx';
 
     function applyOp(a, op, b) {
       a = a || 0;
@@ -1269,24 +1278,24 @@
       if (curVal != null) return curVal;
       return draft.acc != null ? draft.acc : 0;
     }
+    const OP_SHOWN = { '+': '+', '-': '−', '×': '×', '÷': '÷' };
     function displayExpr() {
       const parts = [];
       if (draft.acc != null) parts.push(formatTyped(numFmt(draft.acc)));
-      if (draft.op) parts.push(draft.op);
+      if (draft.op) parts.push(OP_SHOWN[draft.op]);
       if (draft.cur !== '') parts.push(formatTyped(draft.cur));
       return parts.length ? parts.join(' ') : '0';
     }
     function pressDigit(d) {
       haptic();
-      // Si se venía de tocar "=", este dígito arranca un número nuevo (como
-      // en una calculadora física) — sin esto, se pegaba al final del
-      // resultado anterior (ej. "50" + "3" => "503" en vez de "3"), dando
-      // montos gigantes por error.
+      // Si se venía de "=" (o de abrir un movimiento para editarlo), este
+      // dígito arranca un número nuevo, como en una calculadora física.
       if (draft.justEq) { draft.acc = null; draft.cur = ''; draft.justEq = false; }
       if (d === '.' && draft.cur.includes('.')) return;
       if (draft.cur.length > 12) return;
-      draft.cur = (draft.cur === '0' && d !== '.') ? d : draft.cur + d;
-      paint();
+      if (d === '.' && draft.cur === '') { draft.cur = '0.'; paintAmount(); return; }
+      draft.cur = (draft.cur + d).replace(/^0+(?=\d)/, ''); // sin ceros a la izquierda
+      paintAmount();
     }
     function pressOp(op) {
       haptic();
@@ -1294,9 +1303,10 @@
       const curVal = draft.cur === '' ? null : parseFloat(draft.cur);
       if (draft.op && curVal != null) draft.acc = applyOp(draft.acc, draft.op, curVal);
       else if (curVal != null) draft.acc = curVal;
+      if (draft.acc == null) return; // un operador sin número antes no hace nada
       draft.op = op;
       draft.cur = '';
-      paint();
+      paintAmount();
     }
     function pressEquals() {
       haptic();
@@ -1305,12 +1315,9 @@
       else if (curVal != null) draft.acc = curVal;
       draft.op = null;
       draft.cur = draft.acc != null ? numFmt(draft.acc) : '';
-      // Se vuelca todo a "cur" (lo que se muestra); si "acc" quedaba con el
-      // mismo valor, displayExpr() lo mostraba DE NUEVO al lado (ej. "50.000
-      // 50.000"), como si el resultado se hubiera duplicado.
       draft.acc = null;
       draft.justEq = true;
-      paint();
+      paintAmount();
     }
     function pressBack() {
       haptic();
@@ -1318,39 +1325,27 @@
       if (draft.cur) draft.cur = draft.cur.slice(0, -1);
       else if (draft.op) draft.op = null;
       else if (draft.acc != null) { draft.cur = numFmt(draft.acc); draft.acc = null; }
-      paint();
+      paintAmount();
     }
-    // "AC": a diferencia de "⌫" (que borra de a un paso), reinicia toda la
-    // cuenta en curso — para cuando te confundiste sumando varios montos y
-    // preferís arrancar de cero en vez de borrar carácter por carácter.
+    // ⌫ mantenido: reinicia toda la cuenta.
     function pressClear() {
       haptic();
       draft.acc = null;
       draft.op = null;
       draft.cur = '';
       draft.justEq = false;
-      paint();
+      paintAmount();
     }
 
     function currentInstMethod() { return methodById(draft.methodId); }
-    // Antes solo se podían cargar cuotas con tarjeta de crédito — pero
-    // también se compra en cuotas con débito, transferencia o efectivo
-    // (financiación de la tienda, acuerdo informal, etc.), así que alcanza
-    // con que haya algún medio de pago elegido. Pagar con un ahorro queda
-    // afuera: ahí se retira el total de una sola vez (ver onSave()), no
-    // tiene sentido "financiarlo" en cuotas contra el propio ahorro.
+    // Se puede comprar en cuotas con cualquier medio de pago (tarjeta,
+    // financiación de la tienda, acuerdo informal…). Pagar con un ahorro
+    // queda afuera: ahí se retira el total de una sola vez (ver onSave()).
     function showInstallments() {
       return !editing && draft.type === 'gasto' && !!currentInstMethod() && !isSavingMethod(draft.methodId);
     }
-
-    // Elegir cuotas como mini-tarjetas (1/3/6/12/otra) en vez de un campo
-    // numérico pelado: las opciones más comunes quedan a un toque, y "Otra"
-    // despliega el número para casos puntuales.
-    const INST_PRESETS = [1, 3, 6, 12];
-
-    // Con cuotas, el monto tipeado en la calculadora es ambiguo (¿el precio
-    // total de la compra, o lo que sale cada cuota?) — instMode lo saca de
-    // dudas, y esto calcula ambos valores para mostrarlos antes de guardar.
+    // Con cuotas, el monto tipeado es ambiguo (¿el total o lo que sale cada
+    // cuota?): instMode lo define y esto calcula los dos valores.
     function instAmounts(n) {
       const entered = Math.round(finalAmount() * 100) / 100;
       if (!(entered > 0) || !(n > 1)) return null;
@@ -1359,467 +1354,367 @@
       }
       return { per: Math.round((entered / n) * 100) / 100, total: entered };
     }
+    const instN = () => Math.max(1, parseInt(draft.inst || '1', 10) || 1);
 
-    function installmentsPickerHTML() {
-      const cur = Number(draft.inst);
-      const isCustom = !INST_PRESETS.includes(cur);
-      const amounts = instAmounts(cur);
+    /* ---------- Partes del panel ---------- */
+    // Equivalente en la otra moneda a la cotización de hoy (y, mientras se
+    // está haciendo una cuenta, el resultado parcial).
+    function amountSubHTML() {
+      const v = Math.round(finalAmount() * 100) / 100;
+      const parts = [];
+      if (draft.op && draft.cur !== '') parts.push(`= ${fmtMoney(v, draft.currency)}`);
+      const other = draft.currency === 'ARS' ? usdSnapshotFor(v, 'ARS') : arsSnapshotFor(v, 'USD');
+      if (v > 0 && other != null) parts.push(`≈ ${fmtMoney(other, draft.currency === 'ARS' ? 'USD' : 'ARS')}`);
+      return parts.map(esc).join(' · ');
+    }
+    function amountHTML() {
+      const shown = displayExpr();
+      const size = shown.length > 14 ? ' is-xs' : shown.length > 10 ? ' is-sm' : '';
       return `
-        <div class="tx-row-note">
-          <label>Cuotas</label>
-          <div class="inst-picker">
-            ${INST_PRESETS.map((n) => `<button type="button" class="inst-opt ${!isCustom && cur === n ? 'sel' : ''}" data-inst-preset="${n}">${n}</button>`).join('')}
-            <button type="button" class="inst-opt ${isCustom ? 'sel' : ''}" data-inst-custom>Otra</button>
+        <div class="amount${size}" data-amount>
+          <div class="val num" aria-live="polite"><small>${draft.currency === 'USD' ? 'US$' : '$'}</small><span>${esc(shown)}</span><span class="caret" aria-hidden="true"></span></div>
+          <div class="amount-sub">
+            <button type="button" class="cur" data-curtoggle aria-label="Moneda: ${draft.currency}. Cambiar a ${draft.currency === 'ARS' ? 'USD' : 'ARS'}">
+              <b>${draft.currency}</b>${spriteIcon('swap')}<span>${draft.currency === 'ARS' ? 'USD' : 'ARS'}</span>
+            </button>
+            <span class="amount-eq num" data-amount-sub>${amountSubHTML()}</span>
           </div>
-          ${isCustom ? `<input type="number" id="tx-inst" min="1" max="36" step="1" value="${esc(draft.inst)}" placeholder="Cantidad de cuotas" class="inst-custom-input">` : ''}
-        </div>
-        ${cur > 1 ? `
-        <div class="tx-row-note">
-          <label>El monto de arriba es…</label>
-          <div class="inst-picker inst-mode-picker">
-            <button type="button" class="inst-opt ${draft.instMode !== 'per' ? 'sel' : ''}" data-inst-mode="total">el total de la compra</button>
-            <button type="button" class="inst-opt ${draft.instMode === 'per' ? 'sel' : ''}" data-inst-mode="per">el valor de 1 cuota</button>
-          </div>
-          <div class="hint inst-preview">
-            ${amounts
-              ? `${cur} cuotas de <b>${esc(fmtMoney(amounts.per, draft.currency))}</b> c/u — total <b>${esc(fmtMoney(amounts.total, draft.currency))}</b>`
-              : 'Ingresá un monto arriba para ver cómo queda cada cuota.'}
-          </div>
-        </div>` : ''}`;
+        </div>`;
+    }
+    const chip = (attrs, icon, label, on) =>
+      `<button type="button" class="chip${on ? ' on' : ''}" ${attrs}>${spriteIcon(icon)}<span>${esc(label)}</span></button>`;
+    function chipsHTML() {
+      const out = [];
+      out.push(`<label class="chip chip-date">${spriteIcon('cal')}<span>${esc(relDayLabel(draft.date))}</span>
+        <input type="date" id="tx-date-input" value="${esc(draft.date)}" aria-label="Fecha"></label>`);
+      if (draft.type === 'transferencia') {
+        out.push(chip('data-panel="method"', 'card', draft.methodId ? `Desde ${methodName(draft.methodId)}` : 'Desde…', draft.panel === 'method'));
+        out.push(chip('data-panel="methodTo"', 'wallet', draft.toMethodId ? `Hacia ${methodName(draft.toMethodId)}` : 'Hacia…', draft.panel === 'methodTo'));
+      } else {
+        out.push(chip('data-panel="method"', isSavingMethod(draft.methodId) ? 'target' : 'card', draft.methodId ? methodName(draft.methodId) : 'Cuenta', draft.panel === 'method'));
+      }
+      if (showInstallments()) {
+        const n = instN();
+        const a = instAmounts(n);
+        const label = n === 1 ? '1 pago' : a ? `${n} cuotas de ${fmtMoney(a.per, draft.currency)}` : `${n} cuotas`;
+        out.push(chip('data-panel="inst"', 'repeat', label, n > 1 || draft.panel === 'inst'));
+      }
+      if (canShare()) {
+        const pct = Math.round(Number(draft.sharePct) || 0);
+        const label = draft.shareIt ? `Compartido con ${partnerLabel(partner)} · ${pct}/${100 - pct}` : 'Compartido';
+        out.push(chip('data-share', 'users', label, draft.shareIt));
+      }
+      out.push(chip('data-panel="note"', 'note', draft.note ? draft.note : 'Nota', !!draft.note || draft.panel === 'note'));
+      return `<div class="chips chips-wrap">${out.join('')}</div>`;
     }
 
-    // Grilla de tarjetas (categoría/subcategoría), con las que tienen hijos
-    // llevando a una "sub-grilla" en vez de mostrar todo mezclado en una lista.
-    function catTileGridHTML(items, checkChildren, selId) {
-      selId = selId === undefined ? draft.categoryId : selId;
-      return `<div class="cat-tile-grid">${items.map((item) => {
-        const hasKids = checkChildren && catChildren(item.id).length > 0;
-        if (hasKids) {
-          return `<div class="cat-tile" data-catgroup="${esc(item.id)}">
-            <span class="cat-tile-name">${esc(item.name)}</span>
-            <span class="cat-tile-chev">⌄</span>
-          </div>`;
-        }
-        const sel = item.id === selId;
-        return `<div class="cat-tile ${sel ? 'sel' : ''}" data-pickid="${esc(item.id)}">
-          <span class="cat-tile-name">${esc(item.name)}</span>
-        </div>`;
-      }).join('')}</div>`;
-    }
-    function categoryOptionsHTML() {
-      if (!useSubcats()) {
-        const items = S().categories.filter((c) => c.type === draft.type);
-        return items.length ? catTileGridHTML(items)
-          : '<div class="empty">No hay categorías. Agregá una desde Ajustes.</div>';
-      }
-      const groups = catGroups(draft.type);
-      if (!groups.length) return '<div class="empty">No hay categorías. Agregá una desde Ajustes.</div>';
-      if (draft.catGroupExpand) {
-        const g = groups.find((x) => x.id === draft.catGroupExpand);
-        const children = g ? catChildren(g.id) : [];
-        if (g && children.length) {
-          return `<div class="cat-tile-crumb" data-catback>‹ ${esc(g.name)}</div>${catTileGridHTML(children)}`;
+    // Grilla de categorías: las 8 más usadas (o todas), en círculos con su
+    // color. Un grupo con subcategorías pasa a mostrar sus subcategorías en
+    // los mismos círculos, con la más usada ya elegida.
+    const catb = (attrs, color, icon, name, on) =>
+      `<button type="button" class="catb${on ? ' on' : ''}" style="--c:${color}" ${attrs}><span class="cic">${icon}</span><span class="catb-name">${esc(name)}</span></button>`;
+    function catSectionHTML() {
+      const selTop = draft.categoryId ? topCategoryOf(draft.categoryId) : null;
+      if (useSubcats() && draft.catGroupExpand) {
+        const g = catById(draft.catGroupExpand);
+        const kids = g ? catChildren(g.id) : [];
+        if (g && kids.length) {
+          return `
+            <div class="cat-head"><span class="ovl">${esc(g.name)} · elegí subcategoría</span></div>
+            <div class="catgrid swap" data-catgrid>
+              ${catb('data-catback aria-label="Volver a las categorías"', 'var(--t2)', spriteIcon('cl'), 'Volver', false)}
+              ${kids.map((c) => catb(`data-pickid="${esc(c.id)}"`, catColor(c.id), iconSvg(categoryIconName(c.id)), c.name, c.id === draft.categoryId)).join('')}
+            </div>`;
         }
         draft.catGroupExpand = null;
       }
-      return catTileGridHTML(groups, true);
+      const usage = categoryUsage(draft.type);
+      const all = useSubcats() ? catGroups(draft.type) : S().categories.filter((c) => c.type === draft.type);
+      if (!all.length) return '<div class="empty">No hay categorías. Agregá una desde Ajustes.</div>';
+      // Orden estable: por uso y, a igual uso, el orden en que están en Ajustes.
+      const ranked = all.map((c, i) => ({ c, i })).sort((a, b) => (usage.get(b.c.id) || 0) - (usage.get(a.c.id) || 0) || a.i - b.i).map((x) => x.c);
+      let shown = draft.showAllCats ? ranked : ranked.slice(0, 8);
+      const selShownId = useSubcats() ? selTop : draft.categoryId;
+      if (!draft.showAllCats && selShownId && !shown.some((c) => c.id === selShownId)) {
+        const sel = catById(selShownId);
+        if (sel) shown = [...shown.slice(0, 7), sel];
+      }
+      return `
+        <div class="cat-head">
+          <span class="ovl">Categoría</span>
+          ${all.length > 8 ? `<button type="button" class="link-btn" data-allcats>${draft.showAllCats ? 'Menos' : 'Todas'}</button>` : ''}
+        </div>
+        <div class="catgrid" data-catgrid>
+          ${shown.map((c) => {
+            const hasKids = useSubcats() && catChildren(c.id).length > 0;
+            const on = useSubcats() ? c.id === selTop : c.id === draft.categoryId;
+            return catb(hasKids ? `data-catgroup="${esc(c.id)}"` : `data-pickid="${esc(c.id)}"`, catColor(c.id), iconSvg(categoryIconName(c.id)), c.name, on);
+          }).join('')}
+        </div>`;
     }
-    function methodOptionsHTML(selId, excludeId) {
-      let items = S().methods;
-      if (excludeId) items = items.filter((m) => m.id !== excludeId);
-      const methodsHTML = items.length ? catTileGridHTML(items, false, selId)
-        : '<div class="empty">No hay medios. Agregá uno desde Tarjetas y medios.</div>';
-      // Pagar un gasto directo con un ahorro (retiro automático, ver
-      // onSave()) solo tiene sentido para gastos — un ingreso o el origen/
-      // destino de una transferencia entre tus propias cuentas no "sale" de
-      // un fondo de ahorro. draft.type === 'gasto' ya alcanza para
-      // distinguir este caso de 'from'/'to' (esos solo existen para
-      // transferencia, ver wizardSteps()).
+
+    // Lista de cuentas (y, para gastos, "Pagar con un ahorro").
+    function methodPanelHTML(kind) {
+      const selId = kind === 'methodTo' ? draft.toMethodId : draft.methodId;
+      const excludeId = draft.type === 'transferencia' ? (kind === 'methodTo' ? draft.methodId : draft.toMethodId) : null;
+      const row = (id, name, icon) => `
+        <button type="button" class="pick-row${id === selId ? ' on' : ''}" data-pickmethod="${esc(id)}">
+          <span class="cic" style="--c:var(--t2)">${iconSvg(icon)}</span><span>${esc(name)}</span>
+          ${id === selId ? spriteIcon('check') : ''}
+        </button>`;
+      const methods = S().methods.filter((m) => m.id !== excludeId);
       const savings = draft.type === 'gasto' ? S().savings : [];
-      if (!savings.length) return methodsHTML;
-      return `${methodsHTML}
-        <div class="tx-pick-section-label">Pagar con un ahorro</div>
-        ${catTileGridHTML(savings, false, selId)}`;
-    }
-
-    function formHTML() {
-      const titles = { gasto: 'Gasto', ingreso: 'Ingreso', transferencia: 'Transferencia' };
+      const title = draft.type === 'transferencia' ? (kind === 'methodTo' ? 'Hacia' : 'Desde') : 'Cuenta';
       return `
-      <div class="dialog-head tx-head">
-        <button type="button" class="row-del" data-close aria-label="Cerrar">✕</button>
-        <span class="tx-head-title">${titles[draft.type]}</span>
-        <span></span>
-      </div>
-      <div class="tx-tabs">
-        <button type="button" class="tx-tab ${draft.type === 'ingreso' ? 'active tx-tab-income' : ''}" data-ttype="ingreso">Ingreso</button>
-        <button type="button" class="tx-tab ${draft.type === 'gasto' ? 'active tx-tab-expense' : ''}" data-ttype="gasto">Gasto</button>
-        <button type="button" class="tx-tab ${draft.type === 'transferencia' ? 'active tx-tab-transfer' : ''}" data-ttype="transferencia">Transferencia</button>
-      </div>
-      <div class="tx-body">
-        <label class="tx-row tx-row-date">
-          <span class="tx-row-label">Fecha</span>
-          <span class="tx-row-value tx-row-value-date">${esc(fmtDateFull(draft.date))}</span>
-          <input type="date" id="tx-date-input" class="tx-date-native" value="${esc(draft.date)}">
-        </label>
-
-        <div class="tx-amount-block">
-          <div class="tx-cur-toggle">
-            <button type="button" class="cur-pill ${draft.currency === 'ARS' ? 'active' : ''}" data-cur="ARS">ARS</button>
-            <button type="button" class="cur-pill ${draft.currency === 'USD' ? 'active' : ''}" data-cur="USD">USD</button>
-          </div>
-          <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : draft.type === 'gasto' ? 'is-expense' : ''}">
-            <span>${esc(displayExpr())}</span>
-            <button type="button" class="tx-amount-back" data-back>⌫ Borrar</button>
-          </div>
-        </div>
-
-        ${draft.type === 'transferencia' ? `
-        <div class="tx-row" data-toggle="method">
-          <span class="tx-row-label">Desde</span>
-          <span class="tx-row-value">${draft.methodId ? esc(methodName(draft.methodId)) : 'Elegir'}</span>
-          <span class="tx-row-chev ${draft.expand === 'method' ? 'open' : ''}">›</span>
-        </div>
-        ${draft.expand === 'method' ? `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML(draft.methodId, draft.toMethodId)}</div>` : ''}
-
-        <div class="tx-row" data-toggle="methodTo">
-          <span class="tx-row-label">Hacia</span>
-          <span class="tx-row-value">${draft.toMethodId ? esc(methodName(draft.toMethodId)) : 'Elegir'}</span>
-          <span class="tx-row-chev ${draft.expand === 'methodTo' ? 'open' : ''}">›</span>
-        </div>
-        ${draft.expand === 'methodTo' ? `<div class="tx-pick-inline" data-kind="methodTo">${methodOptionsHTML(draft.toMethodId, draft.methodId)}</div>` : ''}
-        ` : `
-        <div class="tx-row" data-toggle="category">
-          <span class="tx-row-label">Categoría</span>
-          <span class="tx-row-value">${draft.categoryId ? esc(catName(draft.categoryId)) : 'Elegir'}</span>
-          <span class="tx-row-chev ${draft.expand === 'category' ? 'open' : ''}">›</span>
-        </div>
-        ${draft.expand === 'category' ? `<div class="tx-pick-inline" data-kind="category">${categoryOptionsHTML()}</div>` : ''}
-
-        <div class="tx-row" data-toggle="method">
-          <span class="tx-row-label">Cuenta</span>
-          <span class="tx-row-value">${draft.methodId ? esc(methodName(draft.methodId)) : 'Elegir'}</span>
-          <span class="tx-row-chev ${draft.expand === 'method' ? 'open' : ''}">›</span>
-        </div>
-        ${draft.expand === 'method' ? `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML(draft.methodId)}</div>` : ''}
-        `}
-
-        ${showInstallments() ? installmentsPickerHTML() : ''}
-
-        ${canShare() ? `
-        <label class="tx-check-row">
-          <input type="checkbox" id="tx-share" ${draft.shareIt ? 'checked' : ''}>
-          <span>Es un gasto compartido con ${esc(partnerLabel(partner))}</span>
-        </label>
-        ${draft.shareIt ? `
-        <div class="tx-row-note">
-          <label>Vos te quedás con este % del gasto (el resto le corresponde a ${esc(partnerLabel(partner))})</label>
-          <input type="number" id="tx-share-pct" min="0" max="100" step="1" value="${draft.sharePct}">
-        </div>` : ''}` : ''}
-
-        <div class="tx-row-note">
-          <label>Nota <span class="hint">(opcional)</span></label>
-          <input type="text" id="tx-note" maxlength="80" value="${esc(draft.note)}">
-        </div>
-      </div>
-      ${!draft.expand ? keypadHTML() : ''}
-      <div class="dialog-foot">
-        ${editing ? '<button type="button" class="btn btn-danger" data-del style="margin-right:auto">Eliminar</button>' : ''}
-        <button type="button" class="btn btn-primary" data-save>Guardar</button>
-      </div>`;
+        <div class="cat-head"><span class="ovl">${title}</span><button type="button" class="link-btn" data-panelclose>Listo</button></div>
+        <div class="pick-list">
+          ${methods.length ? methods.map((m) => row(m.id, m.name, methodIconName(m.id))).join('') : '<div class="empty">No hay medios. Agregá uno desde Cuentas.</div>'}
+          ${savings.length ? `<div class="ovl pick-sep">Pagar con un ahorro</div>${savings.map((s) => row(s.id, s.name, 'wallet')).join('')}` : ''}
+        </div>`;
     }
-
-    function keypadHTML() {
+    function instPanelHTML() {
+      const n = instN();
+      const a = instAmounts(n);
       return `
-      <div class="tx-keypad">
-        <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" class="tx-key-op" data-op="÷">÷</button>
-        <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" class="tx-key-op" data-op="×">×</button>
-        <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" class="tx-key-op" data-op="-">−</button>
-        <button type="button" data-k="0">0</button><button type="button" data-k="00">00</button><button type="button" data-k="000">000</button><button type="button" class="tx-key-op" data-op="+">+</button>
-        <button type="button" data-k=".">,</button><button type="button" class="tx-key-ac" data-ac>AC</button><button type="button" class="tx-key-eq" data-eq>=</button>
-      </div>`;
+        <div class="cat-head"><span class="ovl">Cuotas</span><button type="button" class="link-btn" data-panelclose>Listo</button></div>
+        <div class="inst-grid">
+          ${Array.from({ length: INST_MAX }, (_, i) => i + 1).map((k) => `<button type="button" class="inst-opt${k === n ? ' sel' : ''}" data-inst="${k}">${k === 1 ? '1 pago' : k}</button>`).join('')}
+        </div>
+        ${n > 1 ? `
+        <div class="tseg tseg-small" role="group" aria-label="El monto es">
+          <button type="button" class="${draft.instMode !== 'per' ? 'on' : ''}" data-inst-mode="total">Es el total</button>
+          <button type="button" class="${draft.instMode === 'per' ? 'on' : ''}" data-inst-mode="per">Es cada cuota</button>
+        </div>
+        <div class="hint inst-preview">${a
+          ? `${n} cuotas de <b>${esc(fmtMoney(a.per, draft.currency))}</b> · total <b>${esc(fmtMoney(a.total, draft.currency))}</b>`
+          : 'Cargá un monto para ver cuánto queda cada cuota.'}</div>` : ''}`;
+    }
+    const SHARE_PRESETS = [50, 60, 70, 40, 30, 100];
+    function sharePanelHTML() {
+      const pct = Math.round(Number(draft.sharePct) || 0);
+      const who = partnerLabel(partner);
+      return `
+        <div class="cat-head"><span class="ovl">Compartido con ${esc(who)}</span><button type="button" class="link-btn" data-panelclose>Listo</button></div>
+        <div class="hint">Cuánto te toca a vos y cuánto a ${esc(who)}.</div>
+        <div class="inst-grid share-grid">
+          ${SHARE_PRESETS.map((p) => `<button type="button" class="inst-opt${draft.shareIt && p === pct ? ' sel' : ''}" data-sharepct="${p}">${p}/${100 - p}</button>`).join('')}
+        </div>
+        <label class="share-custom">
+          <span>Tu parte</span>
+          <input type="number" id="tx-share-pct" min="0" max="100" step="1" inputmode="numeric" value="${pct}">
+          <span>%</span>
+        </label>
+        <button type="button" class="btn btn-full share-off" data-shareoff>No compartir</button>`;
+    }
+    function notePanelHTML() {
+      return `
+        <div class="cat-head"><span class="ovl">Nota</span><button type="button" class="link-btn" data-panelclose>Listo</button></div>
+        <input type="text" id="tx-note" maxlength="80" value="${esc(draft.note)}" placeholder="Ej.: cumple de Ana" enterkeyhint="done">`;
+    }
+    function lowerHTML() {
+      if (draft.panel === 'method' || draft.panel === 'methodTo') return methodPanelHTML(draft.panel);
+      if (draft.panel === 'inst' && showInstallments()) return instPanelHTML();
+      if (draft.panel === 'share' && canShare()) return sharePanelHTML();
+      if (draft.panel === 'note') return notePanelHTML();
+      draft.panel = null;
+      if (draft.type === 'transferencia') return '';
+      return catSectionHTML();
     }
 
-    function wireKeypad() {
-      $$('.tx-keypad [data-k]', dlg).forEach((b) => b.addEventListener('click', () => pressDigit(b.dataset.k)));
-      $$('.tx-keypad [data-op]', dlg).forEach((b) => b.addEventListener('click', () => pressOp(b.dataset.op)));
-      const eqBtn = $('[data-eq]', dlg);
-      if (eqBtn) eqBtn.addEventListener('click', pressEquals);
-      const acBtn = $('[data-ac]', dlg);
-      if (acBtn) acBtn.addEventListener('click', pressClear);
+    function keysHTML() {
+      const k = (v, label, cls = '', extra = '') => `<button type="button" class="key${cls}" ${extra} data-k="${v}">${label}</button>`;
+      const op = (v, label, aria) => `<button type="button" class="key op" data-op="${v}" aria-label="${aria}">${label}</button>`;
+      return `
+        <div class="keys" data-keys>
+          ${k('7', '7')}${k('8', '8')}${k('9', '9')}<button type="button" class="key op key-wide" data-back aria-label="Borrar (mantené para borrar todo)">${spriteIcon('back')}</button>
+          ${k('4', '4')}${k('5', '5')}${k('6', '6')}${op('÷', '÷', 'Dividir')}${op('×', '×', 'Multiplicar')}
+          ${k('1', '1')}${k('2', '2')}${k('3', '3')}${op('-', '−', 'Restar')}${op('+', '+', 'Sumar')}
+          ${k('000', '000')}${k('0', '0')}${k('.', ',', '', 'aria-label="Coma"')}<button type="button" class="key op key-wide" data-eq aria-label="Igual">=</button>
+        </div>`;
+    }
+
+    function saveLabel() {
+      if (editing) return 'Guardar cambios';
+      if (draft.type === 'transferencia') return 'Guardar transferencia';
+      const base = `Guardar ${TX_TYPE_LABEL[draft.type].toLowerCase()}`;
+      return draft.categoryId ? `${base} · ${catName(draft.categoryId)}` : base;
+    }
+
+    function sheetHTML() {
+      return `
+        <div class="sh-top" data-drag>
+          <div class="grab" aria-hidden="true"></div>
+          <div class="sh-h">
+            <button type="button" class="icb" data-close aria-label="Cerrar">${spriteIcon('x')}</button>
+            <h2>${editing ? 'Editar movimiento' : 'Nuevo movimiento'}</h2>
+            ${editing ? `<button type="button" class="icb icb-danger" data-del aria-label="Eliminar movimiento">${iconSvg('trash')}</button>` : '<span></span>'}
+          </div>
+        </div>
+        <div class="sh-body" data-shbody>
+          <div class="tseg" role="group" aria-label="Tipo de movimiento">
+            ${['gasto', 'ingreso', 'transferencia'].map((t) => `<button type="button" class="${draft.type === t ? 'on' : ''}" data-ttype="${t}" aria-pressed="${draft.type === t}">${TX_TYPE_LABEL[t]}</button>`).join('')}
+          </div>
+          ${amountHTML()}
+          ${chipsHTML()}
+          <div class="sh-lower">${lowerHTML()}</div>
+        </div>
+        ${draft.panel === 'note' ? '' : keysHTML()}
+        <div class="savebar">
+          ${draft.error ? `<div class="sh-error" role="alert">${esc(draft.error)}</div>` : ''}
+          <button type="button" class="btn btn-primary btn-full btn-save" data-save>${esc(saveLabel())}</button>
+        </div>`;
+    }
+
+    // El monto se repinta solo (sin rehacer todo el panel) en cada tecla:
+    // así no se pierde el scroll ni parpadea la grilla.
+    function paintAmount() {
+      draft.error = '';
+      const a = $('[data-amount]', dlg);
+      if (a) a.outerHTML = amountHTML();
+      const chips = $('.chips', dlg);
+      if (chips && showInstallments() && instN() > 1) chips.outerHTML = chipsHTML();
+      if (draft.panel === 'inst') { const lower = $('.sh-lower', dlg); if (lower) lower.innerHTML = lowerHTML(); }
+      const err = $('.sh-error', dlg);
+      if (err) err.remove();
     }
 
     function paint() {
-      dlg.innerHTML = editing ? formHTML() : wizardHTML();
-      if (editing) wire(); else wizardWire();
-    }
-
-    /* ---------- Alta de movimiento nuevo: de a una etapa por vez ---------- */
-    const STEP_TITLE = {
-      type: 'Tipo de movimiento', date: 'Fecha', amount: 'Monto',
-      category: 'Categoría', method: 'Cuenta', from: 'Desde', to: 'Hacia', extra: 'Detalles',
-    };
-    function wizardSteps() {
-      return draft.type === 'transferencia'
-        ? ['type', 'date', 'amount', 'from', 'to', 'extra']
-        : ['type', 'date', 'amount', 'category', 'method', 'extra'];
-    }
-    function wizardSummaryHTML() {
-      const steps = wizardSteps();
-      const chips = [{ gasto: 'Gasto', ingreso: 'Ingreso', transferencia: 'Transferencia' }[draft.type]];
-      const past = (k) => steps.indexOf(k) < draft.wstep;
-      if (past('date')) chips.push(fmtDateFull(draft.date));
-      if (past('amount') && finalAmount() > 0) chips.push(fmtMoney(finalAmount(), draft.currency));
-      if (draft.type === 'transferencia') {
-        if (past('from') && draft.methodId) chips.push(methodName(draft.methodId));
-        if (past('to') && draft.toMethodId) chips.push(methodName(draft.toMethodId));
-      } else {
-        if (past('category') && draft.categoryId) chips.push(catName(draft.categoryId));
-        if (past('method') && draft.methodId) chips.push(methodName(draft.methodId));
-      }
-      return chips.map((c) => `<span class="tx-wiz-chip">${esc(c)}</span>`).join('');
-    }
-    function wizardStepBodyHTML(key) {
-      if (key === 'type') {
-        const opts = [
-          { t: 'ingreso', label: 'Ingreso', cls: 'type-income', icon: 'trend', rowIcon: 'row-icon-income' },
-          { t: 'gasto', label: 'Gasto', cls: 'type-expense', icon: 'cash', rowIcon: 'row-icon-expense' },
-          { t: 'transferencia', label: 'Transferencia', cls: 'type-transfer', icon: 'swap', rowIcon: 'row-icon-transfer' },
-        ];
-        return `<div class="tx-wiz-type-options">${opts.map((o) => `
-          <button type="button" class="tx-wiz-type-opt ${o.cls} ${draft.type === o.t ? 'sel' : ''}" data-wtype="${o.t}">
-            <span class="row-icon ${o.rowIcon}">${iconSvg(o.icon)}</span>
-            <span>${esc(o.label)}</span>
-          </button>`).join('')}</div>`;
-      }
-      if (key === 'date') {
-        return `
-          <label class="tx-row tx-row-date">
-            <span class="tx-row-label">Fecha</span>
-            <span class="tx-row-value tx-row-value-date">${esc(fmtDateFull(draft.date))}</span>
-            <input type="date" id="tx-date-input" class="tx-date-native" value="${esc(draft.date)}">
-          </label>
-          ${draft.date !== todayStr() ? '<button type="button" class="link-btn" data-wtoday>Usar hoy</button>' : ''}`;
-      }
-      if (key === 'amount') {
-        return `
-          <div class="tx-amount-block">
-            <div class="tx-cur-toggle">
-              <button type="button" class="cur-pill ${draft.currency === 'ARS' ? 'active' : ''}" data-cur="ARS">ARS</button>
-              <button type="button" class="cur-pill ${draft.currency === 'USD' ? 'active' : ''}" data-cur="USD">USD</button>
-            </div>
-            <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : draft.type === 'gasto' ? 'is-expense' : ''}">
-              <span>${esc(displayExpr())}</span>
-              <button type="button" class="tx-amount-back" data-back>⌫ Borrar</button>
-            </div>
-          </div>`;
-      }
-      if (key === 'category') {
-        return `<div class="tx-pick-inline" data-kind="category">${categoryOptionsHTML()}</div>`;
-      }
-      if (key === 'method') {
-        return `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML(draft.methodId)}</div>`;
-      }
-      if (key === 'from') {
-        return `<div class="tx-pick-inline" data-kind="from">${methodOptionsHTML(draft.methodId, draft.toMethodId)}</div>`;
-      }
-      if (key === 'to') {
-        return `<div class="tx-pick-inline" data-kind="to">${methodOptionsHTML(draft.toMethodId, draft.methodId)}</div>`;
-      }
-      // 'extra': cuotas (si aplica) + compartido (si aplica) + nota, antes de guardar.
-      return `
-        ${showInstallments() ? installmentsPickerHTML() : ''}
-        ${canShare() ? `
-        <label class="tx-check-row">
-          <input type="checkbox" id="tx-share" ${draft.shareIt ? 'checked' : ''}>
-          <span>Es un gasto compartido con ${esc(partnerLabel(partner))}</span>
-        </label>
-        ${draft.shareIt ? `
-        <div class="tx-row-note">
-          <label>Vos te quedás con este % del gasto (el resto le corresponde a ${esc(partnerLabel(partner))})</label>
-          <input type="number" id="tx-share-pct" min="0" max="100" step="1" value="${draft.sharePct}">
-        </div>` : ''}` : ''}
-        <div class="tx-row-note">
-          <label>Nota <span class="hint">(opcional)</span></label>
-          <input type="text" id="tx-note" maxlength="80" value="${esc(draft.note)}">
-        </div>`;
-    }
-    function wizardFootHTML(key) {
-      if (key === 'date') {
-        return '<div class="dialog-foot"><button type="button" class="btn btn-primary btn-full" data-wnext>Siguiente →</button></div>';
-      }
-      if (key === 'amount') {
-        return `<div class="dialog-foot"><button type="button" class="btn btn-primary btn-full" data-wnext ${finalAmount() > 0 ? '' : 'disabled'}>Siguiente →</button></div>`;
-      }
-      if (key === 'extra') {
-        return '<div class="dialog-foot"><button type="button" class="btn btn-primary" data-save>Guardar</button></div>';
-      }
-      return ''; // type/category/method/from/to: avanzan solos al tocar una opción
-    }
-    function wizardHTML() {
-      const steps = wizardSteps();
-      draft.wstep = Math.min(draft.wstep, steps.length - 1);
-      const key = steps[draft.wstep];
-      return `
-      <div class="dialog-head tx-head">
-        ${draft.wstep > 0 ? '<button type="button" class="row-del" data-wiz-back aria-label="Atrás">‹</button>' : '<span></span>'}
-        <span class="tx-head-title">${esc(STEP_TITLE[key])}</span>
-        <button type="button" class="row-del" data-wiz-close aria-label="Cancelar">✕</button>
-      </div>
-      <div class="tx-wiz-progress">${steps.map((_, i) => `<span class="tx-wiz-dot ${i === draft.wstep ? 'active' : i < draft.wstep ? 'done' : ''}"></span>`).join('')}</div>
-      ${draft.wstep > 0 ? `<div class="tx-wiz-summary">${wizardSummaryHTML()}</div>` : ''}
-      <div class="tx-body tx-wiz-body">${wizardStepBodyHTML(key)}</div>
-      ${key === 'amount' ? keypadHTML() : ''}
-      ${wizardFootHTML(key)}`;
-    }
-    function wireCatGroupNav() {
-      $$('[data-catgroup]', dlg).forEach((elx) => elx.addEventListener('click', (e) => {
-        e.stopPropagation();
-        draft.catGroupExpand = elx.dataset.catgroup;
-        paint();
-      }));
-      $$('[data-catback]', dlg).forEach((elx) => elx.addEventListener('click', (e) => {
-        e.stopPropagation();
-        draft.catGroupExpand = null;
-        paint();
-      }));
-    }
-    function wizardWire() {
-      const backBtn = $('[data-wiz-back]', dlg);
-      if (backBtn) backBtn.addEventListener('click', () => { draft.wstep -= 1; paint(); });
-      $('[data-wiz-close]', dlg).addEventListener('click', () => dlg.close());
-      const key = wizardSteps()[draft.wstep];
-      if (key === 'type') {
-        $$('[data-wtype]', dlg).forEach((b) => b.addEventListener('click', () => {
-          draft.type = b.dataset.wtype;
-          if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
-          // Pagar con un ahorro solo es válido para un gasto (ver
-          // methodOptionsHTML) — si ya se había elegido uno y se cambia a
-          // ingreso/transferencia, ese medio deja de ser válido.
-          if (draft.methodId && isSavingMethod(draft.methodId) && draft.type !== 'gasto') draft.methodId = '';
-          draft.catGroupExpand = null;
-          draft.wstep = 1;
-          paint();
-        }));
-      } else if (key === 'date') {
-        $('#tx-date-input', dlg).addEventListener('change', (e) => { draft.date = e.target.value; paint(); });
-        const todayBtn = $('[data-wtoday]', dlg);
-        if (todayBtn) todayBtn.addEventListener('click', () => { draft.date = todayStr(); paint(); });
-        $('[data-wnext]', dlg).addEventListener('click', () => { draft.wstep += 1; paint(); });
-      } else if (key === 'amount') {
-        $$('.cur-pill', dlg).forEach((b) => b.addEventListener('click', () => { draft.currency = b.dataset.cur; paint(); }));
-        wireKeypad();
-        $('[data-back]', dlg).addEventListener('click', pressBack);
-        const nextBtn = $('[data-wnext]', dlg);
-        if (nextBtn) nextBtn.addEventListener('click', () => {
-          if (!(finalAmount() > 0)) return;
-          draft.acc = finalAmount();
-          draft.op = null;
-          draft.cur = '';
-          draft.wstep += 1;
-          paint();
-        });
-      } else if (key === 'category') {
-        wireCatGroupNav();
-        $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
-          draft.categoryId = row.dataset.pickid;
-          draft.catGroupExpand = null;
-          draft.wstep += 1;
-          paint();
-        }));
-      } else if (key === 'method' || key === 'from' || key === 'to') {
-        $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
-          if (key === 'to') draft.toMethodId = row.dataset.pickid;
-          else draft.methodId = row.dataset.pickid;
-          draft.wstep += 1;
-          paint();
-        }));
-      } else if (key === 'extra') {
-        const shareBox = $('#tx-share', dlg);
-        if (shareBox) shareBox.addEventListener('change', (e) => { draft.shareIt = e.target.checked; paint(); });
-        wireDraftInputs();
-        $('[data-save]', dlg).addEventListener('click', onSave);
+      const body = $('[data-shbody]', dlg);
+      const scroll = body ? body.scrollTop : 0;
+      dlg.innerHTML = sheetHTML();
+      const nb = $('[data-shbody]', dlg);
+      if (nb) nb.scrollTop = scroll;
+      if (draft.panel === 'note') {
+        const n = $('#tx-note', dlg);
+        if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
       }
     }
 
-    function wire() {
-      $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => dlg.close()));
-      $$('.tx-tab', dlg).forEach((b) => b.addEventListener('click', () => {
-        draft.type = b.dataset.ttype;
-        if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
-        if (draft.methodId && isSavingMethod(draft.methodId) && draft.type !== 'gasto') draft.methodId = '';
-        draft.expand = null;
-        draft.catGroupExpand = null;
-        paint();
-      }));
-      $('#tx-date-input', dlg).addEventListener('change', (e) => { draft.date = e.target.value; paint(); });
-      $$('.cur-pill', dlg).forEach((b) => b.addEventListener('click', () => { draft.currency = b.dataset.cur; paint(); }));
-      $$('[data-toggle]', dlg).forEach((row) => row.addEventListener('click', () => {
-        const k = row.dataset.toggle;
-        draft.expand = draft.expand === k ? null : k;
-        if (k === 'category') draft.catGroupExpand = null;
-        paint();
-      }));
-      wireCatGroupNav();
-      $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
-        const kind = row.closest('.tx-pick-inline').dataset.kind;
-        if (kind === 'category') draft.categoryId = row.dataset.pickid;
-        else if (kind === 'methodTo') draft.toMethodId = row.dataset.pickid;
-        else draft.methodId = row.dataset.pickid;
-        draft.expand = null;
-        draft.catGroupExpand = null;
-        paint();
-      }));
-      const shareBox = $('#tx-share', dlg);
-      if (shareBox) shareBox.addEventListener('change', (e) => { draft.shareIt = e.target.checked; paint(); });
-      wireKeypad();
-      $('[data-back]', dlg).addEventListener('click', pressBack);
-      wireDraftInputs();
-      $('[data-save]', dlg).addEventListener('click', onSave);
-      const delBtn = $('[data-del]', dlg);
-      if (delBtn) delBtn.addEventListener('click', () => { dlg.close(); deleteTx(tx); });
+    function setType(t) {
+      draft.type = t;
+      if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
+      // Pagar con un ahorro solo es válido para un gasto.
+      if (draft.methodId && isSavingMethod(draft.methodId) && draft.type !== 'gasto') draft.methodId = '';
+      if (!draft.methodId) draft.methodId = lastUsedMethodId(t === 'transferencia' ? null : t);
+      draft.catGroupExpand = null;
+      draft.panel = null;
+      draft.error = '';
+      paint();
+    }
+    function pickCategoryGroup(groupId) {
+      const kids = catChildren(groupId);
+      const usage = categoryUsage(draft.type);
+      // La subcategoría más usada queda elegida; si ya había una de este
+      // grupo, se respeta.
+      const already = kids.find((c) => c.id === draft.categoryId);
+      const best = already || [...kids].sort((a, b) => (usage.get(b.id) || 0) - (usage.get(a.id) || 0))[0];
+      draft.categoryId = best ? best.id : draft.categoryId;
+      draft.catGroupExpand = groupId;
+      draft.error = '';
+      paint();
     }
 
-    // Nota/cuotas/% compartido se guardan en draft en cada tecla (no solo al
-    // guardar): tocar el checkbox de "compartido" repinta el diálogo, y sin
-    // esto se perdía lo ya tipeado en esos campos.
-    function wireDraftInputs() {
-      const noteEl = $('#tx-note', dlg);
-      if (noteEl) noteEl.addEventListener('input', (e) => { draft.note = e.target.value; });
-      $$('[data-inst-preset]', dlg).forEach((b) => b.addEventListener('click', () => {
-        draft.inst = b.dataset.instPreset;
+    // Todos los toques del panel pasan por acá (el HTML se rehace entero en
+    // cada paint(), así que se escucha una sola vez en el <dialog>).
+    function onClick(e) {
+      const t = e.target;
+      const q = (sel) => t.closest(sel);
+      let b;
+      if (q('[data-close]')) { closeSheet(dlg); return; }
+      if ((b = q('.chip-date'))) {
+        // En la compu el selector de fecha no se abre tocando el campo
+        // invisible; en el iPhone sí, con la ruedita del sistema.
+        const inp = $('input', b);
+        if (inp && inp.showPicker && e.target !== inp) { try { inp.showPicker(); } catch (err) { /* sin showPicker */ } }
+        return;
+      }
+      if (q('[data-del]')) { closeSheet(dlg).then(() => deleteTx(tx)); return; }
+      if ((b = q('[data-ttype]'))) { if (b.dataset.ttype !== draft.type) setType(b.dataset.ttype); return; }
+      if ((b = q('[data-keys] [data-k]'))) { pressDigit(b.dataset.k); return; }
+      if ((b = q('[data-keys] [data-op]'))) { pressOp(b.dataset.op); return; }
+      if (q('[data-keys] [data-eq]')) { pressEquals(); return; }
+      if (q('[data-keys] [data-back]')) { if (!backHeld) pressBack(); backHeld = false; return; }
+      if (q('[data-curtoggle]')) { draft.currency = draft.currency === 'ARS' ? 'USD' : 'ARS'; paint(); return; }
+      if ((b = q('[data-panel]'))) {
+        const p = b.dataset.panel;
+        draft.panel = draft.panel === p ? null : p;
         paint();
-      }));
-      const instCustomBtn = $('[data-inst-custom]', dlg);
-      if (instCustomBtn) instCustomBtn.addEventListener('click', () => { draft.inst = ''; paint(); });
-      const instEl = $('#tx-inst', dlg);
-      if (instEl) instEl.addEventListener('input', (e) => { draft.inst = e.target.value; });
-      $$('[data-inst-mode]', dlg).forEach((b) => b.addEventListener('click', () => {
-        draft.instMode = b.dataset.instMode;
+        return;
+      }
+      if (q('[data-share]')) {
+        if (shareHeld) { shareHeld = false; return; }
+        if (!draft.shareIt) { draft.shareIt = true; draft.panel = null; } else draft.panel = draft.panel === 'share' ? null : 'share';
         paint();
-      }));
-      const pctEl = $('#tx-share-pct', dlg);
-      if (pctEl) pctEl.addEventListener('input', (e) => { draft.sharePct = e.target.value; });
+        return;
+      }
+      if (q('[data-panelclose]')) { draft.panel = null; paint(); return; }
+      if ((b = q('[data-pickmethod]'))) {
+        if (draft.panel === 'methodTo') draft.toMethodId = b.dataset.pickmethod;
+        else draft.methodId = b.dataset.pickmethod;
+        if (!showInstallments()) draft.inst = 1;
+        draft.panel = null;
+        draft.error = '';
+        paint();
+        return;
+      }
+      if ((b = q('[data-inst]'))) { draft.inst = Number(b.dataset.inst); paint(); return; }
+      if ((b = q('[data-inst-mode]'))) { draft.instMode = b.dataset.instMode; paint(); return; }
+      if ((b = q('[data-sharepct]'))) { draft.shareIt = true; draft.sharePct = Number(b.dataset.sharepct); paint(); return; }
+      if (q('[data-shareoff]')) { draft.shareIt = false; draft.panel = null; paint(); return; }
+      if (q('[data-allcats]')) { draft.showAllCats = !draft.showAllCats; paint(); return; }
+      if (q('[data-catback]')) { draft.catGroupExpand = null; paint(); return; }
+      if ((b = q('[data-catgroup]'))) { pickCategoryGroup(b.dataset.catgroup); return; }
+      if ((b = q('[data-pickid]'))) { draft.categoryId = b.dataset.pickid; draft.error = ''; paint(); return; }
+      if (q('[data-save]')) { onSave(); }
     }
+    function onInput(e) {
+      const t = e.target;
+      if (t.id === 'tx-note') draft.note = t.value;
+      else if (t.id === 'tx-share-pct') {
+        const v = Math.min(100, Math.max(0, parseFloat(t.value)));
+        if (isFinite(v)) { draft.sharePct = v; draft.shareIt = true; }
+      }
+    }
+    function onChange(e) {
+      const t = e.target;
+      if (t.id === 'tx-date-input' && t.value) { draft.date = t.value; paint(); }
+      else if (t.id === 'tx-share-pct' || t.id === 'tx-note') paint();
+    }
+    function onKeydown(e) {
+      if (e.target.id === 'tx-note' && e.key === 'Enter') { e.preventDefault(); draft.panel = null; paint(); }
+    }
+    // ⌫ y "Compartido" mantenidos: borrar todo / elegir la proporción.
+    let backHeld = false, shareHeld = false, holdTimer = null;
+    function onPointerDown(e) {
+      const back = e.target.closest('[data-keys] [data-back]');
+      const share = e.target.closest('[data-share]');
+      if (!back && !share) return;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => {
+        if (back) { backHeld = true; pressClear(); }
+        else { shareHeld = true; draft.shareIt = true; draft.panel = 'share'; haptic(); paint(); }
+      }, 500);
+    }
+    const cancelHold = () => clearTimeout(holdTimer);
 
     async function onSave() {
       if (draft._saving) return;
+      const fail = (msg) => { draft.error = msg; paint(); };
       const entered = Math.round(finalAmount() * 100) / 100;
-      if (!(entered > 0)) { alert('Ingresá un monto mayor a 0.'); return; }
-      if (!draft.methodId) { alert(draft.type === 'transferencia' ? 'Elegí la cuenta de origen.' : 'Elegí una cuenta.'); return; }
+      if (!(entered > 0)) return fail('Cargá un monto mayor a 0.');
+      if (!draft.methodId) return fail(draft.type === 'transferencia' ? 'Elegí la cuenta de origen.' : 'Elegí una cuenta.');
       if (draft.type === 'transferencia') {
-        if (!draft.toMethodId) { alert('Elegí la cuenta de destino.'); return; }
-        if (draft.toMethodId === draft.methodId) { alert('Elegí dos cuentas distintas para transferir.'); return; }
+        if (!draft.toMethodId) return fail('Elegí la cuenta de destino.');
+        if (draft.toMethodId === draft.methodId) return fail('Elegí dos cuentas distintas para transferir.');
       } else if (!draft.categoryId) {
-        alert('Elegí una categoría.'); return;
+        return fail('Elegí una categoría.');
       }
-      // Con cuotas en modo "el monto de arriba es 1 cuota", lo tipeado no es
-      // el total sino el valor de cada cuota — hay que multiplicarlo por n
-      // para saber cuánto sale la compra entera (usado en la nota, el gasto
-      // compartido y demás lugares donde importa el total, no una cuota).
-      const n = !editing && showInstallments() ? Math.max(1, parseInt(draft.inst || '1', 10) || 1) : 1;
+      // Con cuotas en modo "es cada cuota", lo tipeado no es el total sino el
+      // valor de cada cuota: se multiplica por n para saber el total.
+      const n = !editing && showInstallments() ? instN() : 1;
       const amount = (n > 1 && draft.instMode === 'per') ? Math.round(entered * n * 100) / 100 : entered;
       // Buscar la cotización histórica es una llamada de red: evita que un
-      // doble click dispare el guardado dos veces mientras espera.
+      // doble toque dispare el guardado dos veces mientras espera.
       draft._saving = true;
       const saveBtn = $('[data-save]', dlg);
       if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando…'; }
@@ -1866,6 +1761,7 @@
         // fecha/moneda, el retiro vinculado en ese ahorro se rehace desde
         // cero con los datos finales (ver syncSavingWithdrawalForTx()).
         syncSavingWithdrawalForTx(tx);
+        createdTxs = [tx];
       } else {
         createdTxs = [];
         if (n === 1) {
@@ -1915,12 +1811,17 @@
           alert('El movimiento se guardó, pero no se pudo avisar a la cuenta compartida: ' + e.message);
         }
       }
-      dlg.close();
+      // El movimiento recién guardado se resalta un momento en la lista.
+      ui.newTxIds = { ids: new Set(createdTxs.map((t) => t.id)), at: Date.now() };
+      await closeSheet(dlg);
       render();
     }
 
     paint();
-    openModal(dlg);
+    openSheet(dlg, {
+      listeners: { click: onClick, input: onInput, change: onChange, keydown: onKeydown,
+        pointerdown: onPointerDown, pointerup: cancelHold, pointercancel: cancelHold, pointerleave: cancelHold },
+    });
     // Si el hogar compartido todavía no terminó de cargar, se repinta al
     // terminar para que aparezca la opción "compartido".
     if (!editing && Cloud.user() && (!shared.loaded || shared.loading)) {
@@ -1928,6 +1829,105 @@
         if (dlg.open && !partner && sharedPartner()) { partner = sharedPartner(); paint(); }
       }).catch(() => {});
     }
+  }
+
+  /* ---------- Panel inferior (sheet) ----------
+     Usa el mismo <dialog> de la app (queda en la capa superior, con su
+     fondo y el foco atrapado adentro). Sube desde abajo; atrás, la pantalla
+     se achica apenas. Se cierra con la X, con Escape o deslizándolo hacia
+     abajo (más de 120px, o un gesto rápido). Los listeners que se le pasan
+     se sacan solos al cerrarse, así el próximo uso del <dialog> arranca
+     limpio. */
+  function openSheet(dlg, { listeners = {} } = {}) {
+    for (const [ev, fn] of Object.entries(listeners)) dlg.addEventListener(ev, fn);
+    const onCancel = (e) => { e.preventDefault(); closeSheet(dlg); };
+    dlg.addEventListener('cancel', onCancel);
+    const drag = sheetDrag(dlg);
+    // El evento "close" llega un instante después de cerrar: si este panel
+    // se abrió justo al cerrar otro diálogo (ej. detalle → Editar), ese
+    // "close" viejo llega con el panel ya abierto y se ignora.
+    const onClose = () => {
+      if (dlg.open) return;
+      dlg.removeEventListener('close', onClose);
+      for (const [ev, fn] of Object.entries(listeners)) dlg.removeEventListener(ev, fn);
+      dlg.removeEventListener('cancel', onCancel);
+      drag.off();
+      dlg.classList.remove('open');
+      dlg.style.transform = '';
+      document.body.classList.remove('sheet-behind');
+    };
+    dlg.addEventListener('close', onClose);
+    showModalBase(dlg);
+    document.body.classList.add('sheet-behind');
+    requestAnimationFrame(() => requestAnimationFrame(() => dlg.classList.add('open')));
+  }
+  const prefersReducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function closeSheet(dlg) {
+    return new Promise((resolve) => {
+      if (!dlg.open) { resolve(); return; }
+      document.body.classList.remove('sheet-behind');
+      if (prefersReducedMotion() || !dlg.classList.contains('open')) { dlg.close(); resolve(); return; }
+      dlg.style.transform = '';
+      dlg.classList.remove('open');
+      let done = false;
+      const finish = () => { if (done) return; done = true; if (dlg.open) dlg.close(); resolve(); };
+      dlg.addEventListener('transitionend', finish, { once: true });
+      setTimeout(finish, 450);
+    });
+  }
+  // Arrastrar el panel hacia abajo para cerrarlo: desde la agarradera o el
+  // encabezado, o desde el contenido si ya está scrolleado arriba de todo.
+  function sheetDrag(dlg) {
+    let s = null;
+    const down = (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const fromTop = e.target.closest('[data-drag], .dialog-head') || e.target === dlg;
+      const body = e.target.closest('[data-shbody], .dialog-body');
+      if (!fromTop && !(body && body.scrollTop <= 0)) return;
+      if (e.target.closest('input, [data-keys]')) return;
+      s = { y: e.clientY, x: e.clientX, t: performance.now(), dy: 0, active: false };
+    };
+    const move = (e) => {
+      if (!s) return;
+      const dy = e.clientY - s.y, dx = e.clientX - s.x;
+      if (!s.active) {
+        if (Math.abs(dy) < 8) return;
+        if (dy < 0 || Math.abs(dx) > Math.abs(dy)) { s = null; return; }
+        s.active = true;
+        dlg.classList.add('dragging');
+      }
+      s.dy = Math.max(0, dy);
+      dlg.style.transform = `translateY(${s.dy}px)`;
+    };
+    let justDragged = false;
+    const up = () => {
+      if (!s) return;
+      const st = s; s = null;
+      if (!st.active) return;
+      dlg.classList.remove('dragging');
+      justDragged = true;
+      setTimeout(() => { justDragged = false; }, 0);
+      const v = st.dy / Math.max(1, performance.now() - st.t);
+      if (st.dy > 120 || v > 0.6) closeSheet(dlg);
+      else dlg.style.transform = '';
+    };
+    // Si el gesto fue un arrastre, el toque no tiene que "apretar" el botón
+    // que quedó abajo del dedo al soltar.
+    const swallow = (e) => { if (justDragged) { e.stopPropagation(); e.preventDefault(); } };
+    dlg.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    dlg.addEventListener('click', swallow, true);
+    return {
+      off() {
+        dlg.removeEventListener('pointerdown', down);
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        dlg.removeEventListener('click', swallow, true);
+      },
+    };
   }
 
   /* Gasto compartido vinculado a un movimiento propio: el id guardado al
@@ -1942,31 +1942,118 @@
       && Math.abs(Number(e.amount) - Number(tx.amount)) < 0.01) || null;
   }
 
+  /* Borrar un movimiento (o la compra entera, si es una cuota): sale de
+     la lista enseguida y aparece un aviso con "Deshacer" durante 5
+     segundos, en vez de un diálogo de confirmación. El borrado de verdad
+     (guardar, sacar el retiro de ahorro vinculado y el gasto de
+     Compartido) se hace al terminar ese tiempo, o antes si se borra otra
+     cosa o la app pasa a segundo plano. */
+  let pendingDelete = null;
   function deleteTx(tx) {
-    if (tx.groupId) {
-      const group = S().transactions.filter((t) => t.groupId === tx.groupId);
-      if (!confirm(`Este movimiento es una compra en ${group.length} cuotas. Se eliminarán todas las cuotas.`)) return;
-      // Si alguna cuota tenía un retiro de ahorro vinculado (no debería
-      // pasar hoy — savings+cuotas está bloqueado en el alta — pero una
-      // compra vieja podría tenerlo de antes), se saca junto con ella.
-      for (const t of group) removeLinkedSavingEntry(t.id);
-      S().transactions = S().transactions.filter((t) => t.groupId !== tx.groupId);
-    } else {
-      const linked = linkedSharedExpense(tx);
-      if (!confirm(linked ? '¿Eliminar este movimiento? También se va a borrar de Compartido.' : '¿Eliminar este movimiento?')) return;
-      removeLinkedSavingEntry(tx.id);
-      S().transactions = S().transactions.filter((t) => t.id !== tx.id);
-      if (linked) {
-        // Se borra también el gasto del hogar (y se actualiza la lista).
-        Cloud.deleteSharedExpense(linked.id)
-          .then(() => Cloud.listSharedExpenses(shared.household.id))
-          .then((list) => { shared.expenses = list; render(); })
-          .catch((e) => alert('El movimiento se borró, pero no se pudo borrar de Compartido: ' + friendlyCloudError(e)));
-      }
-    }
-    Store.save();
+    flushPendingDelete();
+    const group = tx.groupId ? S().transactions.filter((t) => t.groupId === tx.groupId) : [tx];
+    const ids = new Set(group.map((t) => t.id));
+    const removed = group.map((t) => ({ t, idx: S().transactions.indexOf(t) })).sort((a, b) => a.idx - b.idx);
+    // El gasto de Compartido se busca ahora, mientras el movimiento existe.
+    const linked = tx.groupId ? null : linkedSharedExpense(tx);
+    S().transactions = S().transactions.filter((t) => !ids.has(t.id));
+    pendingDelete = { removed, linked, timer: setTimeout(flushPendingDelete, 5000) };
+    render();
+    const msg = group.length > 1 ? `Se borró la compra en ${group.length} cuotas`
+      : linked ? 'Se borró el movimiento (también de Compartido)' : 'Se borró el movimiento';
+    showToast(msg, { action: 'Deshacer', onAction: undoDelete, duration: 5000 });
+  }
+  function undoDelete() {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timer);
+    const arr = S().transactions;
+    for (const { t, idx } of pendingDelete.removed) arr.splice(Math.min(idx, arr.length), 0, t);
+    pendingDelete = null;
     render();
   }
+  function flushPendingDelete() {
+    if (!pendingDelete) return;
+    const { removed, linked, timer } = pendingDelete;
+    clearTimeout(timer);
+    pendingDelete = null;
+    for (const { t } of removed) removeLinkedSavingEntry(t.id);
+    Store.save();
+    if (linked) {
+      Cloud.deleteSharedExpense(linked.id)
+        .then(() => Cloud.listSharedExpenses(shared.household.id))
+        .then((list) => { shared.expenses = list; render(); })
+        .catch((e) => alert('El movimiento se borró, pero no se pudo borrar de Compartido: ' + friendlyCloudError(e)));
+    }
+    hideToast();
+    render();
+  }
+
+  /* Borra un elemento de una lista del estado (medios, presupuestos,
+     fijos) y ofrece "Deshacer" durante 5 segundos, que lo vuelve a poner
+     en el mismo lugar. */
+  function removeWithUndo(key, item, msg) {
+    flushPendingDelete();
+    const idx = S()[key].indexOf(item);
+    if (idx < 0) return;
+    S()[key] = S()[key].filter((x) => x !== item);
+    Store.save();
+    render();
+    showToast(msg, {
+      action: 'Deshacer', duration: 5000,
+      onAction: () => {
+        const arr = S()[key];
+        arr.splice(Math.min(idx, arr.length), 0, item);
+        Store.save();
+        render();
+      },
+    });
+  }
+
+  /* Aviso breve abajo (arriba de la barra inferior), con una acción
+     opcional como "Deshacer". */
+  let toastTimer = null;
+  function showToast(text, { action, onAction, duration = 4000 } = {}) {
+    hideToast();
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.setAttribute('role', 'status');
+    t.innerHTML = `<span>${esc(text)}</span>${action ? `<button type="button">${esc(action)}</button>` : ''}`;
+    if (action) $('button', t).addEventListener('click', () => { hideToast(); onAction(); });
+    document.body.appendChild(t);
+    toastTimer = setTimeout(hideToast, duration);
+  }
+  function hideToast() {
+    clearTimeout(toastTimer);
+    $$('.toast').forEach((x) => x.remove());
+  }
+
+  /* Panel inferior genérico: agarradera, X, título, un ícono de acción
+     opcional arriba a la derecha (ej. borrar), el contenido y a lo sumo un
+     botón primario abajo. onClick recibe los toques del contenido. */
+  function openPanel({ title, subtitle, body, primary, action, onClick }) {
+    const dlg = $('#dialog');
+    dlg.className = 'sheet sheet-panel';
+    dlg.innerHTML = `
+      <div class="sh-top" data-drag>
+        <div class="grab" aria-hidden="true"></div>
+        <div class="sh-h">
+          <button type="button" class="icb" data-close aria-label="Cerrar">${spriteIcon('x')}</button>
+          <div class="sh-title"><h2>${esc(title)}</h2>${subtitle ? `<div class="sh-sub">${esc(subtitle)}</div>` : ''}</div>
+          ${action ? `<button type="button" class="icb${action.danger ? ' icb-danger' : ''}" data-action aria-label="${esc(action.label)}">${action.icon}</button>` : '<span></span>'}
+        </div>
+      </div>
+      <div class="sh-body" data-shbody>${body}</div>
+      <div class="savebar${primary ? '' : ' savebar-empty'}">${primary ? `<button type="button" class="btn btn-primary btn-full btn-save" data-primary>${esc(primary.label)}</button>` : ''}</div>`;
+    const click = (e) => {
+      if (e.target.closest('[data-close]')) { closeSheet(dlg); return; }
+      if (action && e.target.closest('[data-action]')) { closeSheet(dlg).then(action.onClick); return; }
+      if (primary && e.target.closest('[data-primary]')) { primary.onClick(dlg); return; }
+      if (onClick) onClick(e, dlg);
+    };
+    openSheet(dlg, { listeners: { click } });
+    return dlg;
+  }
+
 
   /* Diálogo de solo lectura con el resumen de un movimiento (fecha,
      categoría, cuenta, cotización usada en ese momento, si se compartió con
@@ -2019,15 +2106,65 @@
       ${noteRow}`;
 
     const titles = { gasto: 'Detalle del gasto', ingreso: 'Detalle del ingreso', transferencia: 'Detalle de la transferencia' };
-    const dlg = openDialog(titles[tx.type] || 'Detalle', bodyHTML, {
-      submitLabel: 'Editar',
-      footExtra: '<button type="button" class="btn btn-danger" data-del style="margin-right:auto">Eliminar</button>',
-      onSubmit: (data, d) => { d.close(); txForm(tx); return false; },
+    openPanel({
+      title: titles[tx.type] || 'Detalle',
+      body: `<div class="tx-detail">${bodyHTML}</div>`,
+      primary: { label: 'Editar', onClick: (dlg) => closeSheet(dlg).then(() => txForm(tx)) },
+      action: { icon: iconSvg('trash'), label: 'Eliminar', danger: true, onClick: () => deleteTx(tx) },
     });
-    $('[data-del]', dlg).addEventListener('click', () => { dlg.close(); deleteTx(tx); });
   }
 
   /* ================= Vista: Resumen ================= */
+  const INSIGHT_COLOR = { neg: 'var(--neg)', warn: 'var(--warn)', good: 'var(--brand-text)', info: 'var(--t2)' };
+  // Saldo grande de Inicio: "$" chico y el número (que anima su cambio,
+  // ver animateHeroBalance()).
+  function heroBigHTML(n) {
+    const sym = disp() === 'USD' ? 'US$' : '$';
+    return `<small>${sym}</small><span class="money">${n < 0 ? '−' : ''}<span class="hero-amount-int">${esc(nfHero.format(Math.abs(n)))}</span></span>`;
+  }
+  // Tasa de ahorro por mes: línea suave con marcadores, degradé verde
+  // debajo, grilla cada 25% (de 0 a 75% como mínimo) y el mes elegido
+  // destacado con una pastilla. rows: [{label, rate, isSel}].
+  let rateChartSeq = 0;
+  function savingsRateChartSvg(rows) {
+    const G = Charts.g;
+    const W = 320, H = 140, x0 = 44, x1 = 290, yTop = 18, yBase = 112;
+    const rates = rows.map((r) => r.rate);
+    const lo = Math.min(0, Math.floor(Math.min(...rates) / 25) * 25);
+    const hi = Math.max(75, Math.ceil(Math.max(...rates) / 25) * 25);
+    const step = (hi - lo) > 100 ? 50 : 25;
+    const ticks = [];
+    for (let v = lo; v <= hi; v += step) ticks.push(v);
+    const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
+    const y = G.escala([lo, hi], [yBase, yTop]);
+    const pts = rows.map((r, i) => [x(i), y(r.rate)]);
+    const selFound = rows.findIndex((r) => r.isSel);
+    const selIdx = selFound >= 0 ? selFound : rows.length - 1;
+    const id = `gAh${++rateChartSeq}`;
+    const baseY = y(Math.max(lo, 0));
+    const labels = rows.map((r, i) => {
+      const [px, py] = pts[i];
+      if (i === selIdx) {
+        const txt = `${r.rate}%`;
+        const w = 12 + txt.length * 7.5;
+        const ty = py - 28 < 2 ? py + 10 : py - 28;
+        return `<rect x="${(px - w / 2).toFixed(1)}" y="${ty.toFixed(1)}" width="${w.toFixed(1)}" height="19" rx="9.5" style="fill:var(--brand)"/>
+          <text x="${px.toFixed(1)}" y="${(ty + 13.5).toFixed(1)}" text-anchor="middle" class="g-pill">${txt}</text>`;
+      }
+      return `<text x="${px.toFixed(1)}" y="${(py - 12).toFixed(1)}" text-anchor="middle" class="g-lab">${r.rate}%</text>`;
+    }).join('');
+    const months = rows.map((r, i) => `<text x="${pts[i][0].toFixed(1)}" y="132" text-anchor="middle"${i === selIdx ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`).join('');
+    const aria = `Tasa de ahorro: ${rows.map((r) => `${r.label} ${r.rate}%`).join(', ')}`;
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--brand);stop-opacity:.32"/><stop offset="1" style="stop-color:var(--brand);stop-opacity:0"/></linearGradient></defs>
+      ${G.grillaY(ticks, y, 34, 312, (v) => `${v}%`)}
+      ${pts.length > 1 ? `<path d="${G.areaSuave(pts, baseY)}" style="fill:url(#${id})"/>
+      <path d="${G.lineaSuave(pts)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:var(--brand)"/>` : ''}
+      ${pts.map((p, i) => (i === selIdx ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="10" style="fill:var(--brand);opacity:.18"/>` : '') + G.marcador(p[0], p[1], 'var(--brand)', i === selIdx)).join('')}
+      ${labels}${months}
+    </svg>`;
+  }
+
   function vResumen(el) {
     const mk = ui.month;
     const txs = S().transactions;
@@ -2063,133 +2200,78 @@
     // ahorros, en cambio, sería un aporte negativo y sumaría).
     const balance = inc - exp - savingsMonth;
 
-    // Cada variación va en una sola línea: "▲ X% MoM" (MoM = month over
-    // month, contra el mes anterior). El monto nominal se saca para que
-    // entre en un renglón sin importar el ancho de pantalla.
-    const delta = (cur, prev, upIsGood) => {
-      if (!(prev > 0)) return '';
-      const diff = cur - prev;
-      const pctLabel = fmtVarPct((diff / prev) * 100);
-      if (pctLabel == null) return `<div class="tile-delta">= MoM</div>`;
-      const up = diff > 0;
-      const cls = (up === upIsGood) ? 'up-good' : 'down-bad';
-      return `<div class="tile-delta"><span class="${cls}">${up ? '▲' : '▼'} ${pctLabel}% MoM</span></div>`;
-    };
-    // Variación de Ahorros: el aporte mensual puede ser $0 o negativo (un
-    // retiro), así que si no hay un aporte previo positivo contra el cual
-    // comparar, el % no tiene una base válida ("nuevo" en vez de un
-    // porcentaje inventado).
-    const savingsDelta = (() => {
-      const diff = savingsMonth - savingsMonthPrev;
-      if (diff === 0) return `<div class="tile-delta">= MoM</div>`;
-      const up = diff > 0;
-      const cls = up ? 'up-good' : 'down-bad';
-      const pctLabel = savingsMonthPrev > 0
-        ? `${up ? '▲' : '▼'} ${fmtVarPct((diff / savingsMonthPrev) * 100) || '0'}% MoM`
-        : `${up ? '▲' : '▼'} nuevo`;
-      return `<div class="tile-delta"><span class="${cls}">${pctLabel}</span></div>`;
-    })();
-
     // Tasa de ahorro del mes: qué % de los ingresos terminó ahorrado (puede
     // ser negativa si el aporte del mes fue un retiro). Sin ingresos ese mes
     // el % no tiene una base válida.
     const savingsRatePct = inc > 0 ? Math.round((savingsMonth / inc) * 100) : null;
     const savingsRatePctPrev = incPrev > 0 ? Math.round((savingsMonthPrev / incPrev) * 100) : null;
-    const savingsRateDeltaHTML = (() => {
-      if (savingsRatePct == null || savingsRatePctPrev == null) return '';
-      const diff = savingsRatePct - savingsRatePctPrev;
-      if (diff === 0) return `<span class="savings-rate-pill">= MoM</span>`;
-      const up = diff > 0;
-      const cls = up ? 'pos' : 'neg';
-      return `<span class="savings-rate-pill ${cls}">${up ? '▲' : '▼'} ${Math.abs(diff)} pp MoM</span>`;
-    })();
+    const monthName = (m) => {
+      const [y, mo] = m.split('-').map(Number);
+      return new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(new Date(y, mo - 1, 1));
+    };
+    const isCurMonth = mk === curMonth();
+    const todayDay = new Date().getDate();
+    // Comparaciones contra el MISMO DÍA del mes anterior (no contra el mes
+    // anterior completo) mientras el mes elegido está en curso: el 19 de
+    // octubre se compara con lo que había al 19 de septiembre.
+    const upToToday = (dateStr) => !isCurMonth || Number(dateStr.slice(8, 10)) <= todayDay;
 
-    // Gastos por categoría (top 5, sin agrupar el resto en "Otros" — para
-    // que la tarjeta principal entre compacta al lado del anillo) — por
-    // fecha real de carga, no por el mes de vencimiento (ver comentario al
-    // principio de la función).
+    // Gastos por categoría — por fecha real de carga, no por el mes de
+    // vencimiento (ver comentario al principio de la función). El % es
+    // sobre el TOTAL del mes, el mismo que muestra Categorías.
     const byCat = new Map();
-    for (const t of inMonthCal.filter((x) => x.type === 'gasto')) {
+    for (const t of inMonthCal.filter((x) => x.type === 'gasto' && upToToday(x.date))) {
       const v = txDispAmount(t);
       if (v == null) continue;
       const topId = topCategoryOf(t.categoryId);
       byCat.set(topId, (byCat.get(topId) || 0) + v);
     }
-    let catItems = [...byCat.entries()]
-      .map(([id, value]) => ({ label: catName(id), value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-    catItems = catItems.map((it, i) => ({ ...it, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
+    const catRanked = [...byCat.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const catTotal = catRanked.reduce((a, [, v]) => a + v, 0);
+    const CAT_TOP = 4;
+    const catRows = catRanked.slice(0, CAT_TOP).map(([id, value]) => ({ id, name: catName(id), value, color: catColor(id) }));
+    const catRest = catRanked.slice(CAT_TOP);
+    if (catRest.length) {
+      catRows.push({ id: null, name: `Otras ${catRest.length}`, value: catRest.reduce((a, [, v]) => a + v, 0), color: OTROS_COLOR });
+    }
+    const pctOf = (v) => (catTotal > 0 ? Math.round((v / catTotal) * 100) : 0);
+    // Con "contar tarjetas por vencimiento", el Gastos de arriba y este total
+    // (por fecha de compra) no coinciden: se aclara acá, una sola vez.
+    const basisNote = S().settings.cardMonthBasis === 'vencimiento' && Math.abs(catTotal - exp) >= 1
+      ? `<p class="k-note">Por fecha de compra: ${money(catTotal)}. En Gastos de arriba las tarjetas cuentan por mes de vencimiento.</p>`
+      : '';
 
-    // "Cómo vas este mes": comentario automático a partir de reglas simples
-    // (nada de IA, son heurísticas sobre los datos que ya tenemos) — junta
-    // candidatos con una severidad, se queda con los 1-2 más urgentes, y si
-    // no hay nada de qué preocuparse suma un par de líneas positivas. Solo
-    // tiene sentido para el mes EN CURSO: un mes pasado ya está cerrado y
-    // uno futuro todavía no tiene datos que analizar.
-    let insights = mk !== curMonth() ? [] : (() => {
+    // "Para tener en cuenta": avisos de una línea a partir de reglas simples
+    // (heurísticas sobre los datos, nada de IA). Solo para el mes EN CURSO:
+    // uno pasado ya está cerrado y uno futuro no tiene datos.
+    const insights = !isCurMonth ? [] : (() => {
       const out = [];
-      // QUÉ comentarios aparecen se decide siempre en PESOS, sin importar
-      // la moneda elegida arriba: antes todo se calculaba en la moneda de
-      // visualización, así que al pasar a USD cambiaban los avisos — un
-      // umbral fijo ($3.000) pensado en pesos era inalcanzable en dólares,
-      // y cada moneda valúa los movimientos a la cotización de su fecha,
-      // así que una comparación contra el mes pasado podía inclinarse para
-      // un lado en pesos y para el otro en dólares. Los montos del texto sí
-      // se muestran en la moneda elegida (sumDisp / fmtDisp).
+      // QUÉ avisos aparecen se decide siempre en PESOS, sin importar la
+      // moneda elegida arriba (un umbral pensado en pesos no sirve en
+      // dólares, y cada moneda valúa a la cotización de su fecha). Los
+      // montos del texto sí van en la moneda elegida.
       const BASE = 'ARS';
       const amtA = (t) => amountInCurrency(t, BASE);
       const sumA = (list) => list.reduce((acc, t) => { const v = amtA(t); return v == null ? acc : acc + v; }, 0);
       const incA = sumA(inMonth.filter((t) => t.type === 'ingreso'));
       const expA = sumA(inMonth.filter((t) => t.type === 'gasto'));
-      const incPrevA = sumA(inPrev.filter((t) => t.type === 'ingreso'));
-      const expPrevA = sumA(inPrev.filter((t) => t.type === 'gasto'));
       const savA = (m) => savingsAtEndOf(m, { excludeOpening: true, cur: BASE });
       const savMonthA = savA(mk) - savA(prevMk);
-      const savMonthPrevA = savA(prevMk) - savA(addMonthsKey(mk, -2));
       const balanceA = incA - expA - savMonthA;
-      const srA = incA > 0 ? Math.round((savMonthA / incA) * 100) : null;
-      const srPrevA = incPrevA > 0 ? Math.round((savMonthPrevA / incPrevA) * 100) : null;
+      const prevName = monthName(prevMk);
 
-      // El aviso de ritmo de gasto (más abajo) compara contra la fecha REAL
-      // de cada movimiento (inMonthCal/inPrevCal, definidas arriba), no el
-      // "mes efectivo" que puede correr una compra con tarjeta al mes de
-      // vencimiento (ver ajuste "contar tarjetas por"). Si no, con esa
-      // opción activada un resumen grande que vence este mes infla la
-      // proyección aunque esas compras se hayan hecho en calendario el mes
-      // pasado — y el aviso queda contradiciendo lo que se ve en "Balance
-      // por día", que también usa la fecha real.
+      // Fecha REAL de cada movimiento (no el mes de vencimiento de la
+      // tarjeta), igual que Categorías y Presupuestos.
       const gastoCal = inMonthCal.filter((t) => t.type === 'gasto');
       const gastoPrevCal = inPrevCal.filter((t) => t.type === 'gasto');
-      // Mismo criterio de fecha real (no efectiva) para las dos, así el
-      // aviso de categoría de abajo tampoco lo dispara un resumen de
-      // tarjeta que vence este mes pero es de compras de otro mes. Cada
-      // categoría se acumula en pesos (para decidir) y en la moneda
-      // elegida (para mostrar).
-      const byCat = (list) => {
-        const m = new Map();
-        for (const t of list) {
-          const topId = topCategoryOf(t.categoryId);
-          const cur = m.get(topId) || { a: 0, d: 0 };
-          cur.a += amtA(t) || 0;
-          cur.d += txDispAmount(t) || 0;
-          m.set(topId, cur);
-        }
-        return m;
-      };
-      const byCatCal = byCat(gastoCal);
-      const byCatPrev = byCat(gastoPrevCal);
+      const gastoPrevSameDay = gastoPrevCal.filter((t) => upToToday(t.date));
 
       if (balanceA < 0) {
-        out.push({ tone: 'warn', severity: 5, icon: '🔴',
-          text: balance < 0
-            ? `Este mes vas en rojo: el balance es de ${fmtDisp(balance)}.`
-            : 'Este mes vas en rojo: gastaste más de lo que ingresó.' });
+        out.push({ tone: 'neg', severity: 6, icon: 'down', go: 'movimientos',
+          title: 'Este mes vas en rojo', sub: `Gastaste ${fmtPlain(Math.abs(balance))} más de lo que entró`, money: true });
       }
 
-      // Fecha real, no efectiva: tiene que coincidir con lo que se ve en
-      // Planificar > Presupuestos, que usa el mismo criterio. Se decide en
-      // la moneda del propio presupuesto (no depende de la elegida arriba).
+      // En la moneda del propio presupuesto (no depende de la elegida arriba).
       const budgetHits = S().budgets.map((b) => {
         const list = gastoCal.filter((t) => txMatchesBudgetCategory(t, b.categoryId));
         const spentOwn = list.reduce((acc, t) => acc + (amountInCurrency(t, b.currency) || 0), 0);
@@ -2200,616 +2282,483 @@
       }).filter((x) => x.overRatio > 0).sort((a, b) => b.overRatio - a.overRatio);
       if (budgetHits.length) {
         const w = budgetHits[0];
-        out.push({ tone: 'warn', severity: 4, icon: '⚠️',
-          text: `Superaste el presupuesto de ${w.name}: ${fmtDisp(w.spent)} de ${fmtDisp(w.limit)}.` });
+        out.push({ tone: 'neg', severity: 5, icon: 'target', go: 'presupuestos',
+          title: `Pasaste el presupuesto de ${w.name}`, sub: `${fmtPlain(w.spent)} de ${fmtPlain(w.limit)}`, money: true });
       }
 
-      // Un gasto fijo (recurrente o una cuota, como el alquiler) es el
-      // mismo te portes como te portes con el resto de tus gastos — así que
-      // dejarlo adentro de la comparación "¿gastaste más que el mes
-      // pasado?" la infla o desinfla nada más según en qué día del
-      // calendario cayó, sin decir nada de tu ritmo real. Estos dos avisos
-      // comparan sólo lo variable.
+      // Un gasto fijo (recurrente o una cuota) es el mismo te portes como te
+      // portes, así que estos dos avisos comparan solo lo variable.
       const isVar = (t) => !t.recurringId && !t.installment;
       const varCal = gastoCal.filter(isVar);
       const varPrevCal = gastoPrevCal.filter(isVar);
       const varExpA = sumA(varCal), varExpPrevA = sumA(varPrevCal);
-
-      if (varExpPrevA > 0) {
-        if (varExpA > varExpPrevA) {
-          const daysLeftMk = daysLeftInMonth(mk);
-          out.push({ tone: 'warn', severity: 4, icon: '🚨',
-            text: `Sin contar gastos fijos, ya gastaste más que todo el mes pasado (${fmtDisp(sumDisp(varCal))} vs ${fmtDisp(sumDisp(varPrevCal))}), y todavía quedan ${daysLeftMk} día${daysLeftMk === 1 ? '' : 's'}.` });
-        } else {
-          const [ky, kmo] = mk.split('-').map(Number);
-          const daysInMk = new Date(ky, kmo, 0).getDate();
-          const daysElapsed = new Date().getDate();
-          const elapsedFrac = daysElapsed / daysInMk;
-          // Con muy pocos días recorridos cualquier proyección es puro
-          // ruido (un solo gasto grande el día 1 "proyectaría" un mes
-          // carísimo) — se espera a tener al menos ~15% del mes andado.
-          if (elapsedFrac > 0.15) {
-            // "Al RITMO ACTUAL" tiene que reflejar el ritmo de los últimos
-            // días, no el promedio de TODO el mes: un gasto grande y
-            // puntual a principio de mes (que después no se repitió) hacía
-            // que ese promedio quedara alto para siempre, aunque el gasto
-            // ya se hubiera aplanado — contradiciendo lo que se ve en
-            // "Balance por día". Lo ya gastado (variable) se suma tal cual,
-            // sin volver a proyectarlo; sólo los días que faltan se
-            // proyectan al ritmo variable de la última semana.
-            const RECENT_WINDOW = 7;
-            const windowStartDay = Math.max(1, daysElapsed - RECENT_WINDOW + 1);
-            const recentDaysCount = daysElapsed - windowStartDay + 1;
-            const recent = varCal.filter((t) => {
-              const day = Number(t.date.slice(8, 10));
-              return day >= windowStartDay && day <= daysElapsed;
-            });
-            const remainingDays = daysInMk - daysElapsed;
-            const projA = varExpA + (sumA(recent) / recentDaysCount) * remainingDays;
-            const projD = sumDisp(varCal) + (sumDisp(recent) / recentDaysCount) * remainingDays;
-            if (projA > varExpPrevA * 1.15) {
-              out.push({ tone: 'warn', severity: 3, icon: '📈',
-                text: `Al ritmo actual (sin contar gastos fijos) vas a terminar gastando más en gastos variables que el mes pasado (proyectado ${fmtDisp(projD)}).` });
-            }
-          }
-        }
+      if (varExpPrevA > 0 && varExpA > varExpPrevA) {
+        const left = daysLeftInMonth(mk);
+        out.push({ tone: 'neg', severity: 4, icon: 'up', go: 'movimientos',
+          title: `Ya gastaste más que en todo ${prevName}`,
+          sub: `Sin contar fijos, y quedan ${left} día${left === 1 ? '' : 's'}` });
       }
 
+      // La categoría que más subió contra el mismo día del mes anterior.
+      const byCatA = (list) => {
+        const m = new Map();
+        for (const t of list) {
+          const topId = topCategoryOf(t.categoryId);
+          const cur = m.get(topId) || { a: 0, d: 0 };
+          cur.a += amtA(t) || 0;
+          cur.d += txDispAmount(t) || 0;
+          m.set(topId, cur);
+        }
+        return m;
+      };
+      const nowByCat = byCatA(gastoCal);
+      const prevByCat = byCatA(gastoPrevSameDay);
       let worstCat = null;
-      for (const [id, val] of byCatCal.entries()) {
-        const prevVal = byCatPrev.get(id) || { a: 0, d: 0 };
+      for (const [id, val] of nowByCat.entries()) {
+        const prevVal = prevByCat.get(id) || { a: 0, d: 0 };
         const diffA = val.a - prevVal.a;
         if (prevVal.a <= 0 || diffA <= 0) continue;
         const pct = diffA / prevVal.a;
-        // Umbral doble (% Y monto mínimo, en pesos) para no alertar por
-        // una categoría chica que se duplicó de $500 a $1.000.
+        // Umbral doble (% Y monto mínimo, en pesos) para no avisar por una
+        // categoría chica que pasó de $500 a $1.000.
         if (pct >= 0.3 && diffA >= Math.max(3000, incA * 0.02)) {
           if (!worstCat || diffA > worstCat.diffA) worstCat = { id, diffA, diffD: val.d - prevVal.d, pct };
         }
       }
       if (worstCat) {
-        out.push({ tone: 'warn', severity: 2, icon: '👀',
-          text: `Cuidado con ${catName(worstCat.id)}: gastaste ${fmtDisp(Math.max(0, worstCat.diffD))} más que el mes pasado (+${Math.round(worstCat.pct * 100)}%).` });
+        out.push({ tone: 'neg', severity: 3, icon: 'up', go: 'categorias',
+          title: `${catName(worstCat.id)} subió ${Math.round(worstCat.pct * 100)}%`,
+          sub: `${fmtPlain(Math.max(0, worstCat.diffD))} más que al ${todayDay} de ${prevName}`, money: true });
       }
 
-      if (srA != null && srPrevA != null && srA < srPrevA - 10) {
-        out.push({ tone: 'warn', severity: 1, icon: '💸',
-          text: `Tu tasa de ahorro bajó de ${srPrevA}% a ${srA}% respecto al mes pasado.` });
+      // Tasa de ahorro: siempre informa; avisa si bajó mucho.
+      if (savingsRatePct != null) {
+        const dropped = savingsRatePctPrev != null && savingsRatePct < savingsRatePctPrev - 10;
+        const improved = savingsRatePctPrev != null && savingsRatePct > savingsRatePctPrev + 5;
+        out.push({
+          tone: dropped ? 'warn' : improved ? 'good' : 'info', severity: dropped ? 2 : 0.5,
+          icon: dropped ? 'down' : 'dollar', go: 'ahorros',
+          title: savingsRatePct >= 0 ? `Ahorraste el ${savingsRatePct}% de lo que entró` : `Sacaste de ahorros el ${-savingsRatePct}% de lo que entró`,
+          sub: savingsRatePctPrev != null ? `En ${prevName} fue ${savingsRatePctPrev}%` : '',
+        });
       }
 
-      out.sort((a, b) => b.severity - a.severity);
-
-      if (!out.length) {
-        if (expPrevA > 0 && expA < expPrevA * 0.9) {
-          out.push({ tone: 'good', icon: '🎉',
-            text: `Vas bien: gastaste ${Math.round((1 - expA / expPrevA) * 100)}% menos que el mes pasado.` });
-        }
-        if (srA != null && srPrevA != null && srA > srPrevA + 5) {
-          out.push({ tone: 'good', icon: '📈',
-            text: `Tu tasa de ahorro mejoró: ${srPrevA}% → ${srA}%.` });
-        }
-        if (!out.length) {
-          out.push({ tone: 'neutral', icon: '🙂',
-            text: (incPrevA > 0 || expPrevA > 0)
-              ? 'Vas en línea con el mes pasado, sin sobresaltos.'
-              : 'Todavía no hay un mes anterior con qué comparar.' });
-        }
-      }
-      // Además de los 1-2 avisos generales, una línea por cada tarjeta de
-      // crédito con cómo viene su resumen en curso (mismo análisis que el
-      // pop-up "Cómo vengo" de Cuentas → Tarjetas, que se abre al tocarla).
+      // Una línea por tarjeta de crédito con cómo viene su resumen en curso
+      // (el mismo análisis que "Cómo vengo", que se abre al tocarla).
       const short = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
-      const cardLines = [];
       for (const card of S().methods.filter((m) => m.kind === 'credito')) {
         const A = cardAnalysis(card);
-        if (!A || (A.spent + A.committed) <= 0 && !A.ref) continue;
+        if (!A || ((A.spent + A.committed) <= 0 && !A.ref)) continue;
         const v = A.verdict;
-        const refDe = A.refLabel.startsWith('el ') ? `del ${A.refLabel.slice(3)}` : `de ${A.refLabel}`;
-        const refA = A.refLabel.startsWith('el ') ? `al ${A.refLabel.slice(3)}` : `a ${A.refLabel}`;
         const closeS = short(A.cy.close);
-        let line;
         if (!v) {
-          line = { tone: 'neutral', icon: '💳',
-            text: `${card.name}: llevás ${fmtDisp(A.spent + A.committed)} en el resumen que cierra el ${closeS} (proyectado ${fmtDisp(A.projected)}).` };
+          out.push({ tone: 'info', severity: 0.4, icon: 'card', cardId: card.id,
+            title: `${card.name}: resumen en curso`, sub: `Llevás ${fmtPlain(A.spent + A.committed)} · cierra el ${closeS}`, money: true });
         } else if (v.tone === 'crit') {
-          const nextDay = new Date(A.cy.close.getTime() + DAY_MS);
-          line = { tone: 'warn', icon: '🛑',
-            text: `${card.name}: ya superás ${A.refLabel} por ${fmtDisp(-v.room)} en el resumen que cierra el ${closeS}. Conviene dejar de usarla; lo que compres desde el ${short(nextDay)} entra en el siguiente.` };
+          out.push({ tone: 'neg', severity: 4.5, icon: 'card', cardId: card.id,
+            title: `${card.name} ya superó ${A.refLabel}`, sub: `${fmtPlain(-v.room)} de más · cierra el ${closeS}`, money: true });
         } else if (v.tone === 'warn') {
-          line = { tone: 'warn', icon: '💳',
-            text: `${card.name}: al ritmo actual llegás ${refA} el ${short(v.hit)} y el resumen cierra el ${closeS}. Desde ahí, mejor no usarla (máx. ${fmtDisp(v.perDay)} por día).` };
+          out.push({ tone: 'warn', severity: 2.5, icon: 'card', cardId: card.id,
+            title: `Ojo con ${card.name}`, sub: `Al ritmo actual llegás ${A.refLabel.startsWith('el ') ? 'al ' + A.refLabel.slice(3) : 'a ' + A.refLabel} el ${short(v.hit)}` });
         } else {
-          line = { tone: 'good', icon: '💳',
-            text: `${card.name}: vas bien, cerrarías el resumen del ${closeS} en ${fmtDisp(A.projected)}, ${fmtDisp(A.ref - A.projected)} por debajo ${refDe}.` };
+          out.push({ tone: 'good', severity: 1, icon: 'check', cardId: card.id,
+            title: `${card.name} viene bien`, sub: `Cerrarías el ${closeS} en ${fmtPlain(A.projected)}`, money: true });
         }
-        line.cardId = card.id;
-        cardLines.push(line);
       }
-      return out.slice(0, 2).concat(cardLines.slice(0, 2));
+
+      // Si no hay nada que avisar, una línea buena contra el mismo día del
+      // mes anterior.
+      const expPrevSameDayA = sumA(gastoPrevSameDay);
+      if (!out.some((x) => x.tone === 'neg' || x.tone === 'warn') && expPrevSameDayA > 0 && sumA(gastoCal) < expPrevSameDayA * 0.9) {
+        out.push({ tone: 'good', severity: 1.5, icon: 'check', go: 'categorias',
+          title: `Gastaste ${Math.round((1 - sumA(gastoCal) / expPrevSameDayA) * 100)}% menos que en ${prevName}`,
+          sub: `Al día ${todayDay} de cada mes` });
+      }
+      return out.sort((a, b) => b.severity - a.severity).slice(0, 3);
     })();
 
-    // Tendencia: últimos 6 meses hasta el mes elegido, salvo los que no
-    // tengan ingresos (un mes con sólo algún gasto suelto no es un mes
-    // "real" para comparar). Por fecha real de carga, no de vencimiento
-    // (ver comentario al principio de la función).
+    // Tasa de ahorro de los últimos 6 meses (hasta el elegido), salvo los
+    // que no tuvieron ingresos (sin ingresos el % no tiene base).
     const months = [];
     for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
-    const trendRows = months.map((m) => {
-      const list = txs.filter((t) => monthKeyOf(t.date) === m);
-      const [y, mo] = m.split('-').map(Number);
-      return {
-        label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
-        income: sumDisp(list.filter((t) => t.type === 'ingreso')),
-        expense: sumDisp(list.filter((t) => t.type === 'gasto')),
-      };
-    }).filter((r) => r.income > 0);
-
-    // Misma ventana de meses, pero para la tasa de ahorro (ahorro/ingresos):
-    // se omiten los meses sin ningún ingreso (dividir por cero no tiene
-    // sentido — antes mostraba 0% para un mes sin ingresos, como si ahí no
-    // se hubiera ahorrado nada, en vez de directamente no calcularla).
     const savingsRateRows = months.map((m) => {
-      const list = txs.filter((t) => monthKeyOf(t.date) === m);
-      const incM = sumDisp(list.filter((t) => t.type === 'ingreso'));
+      const incM = sumDisp(txs.filter((t) => monthKeyOf(t.date) === m && t.type === 'ingreso'));
       const savM = savingsAtEndOf(m, { excludeOpening: true }) - savingsAtEndOf(addMonthsKey(m, -1), { excludeOpening: true });
       const [y, mo] = m.split('-').map(Number);
       return {
         label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
-        incM, rate: Math.round((savM / incM) * 100),
+        incM, rate: incM > 0 ? Math.round((savM / incM) * 100) : null, isSel: m === mk,
       };
     }).filter((r) => r.incM > 0);
-    const hasSavingsRateTrend = savingsRateRows.length > 0;
-
-    // Vencimientos de tarjetas: solo las que ya tienen al menos dos
-    // resúmenes cargados (el actual y el anterior) — sin eso no hay un
-    // "próximo vencimiento" resoluble para mostrar todavía.
-    const cards = S().methods.filter((m) => m.kind === 'credito');
-    const cardRows = cards.map((c) => {
-      const cy = cardCycle(c);
-      if (!cy || !cy.prevClose || !cy.prevDue) return null;
-      return {
-        card: c, cy,
-        current: cardPeriodTotal(c.id, cy.prevClose, cy.close),
-        toPay: cardPeriodTotal(c.id, cy.prevPrevClose || new Date(0), cy.prevClose),
-      };
-    }).filter(Boolean).sort((a, b) => a.cy.due - b.cy.due);
+    const rateDiff = savingsRatePct != null && savingsRatePctPrev != null ? savingsRatePct - savingsRatePctPrev : null;
 
     const pctLeft = (exp <= 0 && savingsMonth <= 0) ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round((balance / inc) * 100))) : 0);
     const pctMonthLeft = monthLeftPct(mk);
     const daysLeft = daysLeftInMonth(mk);
-    // Cuánto se puede gastar por día sin pasarse del balance actual — solo
-    // tiene sentido para el mes en curso (en uno pasado "días restantes" es
-    // 0 y en uno futuro es el mes entero, ninguno de los dos es una
-    // pregunta real). Al día de hoy incluido, así el último día del mes no
-    // divide por cero: ese día entero "vale" el balance que queda.
-    const perDayLeft = mk === curMonth() ? balance / Math.max(1, daysLeft) : null;
-
-    // Gastos acumulados día a día del mes (arranca en 0 y sólo sube — a
-    // diferencia del balance neto de antes, que también bajaba con cada
-    // ingreso): usa la fecha calendario real de cada movimiento, no el mes
-    // "efectivo" (que puede correr un gasto de tarjeta al mes de
-    // vencimiento). En el mes en curso corta en el día de hoy (no tiene
-    // sentido proyectar una línea plana a futuro); en un mes que todavía no
-    // llegó no hay nada que mostrar. El ingreso total del mes se muestra
-    // aparte como línea constante, para ver de un vistazo cuánto falta de
-    // gasto acumulado para "comerse" todo lo que entró.
     const [mkY, mkM] = mk.split('-').map(Number);
     const daysInMk = new Date(mkY, mkM, 0).getDate();
-    const lastDayToShow = mk > curMonth() ? 0 : (mk === curMonth() ? new Date().getDate() : daysInMk);
-    const calMonthTxs = txs.filter((t) => monthKeyOf(t.date) === mk);
-    const dailyDelta = new Array(daysInMk + 1).fill(0);
-    for (const t of calMonthTxs) {
-      if (t.type !== 'gasto') continue;
-      const v = txDispAmount(t);
-      if (v == null) continue;
-      dailyDelta[parseDate(t.date).getDate()] += v;
-    }
-    let dailyRunning = 0;
-    const dailyBalance = [];
-    for (let d = 1; d <= daysInMk; d++) {
-      if (d > lastDayToShow) { dailyBalance.push({ day: d, value: null }); continue; }
-      dailyRunning += dailyDelta[d];
-      dailyBalance.push({ day: d, value: dailyRunning });
-    }
-    const incomeLineCal = sumDisp(calMonthTxs.filter((t) => t.type === 'ingreso'));
-    // Ingresos menos lo ya aportado a ahorros ese mes: el techo real de
-    // gasto sin "meterle mano" a lo que ya se guardó — si el gasto
-    // acumulado lo cruza, de ahí en más se estaría ahorrando menos de lo
-    // que ya se ahorró (savingsMonth viene de más arriba, es el aporte
-    // neto del mes, siempre por fecha real de la entrada).
-    const incomeMinusSavingsLineCal = incomeLineCal - savingsMonth;
+    // Cuánto se puede gastar por día sin pasarse del saldo: solo para el
+    // mes en curso, con el día de hoy incluido (el último día no divide por 0).
+    const perDayLeft = isCurMonth ? balance / Math.max(1, daysLeft) : null;
 
-    // Mismo cálculo para el mes anterior, alineado día a día, para cuando
-    // el usuario activa "comparar con mes anterior" (ver si el gasto
-    // acumulado de hoy va más rápido o más lento que el mes pasado).
-    const prevMkDaily = addMonthsKey(mk, -1);
-    const [prevDY, prevDM] = prevMkDaily.split('-').map(Number);
-    const daysInPrevMkDaily = new Date(prevDY, prevDM, 0).getDate();
-    const lastDayToShowPrev = prevMkDaily > curMonth() ? 0 : (prevMkDaily === curMonth() ? new Date().getDate() : daysInPrevMkDaily);
-    const prevCalMonthTxs = txs.filter((t) => monthKeyOf(t.date) === prevMkDaily);
-    const prevDailyDelta = new Array(daysInPrevMkDaily + 1).fill(0);
-    for (const t of prevCalMonthTxs) {
-      if (t.type !== 'gasto') continue;
-      const v = txDispAmount(t);
-      if (v == null) continue;
-      prevDailyDelta[parseDate(t.date).getDate()] += v;
-    }
-    let prevDailyRunning = 0;
-    const dailyBalancePrev = [];
-    for (let d = 1; d <= daysInPrevMkDaily; d++) {
-      if (d > lastDayToShowPrev) { dailyBalancePrev.push({ day: d, value: null }); continue; }
-      prevDailyRunning += prevDailyDelta[d];
-      dailyBalancePrev.push({ day: d, value: prevDailyRunning });
-    }
+    // Variaciones de los tres números de abajo, solo en % (sin "MoM"). Con
+    // el mes en curso, contra el mismo día del mes anterior.
+    const inPrevSameDay = inPrev.filter((t) => upToToday(paymentDateOf(t)));
+    const incPrevCmp = sumDisp(inPrevSameDay.filter((t) => t.type === 'ingreso'));
+    const expPrevCmp = sumDisp(inPrevSameDay.filter((t) => t.type === 'gasto'));
+    const deltaHTML = (cur, prev, upIsGood) => {
+      if (!(prev > 0)) return '<span class="dl">&nbsp;</span>';
+      const diff = cur - prev;
+      const pctLabel = fmtVarPct((diff / prev) * 100);
+      if (pctLabel == null) return '<span class="dl t3">= igual</span>';
+      const up = diff > 0;
+      return `<span class="dl ${(up === upIsGood) ? 'bt' : 'neg'}">${up ? '▲' : '▼'} ${pctLabel}%</span>`;
+    };
+    const savDeltaHTML = (() => {
+      const diff = savingsMonth - savingsMonthPrev;
+      if (Math.abs(diff) < 1) return savingsMonthPrev ? '<span class="dl t3">= igual</span>' : '<span class="dl">&nbsp;</span>';
+      const up = diff > 0;
+      const label = savingsMonthPrev > 0 ? `${fmtVarPct((diff / savingsMonthPrev) * 100) || '0'}%` : 'nuevo';
+      return `<span class="dl ${up ? 'bt' : 'neg'}">${up ? '▲' : '▼'} ${label}</span>`;
+    })();
 
-    // Muestra el nombre del hogar (no "Compartido con {pareja}"): el nombre
-    // de la pareja ya aparece en el balance de al lado ("ana te debe..."),
-    // repetirlo en el título quedaba redundante.
+    // Compartido en una fila neutra (deber plata no es un error).
+    const me = Cloud.user() ? sharedMe() : null;
     const sharedPartnerM = Cloud.user() ? sharedPartner() : null;
-    const sharedWidget = (shared.household && sharedPartnerM) ? (() => {
+    const sharedRow = (shared.household && sharedPartnerM) ? (() => {
       const bal = sharedBalance();
-      const balAbs = Math.abs(bal);
-      const balTxt = balAbs < 0.01 ? 'Están a mano'
-        : (bal > 0 ? `${esc(partnerLabel(sharedPartnerM))} te debe ${fmtDisp(balAbs)}`
-                   : `Le debés a ${esc(partnerLabel(sharedPartnerM))} ${fmtDisp(balAbs)}`);
-      return `<div class="shared-mini" data-goto-shared>
-        <span class="shared-mini-label">${esc(shared.household.name || 'Hogar compartido')}</span>
-        <span class="shared-mini-value ${bal > 0 ? 'pos' : bal < 0 ? 'neg' : ''}">${esc(balTxt)}</span>
-      </div>`;
+      const who = partnerLabel(sharedPartnerM);
+      const title = Math.abs(bal) < 0.01 ? 'Están a mano' : (bal > 0 ? `${who} te debe` : `Le debés a ${who}`);
+      const nMonth = (shared.expenses || []).filter((e) => e.date && monthKeyOf(e.date) === mk).length;
+      return `
+      <button type="button" class="group home-shared" data-goto-shared>
+        <div class="row">
+          <span class="avs" aria-hidden="true">
+            <span class="av" style="background:var(--c-tel)">${esc(initials(partnerLabel(me)))}</span><span class="av" style="background:var(--c-super)">${esc(initials(who))}</span>
+          </span>
+          <div class="row-main"><div class="tt">${esc(title)}</div><div class="st">${esc(shared.household.name || 'Hogar compartido')} · ${nMonth} gasto${nMonth === 1 ? '' : 's'} en común este mes</div></div>
+          ${Math.abs(bal) < 0.01 ? '' : `<span class="num home-shared-amt">${money(Math.abs(bal))}</span>`}
+          ${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}
+        </div>
+      </button>`;
     })() : '';
 
+    // Anillo doble: afuera el % de balance, adentro el % del mes que falta.
+    const ringSvg = (() => {
+      const arc = (r, w, pct, color) => {
+        const c = 2 * Math.PI * r;
+        const p = Math.max(0, Math.min(100, pct)) / 100;
+        return `<circle cx="60" cy="60" r="${r}" stroke-width="${w}" style="stroke:var(--s2)"/>
+          ${p > 0 ? `<circle cx="60" cy="60" r="${r}" stroke-width="${w}" stroke-dasharray="${(c * p).toFixed(1)} ${c.toFixed(1)}" style="stroke:${color}"/>` : ''}`;
+      };
+      return `<svg viewBox="0 0 120 120" width="120" height="120" aria-hidden="true"><g transform="rotate(-90 60 60)" fill="none" stroke-linecap="round">
+        ${arc(54, 9, pctLeft, 'var(--brand)')}${arc(42, 7, pctMonthLeft, 'var(--c-super)')}</g></svg>`;
+    })();
+    const ringLabel = `Balance ${pctLeft}%, quedan ${daysLeft} de ${daysInMk} días${perDayLeft != null ? `, podés gastar ${fmtPlain(perDayLeft)} por día` : ''}`;
+
     el.innerHTML = `
-      <div class="hero">
-        <svg class="hero-bg-waves" viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M0 150 C 80 110, 160 190, 250 150 S 360 110, 400 140 V300 H0 Z"/>
-          <path d="M0 200 C 100 165, 190 235, 280 195 S 370 170, 400 190 V300 H0 Z"/>
-          <path d="M0 250 C 90 225, 200 280, 300 245 S 380 235, 400 245 V300 H0 Z"/>
-        </svg>
-        ${heroHeadHTML(mk)}
-        ${mk === curMonth() ? '' : '<button class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>'}
-        <div class="hero-main">
-          <div class="hero-main-left">
-            <div class="hero-label">Saldo</div>
-            <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
-            <div class="hero-legend">
-              <span><span class="dot dot-accent"></span><b>${pctLeft}%</b> balance</span>
-              <span><span class="dot dot-warn"></span><b>${daysLeft}</b> día${daysLeft === 1 ? '' : 's'} restante${daysLeft === 1 ? '' : 's'}</span>
+      <div class="hero2">
+        <div class="hz-body">
+          <div class="saldo-row">
+            <div class="saldo-main">
+              <span class="ovl">Saldo</span>
+              <div class="big num ${balance < 0 ? 'neg' : 'bt'} hero-value" data-balance="${balance}" data-balance-key="${esc(mk + ':' + disp())}">${heroBigHTML(balance)}</div>
+              <div class="kv"><i style="background:var(--brand)"></i><b>${pctLeft}%</b> balance</div>
+              <div class="kv"><i style="background:var(--c-super)"></i><b>${daysLeft}</b> día${daysLeft === 1 ? '' : 's'} restante${daysLeft === 1 ? '' : 's'}</div>
+            </div>
+            <div class="ring2" role="img" aria-label="${esc(hideAmounts ? `Balance ${pctLeft}%, quedan ${daysLeft} de ${daysInMk} días` : ringLabel)}">
+              ${ringSvg}
+              ${perDayLeft != null ? `<div class="ring-c"><span class="num ${perDayLeft < 0 ? 'neg' : ''}">${money(perDayLeft)}</span><small>por día</small></div>` : ''}
             </div>
           </div>
-          <div class="hero-ring">
-            ${ringSvg2(pctLeft, pctMonthLeft, 104)}
-            ${perDayLeft != null ? (() => {
-              const txt = fmtDisp(perDayLeft);
-              const sizeCls = txt.length > 10 ? 'xs' : txt.length > 8 ? 'sm' : '';
-              return `<div class="hero-ring-center ${perDayLeft < 0 ? 'neg' : ''}">
-              <b class="${sizeCls}">${txt}</b><span>por día</span>
-            </div>`;
-            })() : ''}
-          </div>
-        </div>
-        <div class="hero-stats">
-          <div class="hero-stat hero-stat-inc">
-            <div class="hero-stat-head"><span class="hero-stat-icon">${iconSvg('arrowDown')}</span><span class="k">Ingresos</span></div>
-            <div class="v">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}
-          </div>
-          <div class="hero-stat hero-stat-exp">
-            <div class="hero-stat-head"><span class="hero-stat-icon">${iconSvg('arrowUp')}</span><span class="k">Gastos</span></div>
-            <div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}
-          </div>
-          <div class="hero-stat hero-stat-sav">
-            <div class="hero-stat-head"><span class="hero-stat-icon">${iconSvg('minus')}</span><span class="k">Ahorros</span></div>
-            <div class="v ${savingsMonth < 0 ? 'neg' : ''}">${fmtDisp(savingsMonth)}</div>${savingsDelta}
+          <div class="minis">
+            <div><span class="lbl"><i class="dotic" style="--c:var(--brand)">${spriteIcon('in')}</i>Ingresos</span><span class="num val">${money(inc)}</span>${deltaHTML(inc, isCurMonth ? incPrevCmp : incPrev, true)}</div>
+            <div><span class="lbl"><i class="dotic" style="--c:var(--neg)">${spriteIcon('in').replace('class="ic"', 'class="ic flip"')}</i>Gastos</span><span class="num val">${money(exp)}</span>${deltaHTML(exp, isCurMonth ? expPrevCmp : expPrev, false)}</div>
+            <div><span class="lbl"><i class="dotic" style="--c:var(--c-super)">${spriteIcon('dollar')}</i>Ahorros</span><span class="num val ${savingsMonth < 0 ? 'neg' : ''}">${money(savingsMonth)}</span>${savDeltaHTML}</div>
           </div>
         </div>
       </div>
 
-      <button class="pill-cta" id="btn-cta-tx" type="button">${iconSvg('plus')}Añadir movimiento</button>
-      ${sharedWidget}
+      ${sharedRow}
 
-      <div class="grid-2 grid-2-pair">
-      <div class="card card-compact card-link" data-goto-categorias>
-        <h2 class="card-title"><span>Gastos por categoría</span></h2>
-        ${catItems.length ? `<div id="chart-cats" class="cats-bars cats-bars-compact"></div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
-      </div>
+      <section class="k-card">
+        <div class="k-card-h"><h2>Gastos por categoría</h2>${catRows.length ? `<button type="button" class="link" data-goto-categorias>Ver todo${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}</button>` : ''}</div>
+        ${catRows.length ? `
+        <div class="stack" role="img" aria-label="${esc(catRows.map((r) => `${r.name} ${pctOf(r.value)}%`).join(', '))}">
+          ${catRows.map((r) => `<i style="width:${((r.value / catTotal) * 100).toFixed(2)}%;background:${r.color}"></i>`).join('')}
+        </div>
+        <div class="cat-lines">
+          ${catRows.map((r) => `
+          <button type="button" class="cat-line" ${r.id ? `data-goto-cat="${esc(r.id)}"` : 'data-goto-categorias'}>
+            <i style="background:${r.color}"></i><span class="cat-line-name">${esc(r.name)}</span>
+            <span class="t3 cat-line-pct">${pctOf(r.value)}%</span><span class="num">${money(r.value)}</span>
+          </button>`).join('')}
+        </div>
+        ${basisNote}` : '<div class="empty">Sin gastos registrados este mes.</div>'}
+      </section>
 
-      <div class="card card-compact card-link savings-rate-card" data-goto-savings>
-        <h2 class="card-title"><span>Tasa de ahorro</span></h2>
-        <div class="savings-rate-stat">
-          <div class="savings-rate-value ${savingsRatePct == null ? '' : savingsRatePct > 0 ? 'pos' : savingsRatePct < 0 ? 'neg' : ''}">${savingsRatePct == null ? '—' : savingsRatePct + '%'}</div>
-          ${savingsRateDeltaHTML}
-        </div>
-        <div class="savings-rate-chart">
-          ${hasSavingsRateTrend ? savingsRateTrendSvg(savingsRateRows)
-            : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}
-        </div>
-      </div>
-      </div>
+      <section class="k-card" data-goto-savings role="button" tabindex="0">
+        <div class="k-card-h"><h2>Tasa de ahorro</h2>${rateDiff == null ? '' : rateDiff === 0 ? '<span class="dchip flat">= igual</span>' : `<span class="dchip ${rateDiff > 0 ? 'good' : 'bad'}">${rateDiff > 0 ? '▲' : '▼'} ${Math.abs(rateDiff)} pp</span>`}</div>
+        ${savingsRateRows.length ? savingsRateChartSvg(savingsRateRows) : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}
+      </section>
 
       ${insights.length ? `
-      <div class="card insight-card">
-        <h2 class="card-title">Cómo vas este mes</h2>
-        <div class="insight-list">
-          ${insights.map((ins) => `
-            <div class="insight-row insight-${ins.tone}${ins.cardId ? ' rowlink' : ''}"${ins.cardId ? ` data-insight-card="${esc(ins.cardId)}" role="button" tabindex="0"` : ''}>
-              <span class="insight-icon">${ins.icon}</span>
-              <span class="insight-text">${esc(ins.text)}</span>
-              ${ins.cardId ? '<span class="insight-go" aria-hidden="true">›</span>' : ''}
-            </div>`).join('')}
-        </div>
-      </div>` : ''}
+      <h2 class="ovl home-ovl">Para tener en cuenta</h2>
+      <div class="group">
+        ${insights.map((ins) => `
+        <button type="button" class="insight" ${ins.cardId ? `data-insight-card="${esc(ins.cardId)}"` : `data-insight-go="${esc(ins.go || '')}"`}>
+          <span class="cic" style="--c:${INSIGHT_COLOR[ins.tone]}">${spriteIcon(ins.icon)}</span>
+          <div class="row-main"><div class="tt">${esc(ins.title)}</div>${ins.sub ? `<div class="st${ins.money ? ' money' : ''}">${esc(ins.sub)}</div>` : ''}</div>
+          ${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}
+        </button>`).join('')}
+      </div>` : ''}`;
 
-      <div class="card">
-        <h2 class="card-title">
-          <span>Ingresos vs. gastos</span>
-          <button class="link-btn" data-trendtable>${ui.trendTable ? 'Ver gráfico' : 'Ver tabla'}</button>
-        </h2>
-        <div class="chart-legend">
-          <span><span class="key" style="background:${Charts.COLORS.income}"></span>Ingresos</span>
-          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos</span>
-        </div>
-        <div id="chart-trend"></div>
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">
-          <span>Balance por día</span>
-          <button type="button" class="icon-btn" id="btn-expand-daily" title="Ampliar" aria-label="Ampliar gráfico">${iconSvg('expand')}</button>
-        </h2>
-        <div class="chart-legend">
-          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
-          <span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>
-          <span><span class="key key-dotted"></span>Ingresos del mes</span>
-          <span><span class="key key-dotted key-dotted-warn"></span>Ingresos − ahorro</span>
-        </div>
-        <div id="chart-daily-balance"></div>
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">Próximos vencimientos</h2>
-        ${cardRows.length ? `
-        <div class="due-card-list">
-          ${cardRows.slice().sort((a, b) => a.cy.prevDue - b.cy.prevDue).map((r) => {
-            const today0 = new Date(); today0.setHours(0, 0, 0, 0);
-            const days = Math.round((r.cy.prevDue - today0) / DAY_MS);
-            const daysLabel = days < 0 ? `Venció hace ${-days} día${-days === 1 ? '' : 's'}`
-              : days === 0 ? 'Vence hoy' : `Vence en ${days} día${days === 1 ? '' : 's'}`;
-            return `<div class="due-card-row" data-goto-card="${esc(r.card.id)}">
-              <div class="row-icon row-icon-due">${iconSvg('card')}</div>
-              <div class="due-card-main">
-                <div class="due-card-title">${esc(r.card.name)}</div>
-                <div class="due-card-sub">${esc(daysLabel)} · ${esc(fmtDay(r.cy.prevDue))}</div>
-              </div>
-              <div class="due-card-amount">
-                <div class="v">${fmtDisp(r.toPay)}</div>
-                <span class="due-card-pill">Ver</span>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>`
-        : `<div class="empty">${cards.length
-            ? 'Cargá al menos dos resúmenes (el actual y el anterior) desde "Resúmenes" en cada tarjeta para ver acá cierres, vencimientos y cuánto vas a pagar.'
-            : 'Agregá tus tarjetas de crédito en “Tarjetas y medios” para ver cierres, vencimientos y cuánto vas a pagar.'}</div>`}
-      </div>`;
-
-    // Gráficos
-    if (catItems.length) {
-      Charts.hBars($('#chart-cats', el), catItems, {
-        fmt: fmtDisp, color: Charts.COLORS.category,
-      });
-    }
-    $$('[data-insight-card]', el).forEach((row) => {
-      const open = () => cardAnalysisDialog(row.dataset.insightCard);
-      row.addEventListener('click', open);
-      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-    });
-    const trendEl = $('#chart-trend', el);
-    if (!trendRows.length) {
-      trendEl.innerHTML = '<div class="empty">Sin movimientos en los últimos 6 meses.</div>';
-    } else if (ui.trendTable) {
-      trendEl.innerHTML = `
-        <div class="table-scroll"><table class="data">
-          <thead><tr><th>Mes</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Balance</th></tr></thead>
-          <tbody>${trendRows.map((r) => `
-            <tr><td>${esc(r.label)}</td>
-            <td class="num amount-in">${fmtDisp(r.income)}</td>
-            <td class="num">${fmtDisp(r.expense)}</td>
-            <td class="num">${fmtDisp(r.income - r.expense)}</td></tr>`).join('')}
-          </tbody>
-        </table></div>`;
-    } else {
-      Charts.lines(trendEl, trendRows.map((r) => r.label), [
-        { label: 'Ingresos', color: Charts.COLORS.income, values: trendRows.map((r) => r.income) },
-        { label: 'Gastos', color: Charts.COLORS.expense, values: trendRows.map((r) => r.expense) },
-      ], {
-        smooth: true, markerRadius: 5, leftPad: 52, topPad: 14,
-        fmtAxis: (v) => Charts.compact(v),
-        ariaLabel: 'Ingresos y gastos por mes',
-      });
-    }
-    Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {
-      prevPoints: dailyBalancePrev,
-      incomeLine: incomeLineCal,
-      incomeMinusSavingsLine: incomeMinusSavingsLineCal,
-      todayLine: mk === curMonth(),
-      ariaLabel: 'Gastos acumulados por día del mes',
-    });
-
-    $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
-      ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
-      render();
-    }));
-    const btnToday = $('[data-mtoday]', el);
-    if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
-    $('[data-trendtable]', el).addEventListener('click', () => {
-      ui.trendTable = !ui.trendTable;
-      render();
-    });
-    // "Ampliar": mismo gráfico en un diálogo, pero con un día por franja fija
-    // (en vez de repartir el ancho disponible entre los ~30 días del mes) y
-    // etiqueta en cada día — así se puede tocar/scrollear para leer un día
-    // puntual con precisión, en vez de estimarlo a ojo en la versión chica.
-    $('#btn-expand-daily', el).addEventListener('click', () => {
-      // Comparación "hoy vs. el mismo día del mes pasado": punto actual del
-      // mes que se está mirando contra el gasto acumulado al mismo número
-      // de día en el mes anterior (si ese mes fue más corto, se usa su
-      // último día disponible) — independiente del toggle "Comparar con
-      // mes anterior", que sólo controla la línea punteada del gráfico.
-      const todayEntry = [...dailyBalance].reverse().find((p) => p.value != null);
-      const prevKnown = dailyBalancePrev.filter((p) => p.value != null);
-      const prevEntry = todayEntry
-        ? (prevKnown.find((p) => p.day === todayEntry.day) || prevKnown[prevKnown.length - 1])
-        : null;
-      let cmpHTML = '';
-      // prevCalMonthTxs.length: sin movimientos cargados el mes anterior no
-      // hay nada real con qué comparar (todos los días quedarían en 0, lo
-      // que se leería como "gastaste $X de más" siendo mentira).
-      if (todayEntry && prevEntry && prevCalMonthTxs.length) {
-        const diff = todayEntry.value - prevEntry.value;
-        const worse = diff > 0; // gastó más que en el mismo punto del mes pasado
-        const pct = prevEntry.value > 0 ? Math.round(Math.abs(diff) / prevEntry.value * 100) : null;
-        cmpHTML = `
-        <div class="daycmp">
-          <div class="daycmp-row">
-            <div class="daycmp-item">
-              <div class="ring-stat-label">Hoy · día ${todayEntry.day}</div>
-              <div class="ring-stat-value">${fmtDisp(todayEntry.value)}</div>
-            </div>
-            <div class="daycmp-item daycmp-item-muted">
-              <div class="ring-stat-label">Día ${prevEntry.day} de ${esc(monthShortLabel(prevMkDaily))}</div>
-              <div class="ring-stat-value">${fmtDisp(prevEntry.value)}</div>
-            </div>
-          </div>
-          <div class="daycmp-diff ${worse ? 'daycmp-diff-bad' : 'daycmp-diff-good'}">
-            <span class="daycmp-diff-arrow">${worse ? '▲' : '▼'}</span>
-            <span class="daycmp-diff-main">${fmtDisp(Math.abs(diff))}${pct != null ? ` (${pct}%)` : ''}</span>
-            <span class="daycmp-diff-label">${worse ? 'más' : 'menos'} que el ${prevEntry.day} de ${esc(monthShortLabel(prevMkDaily))}</span>
-          </div>
-        </div>`;
-      }
-      const dlg = openDialog('Balance por día', `
-        ${cmpHTML}
-        <div class="chart-legend">
-          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
-          <span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>
-          <span><span class="key key-dotted"></span>Ingresos del mes</span>
-          <span><span class="key key-dotted key-dotted-warn"></span>Ingresos − ahorro</span>
-        </div>
-        <div id="chart-daily-balance-big" class="chart-daily-big-host"></div>
-      `, { viewOnly: true, submitLabel: 'Cerrar' });
-      Charts.dailyBalance($('#chart-daily-balance-big', dlg), dailyBalance, {
-        big: true,
-        prevPoints: dailyBalancePrev,
-        incomeLine: incomeLineCal,
-        incomeMinusSavingsLine: incomeMinusSavingsLineCal,
-        todayLine: mk === curMonth(),
-        ariaLabel: 'Gastos acumulados por día del mes',
-      });
-    });
-    $('#btn-cta-tx', el).addEventListener('click', () => txForm(null));
-    $$('[data-goto-card]', el).forEach((row) => row.addEventListener('click', () => {
-      ui.view = 'tarjetas';
-      render();
+    $$('[data-insight-card]', el).forEach((row) => row.addEventListener('click', () => cardAnalysisDialog(row.dataset.insightCard)));
+    $$('[data-insight-go]', el).forEach((row) => row.addEventListener('click', () => {
+      const go = row.dataset.insightGo;
+      if (go && VIEWS[go]) { ui.view = go; render(); }
     }));
     const gotoSavings = $('[data-goto-savings]', el);
-    if (gotoSavings) gotoSavings.addEventListener('click', () => {
-      ui.view = 'ahorros';
-      render();
-    });
+    if (gotoSavings) {
+      const open = () => { ui.view = 'ahorros'; render(); };
+      gotoSavings.addEventListener('click', open);
+      gotoSavings.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    }
     const gotoShared = $('[data-goto-shared]', el);
     if (gotoShared) gotoShared.addEventListener('click', () => {
       ui.view = 'compartido';
       loadShared();
       render();
     });
-    const gotoCats = $('[data-goto-categorias]', el);
-    if (gotoCats) gotoCats.addEventListener('click', () => {
+    $$('[data-goto-categorias]', el).forEach((b) => b.addEventListener('click', () => {
       ui.view = 'categorias';
+      ui.catKind = 'gasto';
       render();
-    });
+    }));
+    $$('[data-goto-cat]', el).forEach((b) => b.addEventListener('click', () => {
+      ui.view = 'categorias';
+      ui.catKind = 'gasto';
+      ui.catOpen = { ...ui.catOpen, ['gasto:' + b.dataset.gotoCat]: true };
+      render();
+    }));
   }
 
   /* ================= Vista: Movimientos ================= */
-  function vMovimientos(el) {
-    const txs = S().transactions;
+  // "Ayer · dom 18 oct" / "Miércoles 7 oct": encabezado de cada día.
+  function movDayLabel(dateStr) {
+    const d = parseDate(dateStr);
+    const dayMonth = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short' }).format(d).replace('.', '');
+    const yesterday = dateToStr(addDays(parseDate(todayStr()), -1));
+    if (dateStr === todayStr() || dateStr === yesterday) {
+      const wd = new Intl.DateTimeFormat('es-AR', { weekday: 'short' }).format(d).replace('.', '');
+      return `${dateStr === todayStr() ? 'Hoy' : 'Ayer'} · ${wd} ${dayMonth}`;
+    }
+    const wd = new Intl.DateTimeFormat('es-AR', { weekday: 'long' }).format(d);
+    return `${wd.charAt(0).toUpperCase()}${wd.slice(1)} ${dayMonth}`;
+  }
+  const shortDayLabel = (dateStr) => {
+    const s = new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }).format(parseDate(dateStr)).replace(/\./g, '').replace(',', '');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+  const plainText = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-    let list = txs.slice();
+  /* Una fila de Movimientos: ícono en el color de su categoría, título
+     (nota o categoría), "Categoría · Cuenta · cuota 2/12" abajo, el monto
+     a la derecha (gastos en el color del texto con "−", ingresos en verde
+     con "+") y el equivalente en la otra moneda. Deslizándola hacia la
+     izquierda aparecen Editar y Borrar (scroll-snap, sin JS). */
+  function movRowHTML(t, { scheduled = false } = {}) {
+    const isNew = ui.newTxIds && ui.newTxIds.ids.has(t.id) ? ' is-new' : '';
+    const other = t.currency === 'USD' ? t.arsSnapshot : t.usdSnapshot;
+    const otherCur = t.currency === 'USD' ? 'ARS' : 'USD';
+    const otherLine = other != null ? `<small class="money">${esc(fmtPlain(Math.abs(other), otherCur))}</small>` : '';
+    let icon, color, title, sub = [], sign = '', amtCls = '';
+    if (t.type === 'transferencia') {
+      icon = iconSvg('swap'); color = 'var(--t2)';
+      title = t.note || 'Transferencia';
+      sub.push(`${methodName(t.methodId)} → ${methodName(t.toMethodId)}`);
+    } else {
+      const cat = catById(t.categoryId);
+      icon = iconSvg(categoryIconName(t.categoryId)); color = catColor(t.categoryId);
+      title = t.note || catName(t.categoryId);
+      // Sin nota, el título ya es la categoría: abajo va su grupo (si es una
+      // subcategoría) en vez de repetirla.
+      if (t.note) sub.push(catName(t.categoryId));
+      else if (cat && cat.parentId) sub.push(catName(cat.parentId));
+      sub.push(methodName(t.methodId));
+      if (t.installment) sub.push(`cuota ${t.installment.k}/${t.installment.n}`);
+      if (t.recurringId) sub.push('fijo');
+      else if (t.leftoverGen) sub.push('sobrante');
+      sign = t.type === 'ingreso' ? '+ ' : '− ';
+      amtCls = t.type === 'ingreso' ? ' pos' : '';
+    }
+    if (scheduled) sub.unshift(shortDayLabel(t.date));
+    return `
+      <div class="swipe">
+        <button type="button" class="row mrow${isNew}" data-tx="${esc(t.id)}">
+          <span class="cic" style="--c:${color}">${icon}</span>
+          <div class="row-main"><div class="tt">${esc(title)}</div><div class="st">${esc(sub.join(' · '))}</div></div>
+          <div class="amt"><span class="num money${amtCls}">${esc(sign + fmtPlain(t.amount, t.currency))}</span>${otherLine}</div>
+        </button>
+        <div class="swipe-actions">
+          <button type="button" class="sw-edit" data-edit="${esc(t.id)}" aria-label="Editar ${esc(title)}">${spriteIcon('note')}<span>Editar</span></button>
+          <button type="button" class="sw-del" data-del="${esc(t.id)}" aria-label="Borrar ${esc(title)}">${iconSvg('trash')}<span>Borrar</span></button>
+        </div>
+      </div>`;
+  }
+
+  function movFilteredList() {
+    let list = S().transactions.slice();
     // Por fecha real de carga, no de vencimiento: un gasto con tarjeta
     // aparece en el mes en que se hizo, aunque el balance lo cuente para
     // el mes en que vence el resumen (ver settings.cardMonthBasis).
     if (!ui.fAllMonths) list = list.filter((t) => monthKeyOf(t.date) === ui.month);
     if (ui.fType) list = list.filter((t) => t.type === ui.fType);
     if (ui.fCat) {
-      // Si se eligió un grupo (ej. "Casa"), tiene que traer también los
-      // movimientos cargados en sus subcategorías (ej. "Supermercado") —
-      // antes comparaba el categoryId tal cual, así que elegir un grupo con
-      // subcategorías activas siempre daba "sin movimientos".
+      // Un grupo (ej. "Casa") trae también sus subcategorías.
       const filterCat = catById(ui.fCat);
       list = list.filter((t) => filterCat && !filterCat.parentId
         ? topCategoryOf(t.categoryId) === ui.fCat
         : t.categoryId === ui.fCat);
     }
-    if (ui.fMethod) list = list.filter((t) => t.methodId === ui.fMethod);
-    list.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-
-    // Para resaltar gastos grandes en la lista: relativo al gasto más alto
-    // de lo que se está viendo (con los filtros actuales), no a un monto
-    // fijo, así se adapta a la escala de cada quien.
-    const gastoVals = list.filter((t) => t.type === 'gasto').map((t) => txDispAmount(t)).filter((v) => v > 0);
-    const maxGasto = gastoVals.length ? Math.max(...gastoVals) : 0;
-    const bigClass = (t) => {
-      if (t.type !== 'gasto' || !maxGasto) return '';
-      const ratio = (txDispAmount(t) || 0) / maxGasto;
-      return ratio >= 0.66 ? ' amount-huge' : ratio >= 0.33 ? ' amount-big' : '';
-    };
-
-    el.innerHTML = `
-      <div class="card">
-        <h2 class="card-title">
-          <span>Detalle</span>
-          <label class="subcats-toggle">
-            Todos los meses
-            <input type="checkbox" id="fil-allmonths" ${ui.fAllMonths ? 'checked' : ''}>
-          </label>
-        </h2>
-        <div class="mov-filters">
-          <select id="fil-type" aria-label="Tipo">
-            <option value="">Ingresos y gastos</option>
-            <option value="ingreso" ${ui.fType === 'ingreso' ? 'selected' : ''}>Solo ingresos</option>
-            <option value="gasto" ${ui.fType === 'gasto' ? 'selected' : ''}>Solo gastos</option>
-            <option value="transferencia" ${ui.fType === 'transferencia' ? 'selected' : ''}>Solo transferencias</option>
-          </select>
-          <select id="fil-cat" aria-label="Categoría">
-            <option value="">Todas las categorías</option>
-            ${catFilterOptionsHTML(ui.fCat)}
-          </select>
-          <select id="fil-method" aria-label="Medio de pago" class="mov-filter-full">
-            <option value="">Todos los medios</option>
-            ${selOptions(S().methods, ui.fMethod)}
-            ${S().savings.length ? `<optgroup label="Ahorros">${selOptions(S().savings, ui.fMethod)}</optgroup>` : ''}
-          </select>
-        </div>
-        <button class="btn btn-primary btn-sm mov-add" id="btn-add-tx">+ Movimiento</button>
-
-        ${list.length ? `
-        ${txDayGroupsHTML(list, '', { presorted: true, amountClass: bigClass })}`
-        : '<div class="empty">No hay movimientos con estos filtros. Cargá el primero con “+ Movimiento”.</div>'}
-      </div>`;
-
-    $('#fil-allmonths', el).addEventListener('change', (e) => { ui.fAllMonths = e.target.checked; render(); });
-    $('#fil-type', el).addEventListener('change', (e) => { ui.fType = e.target.value; render(); });
-    $('#fil-cat', el).addEventListener('change', (e) => { ui.fCat = e.target.value; render(); });
-    $('#fil-method', el).addEventListener('change', (e) => { ui.fMethod = e.target.value; render(); });
-    $('#btn-add-tx', el).addEventListener('click', () => txForm(null));
-
-    // Sin ✕ en cada fila (ocupaba lugar en una lista larga): se elimina
-    // desde el detalle que se abre al tocar el movimiento.
-    $$('.tx-card-row', el).forEach((row) => {
-      row.addEventListener('click', () => {
-        const tx = S().transactions.find((t) => t.id === row.dataset.tx);
-        if (tx) txDetailDialog(tx);
+    if (ui.fMethod) list = list.filter((t) => t.methodId === ui.fMethod || t.toMethodId === ui.fMethod);
+    const q = plainText(ui.fSearch).trim();
+    if (q) {
+      const qDigits = q.replace(/[.\s$]/g, '');
+      list = list.filter((t) => {
+        const hay = plainText([t.note, catName(t.categoryId), t.categoryId && catById(t.categoryId) && catById(t.categoryId).parentId ? catName(catById(t.categoryId).parentId) : '',
+          methodName(t.methodId), t.toMethodId ? methodName(t.toMethodId) : ''].join(' '));
+        return hay.includes(q) || (/^\d+$/.test(qDigits) && String(Math.round(t.amount)).includes(qDigits));
       });
+    }
+    return list;
+  }
+
+  function movListHTML() {
+    const list = movFilteredList();
+    if (!list.length) {
+      return `<div class="empty">${ui.fSearch || ui.fType || ui.fCat || ui.fMethod
+        ? 'No hay movimientos con estos filtros.'
+        : 'Todavía no hay movimientos este mes. Cargá uno con el +.'}</div>`;
+    }
+    const today = todayStr();
+    // Cuotas y fijos con fecha futura van aparte: todavía no pasaron.
+    const scheduled = list.filter((t) => t.date > today).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    const past = list.filter((t) => t.date <= today).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    const dayTotal = (items) => {
+      let n = 0;
+      for (const t of items) {
+        if (t.type === 'transferencia') continue;
+        const v = txDispAmount(t);
+        if (v != null) n += t.type === 'ingreso' ? v : -v;
+      }
+      if (Math.abs(n) < 0.5) return '';
+      return `<span class="num money">${esc((n < 0 ? '− ' : '+ ') + fmtPlain(Math.abs(n)))}</span>`;
+    };
+    return `
+      ${scheduled.length ? `
+      <section class="sched">
+        <h3 class="dayh"><span>Programados</span><span class="num">${scheduled.length}</span></h3>
+        <div class="group">${scheduled.map((t) => movRowHTML(t, { scheduled: true })).join('')}</div>
+      </section>` : ''}
+      ${dayGroups(past).map(({ dateStr, items }) => `
+      <section>
+        <h3 class="dayh"><span>${esc(movDayLabel(dateStr))}</span>${dayTotal(items)}</h3>
+        <div class="group">${items.map((t) => movRowHTML(t)).join('')}</div>
+      </section>`).join('')}`;
+  }
+
+  function vMovimientos(el) {
+    const hasTransfers = S().transactions.some((t) => t.type === 'transferencia');
+    const typeChips = [['', 'Todos'], ['gasto', 'Gastos'], ['ingreso', 'Ingresos']];
+    if (hasTransfers) typeChips.push(['transferencia', 'Transferencias']);
+    const cat = ui.fCat ? catById(ui.fCat) : null;
+    el.innerHTML = `
+      <label class="search">
+        ${spriteIcon('search')}
+        <input type="search" id="mov-search" placeholder="Buscar" value="${esc(ui.fSearch || '')}" enterkeyhint="search" autocomplete="off" aria-label="Buscar movimientos">
+      </label>
+      <div class="chips chips-scroll" role="toolbar" aria-label="Filtros">
+        ${typeChips.map(([v, label]) => `<button type="button" class="chip${ui.fType === v ? ' on' : ''}" data-ftype="${v}" aria-pressed="${ui.fType === v}">${label}</button>`).join('')}
+        ${S().methods.map((m) => `<button type="button" class="chip${ui.fMethod === m.id ? ' on' : ''}" data-fmethod="${esc(m.id)}" aria-pressed="${ui.fMethod === m.id}">${esc(m.name)}</button>`).join('')}
+        <button type="button" class="chip${cat ? ' on' : ''}" data-fcat>${esc(cat ? cat.name : 'Categoría')}${spriteIcon('cd')}</button>
+      </div>
+      <div class="mov-list" id="mov-list">${movListHTML()}</div>`;
+
+    const listEl = $('#mov-list', el);
+    $('#mov-search', el).addEventListener('input', (e) => {
+      ui.fSearch = e.target.value;
+      listEl.innerHTML = movListHTML();
+    });
+    el.addEventListener('click', (e) => {
+      let b;
+      if ((b = e.target.closest('[data-ftype]'))) { ui.fType = b.dataset.ftype; render(); return; }
+      if ((b = e.target.closest('[data-fmethod]'))) { ui.fMethod = ui.fMethod === b.dataset.fmethod ? '' : b.dataset.fmethod; render(); return; }
+      if (e.target.closest('[data-fcat]')) { categoryFilterSheet(); return; }
+      const byId = (id) => S().transactions.find((t) => t.id === id);
+      if ((b = e.target.closest('[data-edit]'))) { const tx = byId(b.dataset.edit); if (tx) txForm(tx); return; }
+      if ((b = e.target.closest('[data-del]'))) { const tx = byId(b.dataset.del); if (tx) deleteTx(tx); return; }
+      if ((b = e.target.closest('[data-tx]'))) { const tx = byId(b.dataset.tx); if (tx) txDetailDialog(tx); }
     });
   }
+
+  // Elegir la categoría del filtro (grupo entero o una subcategoría).
+  function categoryFilterSheet() {
+    const row = (id, name, color, icon, on, sub) => `
+      <button type="button" class="pick-row${on ? ' on' : ''}${sub ? ' pick-sub' : ''}" data-pickcat="${esc(id)}">
+        <span class="cic" style="--c:${color}">${icon}</span><span>${esc(name)}</span>${on ? spriteIcon('check') : ''}
+      </button>`;
+    const section = (type, label) => {
+      const groups = S().categories.filter((c) => c.type === type && !c.parentId);
+      if (!groups.length) return '';
+      return `<div class="ovl pick-sep">${label}</div>${groups.map((g) => row(g.id, g.name, catColor(g.id), iconSvg(categoryIconName(g.id)), ui.fCat === g.id, false)
+        + (useSubcats() ? catChildren(g.id).map((c) => row(c.id, c.name, catColor(c.id), iconSvg(categoryIconName(c.id)), ui.fCat === c.id, true)).join('') : '')).join('')}`;
+    };
+    openPanel({
+      title: 'Categoría',
+      body: `<div class="pick-list">
+        ${row('', 'Todas las categorías', 'var(--t2)', spriteIcon('more'), !ui.fCat, false)}
+        ${section('gasto', 'Gastos')}${section('ingreso', 'Ingresos')}
+      </div>`,
+      onClick(e, dlg) {
+        const b = e.target.closest('[data-pickcat]');
+        if (!b) return;
+        ui.fCat = b.dataset.pickcat;
+        closeSheet(dlg).then(render);
+      },
+    });
+  }
+
+  // Elegir el mes (o "Todos los meses", solo para la lista).
+  function monthPickerSheet() {
+    const months = new Set();
+    const cm = curMonth();
+    for (let i = -24; i <= 3; i++) months.add(addMonthsKey(cm, i));
+    for (const t of S().transactions) months.add(monthKeyOf(t.date));
+    const sorted = [...months].sort().reverse();
+    const allowAll = ui.view === 'movimientos';
+    const row = (value, label, on) => `
+      <button type="button" class="pick-row${on ? ' on' : ''}" data-pickmonth="${esc(value)}">
+        <span class="cic" style="--c:var(--t2)">${spriteIcon('cal')}</span><span>${esc(label)}</span>${on ? spriteIcon('check') : ''}
+      </button>`;
+    const dlg = openPanel({
+      title: 'Mes',
+      body: `<div class="pick-list">
+        ${allowAll ? row('all', 'Todos los meses', ui.fAllMonths) : ''}
+        ${sorted.map((m) => row(m, topbarMonthLabel(m) + (m === cm ? ' · actual' : ''), !(allowAll && ui.fAllMonths) && m === ui.month)).join('')}
+      </div>`,
+      onClick(e, d) {
+        const b = e.target.closest('[data-pickmonth]');
+        if (!b) return;
+        if (b.dataset.pickmonth === 'all') ui.fAllMonths = true;
+        else { ui.fAllMonths = false; ui.month = b.dataset.pickmonth; }
+        closeSheet(d).then(render);
+      },
+    });
+    const on = $('.pick-row.on', dlg);
+    if (on) on.scrollIntoView({ block: 'center' });
+  }
+
 
   /* ================= Vista: Categorías (análisis) ================= */
   // A qué "grupo" pertenece un gasto para el análisis: el id del grupo de
@@ -2854,548 +2803,454 @@
     return [...groups.values()].sort((a, b) => b.total - a.total);
   }
 
-  // Agrega al desglose del mes actual, en $0, las categorías/subcategorías
-  // que tuvieron gasto el mes anterior pero no este mes — sin esto,
-  // apenas una categoría dejaba de tener movimientos en el mes elegido
-  // desaparecía entera de la tabla en vez de mostrarse reducida a cero
-  // (que es justamente lo que "vs. ant." está pensado para mostrar).
-  function withPrevZeros(breakdown, prevBreakdown) {
-    const result = breakdown.map((g) => ({ ...g, subs: g.subs.map((s) => ({ ...s })) }));
-    const byId = new Map(result.map((g) => [g.id, g]));
-    for (const pg of prevBreakdown) {
-      let g = byId.get(pg.id);
-      if (!g) {
-        g = { id: pg.id, name: pg.name, total: 0, subs: [], direct: 0 };
-        result.push(g);
-        byId.set(pg.id, g);
+
+
+  /* ---------- Escalas y formatos de los gráficos del rediseño ---------- */
+  // Tope "redondo" del eje y su paso, para 3 a 5 líneas de grilla.
+  function niceScale(max, count = 4) {
+    if (!(max > 0)) max = 1;
+    const raw = max / count;
+    const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / pow;
+    const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * pow;
+    return { top: Math.ceil(max / step) * step, step };
+  }
+  // Unidad de un gráfico de montos: millones ("3,82") si llega al millón,
+  // miles ("850") si no. Los ejes dicen "1 M" / "500 k".
+  function moneyUnit(max) {
+    if (max >= 1e6) return { div: 1e6, dec: 2, axis: 'M', note: 'en millones' };
+    return { div: 1e3, dec: 0, axis: 'k', note: 'en miles' };
+  }
+  const unitNum = (v, u) => (hideAmounts ? '•••' : (v / u.div).toFixed(u.dec).replace('.', ','));
+  const unitAxis = (v, u) => (v === 0 ? '0' : `${(v / u.div).toLocaleString('es-AR', { maximumFractionDigits: 1 })} ${u.axis}`);
+
+  /* ---------- Movimientos › Categorías › General ---------- */
+  // Ingresos y gastos por mes (los últimos 4 hasta el elegido): dos líneas
+  // suaves con marcadores y el valor arriba/abajo de cada punto. Si el
+  // último mes está en curso, ese tramo de gastos va punteado (el mes no
+  // terminó) y el área entre las dos líneas muestra lo que quedó.
+  function incomeExpenseChartSvg(rows, inProgress) {
+    const G = Charts.g;
+    const W = 320, H = 156, x0 = 50, x1 = 290, yTop = 14, yBase = 130;
+    const max = Math.max(1, ...rows.map((r) => Math.max(r.inc, r.exp)));
+    const u = moneyUnit(max);
+    const { top, step } = niceScale(max, 4);
+    const ticks = [];
+    for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+    const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
+    const y = G.escala([0, top], [yBase, yTop]);
+    const inc = rows.map((r, i) => [x(i), y(r.inc)]);
+    const exp = rows.map((r, i) => [x(i), y(r.exp)]);
+    const last = rows.length - 1;
+    const expDone = inProgress ? exp.slice(0, last) : exp;
+    const area = rows.length > 1 ? `<path d="${G.areaEntre(inc, exp)}" style="fill:var(--brand);opacity:.08"/>` : '';
+    const expSolid = expDone.length > 1 ? `<path d="${G.lineaSuave(expDone)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:var(--t1)"/>` : '';
+    const expDash = inProgress && last > 0 ? `<path d="${G.lineaSuave(exp.slice(last - 1))}" fill="none" stroke-width="2.5" stroke-dasharray="4 4" stroke-linecap="round" style="stroke:var(--t1)"/>` : '';
+    const incLine = rows.length > 1 ? `<path d="${G.lineaSuave(inc)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:var(--brand)"/>` : '';
+    const markers = rows.map((r, i) => {
+      const isLast = i === last;
+      const expMk = isLast && inProgress
+        ? `<circle cx="${exp[i][0].toFixed(1)}" cy="${exp[i][1].toFixed(1)}" r="4.5" stroke-width="2.4" stroke-dasharray="2 2" style="fill:var(--s1);stroke:var(--t1)"/>`
+        : G.marcador(exp[i][0], exp[i][1], 'var(--t1)', false);
+      return G.marcador(inc[i][0], inc[i][1], 'var(--brand)', isLast) + expMk;
+    }).join('');
+    // Ingresos arriba de su punto; gastos abajo (o arriba si gastó más).
+    const labels = rows.map((r, i) => {
+      const incAbove = r.inc >= r.exp;
+      const iy = incAbove ? inc[i][1] - 10 : inc[i][1] + 18;
+      const ey = incAbove ? exp[i][1] + 18 : exp[i][1] - 10;
+      return `<text x="${inc[i][0].toFixed(1)}" y="${Math.max(10, iy).toFixed(1)}" text-anchor="middle" class="g-lab"${i === last ? ' style="fill:var(--brand-text)"' : ''}>${unitNum(r.inc, u)}</text>
+        <text x="${exp[i][0].toFixed(1)}" y="${Math.min(yBase - 2, ey).toFixed(1)}" text-anchor="middle" class="g-lab">${unitNum(r.exp, u)}</text>`;
+    }).join('');
+    const months = rows.map((r, i) => `<text x="${x(i).toFixed(1)}" y="148" text-anchor="middle"${i === last ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`).join('');
+    const aria = `Ingresos y gastos por mes: ${rows.map((r, i) => `${r.label} ${hideAmounts ? '' : `${fmtPlain(r.inc)} y ${fmtPlain(r.exp)}`}${i === last && inProgress ? ' (en curso)' : ''}`).join('; ')}`;
+    return { unit: u, svg: `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}">
+      ${G.grillaY(ticks, y, 36, 306, (v) => unitAxis(v, u))}
+      ${area}${incLine}${expSolid}${expDash}${markers}${labels}${months}
+    </svg>` };
+  }
+
+  // Gastos acumulados día a día del mes elegido (escalones hasta hoy)
+  // contra el mes anterior completo (punteado), con los ingresos del mes y
+  // los ingresos − ahorro como líneas horizontales, la línea "Hoy" y la
+  // diferencia contra el mes anterior al mismo día.
+  function dailySpendChartSvg({ cur, prev, daysInMonth, upTo, income, incomeMinusSav, isCurrent, prevLabel }) {
+    const G = Charts.g;
+    const W = 320, H = 176, x0 = 40, x1 = 304, yTop = 20, yBase = 150;
+    const curPts = G.acumulado(cur, upTo);
+    const prevDays = Object.keys(prev).length ? Math.max(...Object.keys(prev).map(Number)) : 0;
+    const prevPts = G.acumulado(prev, Math.max(prevDays, 1));
+    const max = Math.max(1, income, incomeMinusSav, ...curPts.map((p) => p[1]), ...prevPts.map((p) => p[1]));
+    const u = moneyUnit(max);
+    const { top, step } = niceScale(max * 1.04, 4);
+    const ticks = [];
+    for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+    const x = G.escala([1, daysInMonth], [x0, x1]);
+    const y = G.escala([0, top], [yBase, yTop]);
+    const curXY = curPts.map(([d, v]) => [x(d), y(v)]);
+    const prevXY = prevPts.map(([d, v]) => [x(Math.min(d, daysInMonth)), y(v)]);
+    const prevPath = prevXY.length > 1 ? `<path d="M${prevXY.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L')}" fill="none" stroke-width="1.6" stroke-dasharray="4 3" stroke-linejoin="round" style="stroke:var(--t3)"/>` : '';
+    const steps = curXY.length ? G.escalones(curXY) : '';
+    const area = curXY.length > 1 ? `<path d="${steps} L${curXY[curXY.length - 1][0].toFixed(1)} ${yBase} L${curXY[0][0].toFixed(1)} ${yBase} Z" style="fill:url(#gDia)"/>` : '';
+    const curPath = curXY.length ? `<path d="${steps}" fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--t1)"/>` : '';
+    const hline = (v, color, label, labelColor, below) => {
+      if (!(v > 0)) return '';
+      const yy = y(v);
+      return `<line x1="${x0}" x2="${x1}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke-width="1.5" stroke-dasharray="5 4" style="stroke:${color}"/>
+        <text x="${below ? x0 + 2 : x1}" y="${(below ? yy + 13 : yy - 5).toFixed(1)}" text-anchor="${below ? 'start' : 'end'}" style="fill:${labelColor};font-weight:600">${esc(label)} ${unitNum(v, u)} ${u.axis}</text>`;
+    };
+    const incLines = hline(income, 'var(--brand)', 'Ingresos', 'var(--brand-text)', false)
+      + (Math.abs(income - incomeMinusSav) >= 1 ? hline(incomeMinusSav, 'var(--c-super)', 'Ingresos − ahorro', 'var(--c-super)', true) : '');
+    let today = '';
+    if (curXY.length) {
+      const [hx, hy] = curXY[curXY.length - 1];
+      const prevAt = prevPts[Math.min(upTo, prevPts.length) - 1];
+      const curVal = curPts[curPts.length - 1][1];
+      // "Hoy" va justo arriba del punto más alto de ese día (el de este mes
+      // o el del anterior), para no pisarse con las líneas de ingresos.
+      const prevAtY = prevAt && prevDays ? y(prevAt[1]) : hy;
+      const hoyY = Math.max(yTop + 10, Math.min(hy, prevAtY) - 14);
+      today = (isCurrent ? `<line x1="${hx.toFixed(1)}" x2="${hx.toFixed(1)}" y1="${(hoyY + 4).toFixed(1)}" y2="${yBase}" stroke-width="1" stroke-dasharray="2 3" style="stroke:var(--t3)"/>
+        <text x="${hx.toFixed(1)}" y="${hoyY.toFixed(1)}" text-anchor="middle" style="fill:var(--t2);font-weight:600">Hoy</text>` : '');
+      if (prevAt && prevDays) {
+        const py = y(prevAt[1]);
+        const diff = curVal - prevAt[1];
+        today += `<circle cx="${hx.toFixed(1)}" cy="${py.toFixed(1)}" r="4" stroke-width="2" style="fill:var(--s1);stroke:var(--t3)"/>`;
+        if (Math.abs(py - hy) > 14 && !hideAmounts) {
+          const lx = hx + 9 > x1 - 70 ? hx - 9 : hx + 9;
+          const anchor = lx < hx ? 'end' : 'start';
+          const color = diff > 0 ? 'var(--neg)' : 'var(--brand-text)';
+          today += `<line x1="${lx.toFixed(1)}" x2="${lx.toFixed(1)}" y1="${(Math.min(py, hy) + 2).toFixed(1)}" y2="${(Math.max(py, hy) - 2).toFixed(1)}" stroke-width="1.5" style="stroke:${color}"/>
+            <text x="${(anchor === 'start' ? lx + 5 : lx - 5).toFixed(1)}" y="${((py + hy) / 2 + 4).toFixed(1)}" text-anchor="${anchor}" style="fill:${color};font-weight:700">≈ ${unitNum(Math.abs(diff), u)} ${u.axis} ${diff > 0 ? 'más' : 'menos'}</text>`;
+        }
       }
-      const subIds = new Set(g.subs.map((s) => s.id));
-      for (const ps of pg.subs) {
-        if (!subIds.has(ps.id)) g.subs.push({ id: ps.id, name: ps.name, value: 0 });
-      }
+      today += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="5" stroke-width="2.5" style="fill:var(--t1);stroke:var(--s1)"/>`;
     }
-    return result.sort((a, b) => b.total - a.total);
+    const xTicks = [1, 5, 10, 15, 20, 25, daysInMonth].filter((d, i, a) => d <= daysInMonth && a.indexOf(d) === i && !(d !== daysInMonth && daysInMonth - d < 3));
+    const xLabels = xTicks.map((d) => `<text x="${x(d).toFixed(1)}" y="168" text-anchor="middle">${d}</text>`).join('');
+    const aria = `Gastos acumulados día a día${hideAmounts ? '' : `: ${fmtPlain(curPts.length ? curPts[curPts.length - 1][1] : 0)} al día ${upTo}; ${prevLabel} cerró en ${fmtPlain(prevPts.length ? prevPts[prevPts.length - 1][1] : 0)}`}.`;
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}">
+      <defs><linearGradient id="gDia" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--t1);stop-opacity:.16"/><stop offset="1" style="stop-color:var(--t1);stop-opacity:0"/></linearGradient></defs>
+      ${G.grillaY(ticks, y, 36, 306, (v) => unitAxis(v, u))}
+      ${incLines}${prevPath}${area}${curPath}${today}${xLabels}
+    </svg>`;
+  }
+
+  // Evolución de una categoría por mes: línea suave en su color, con el
+  // valor de cada mes y el último destacado.
+  function categoryEvoSvg(rows, color) {
+    const G = Charts.g;
+    const W = 320, H = 140, x0 = 44, x1 = 290, yTop = 22, yBase = 112;
+    const max = Math.max(1, ...rows.map((r) => r.value));
+    const u = moneyUnit(max);
+    const { top, step } = niceScale(max, 3);
+    const ticks = [];
+    for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+    const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
+    const y = G.escala([0, top], [yBase, yTop]);
+    const pts = rows.map((r, i) => [x(i), y(r.value)]);
+    const last = rows.length - 1;
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(rows.map((r) => `${r.label} ${hideAmounts ? '' : fmtPlain(r.value)}`).join(', '))}">
+      ${G.grillaY(ticks, y, 34, 312, (v) => unitAxis(v, u))}
+      ${pts.length > 1 ? `<path d="${G.lineaSuave(pts)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:${color}"/>` : ''}
+      ${pts.map((p, i) => G.marcador(p[0], p[1], color, i === last)).join('')}
+      ${rows.map((r, i) => `<text x="${pts[i][0].toFixed(1)}" y="${(pts[i][1] - 10).toFixed(1)}" text-anchor="middle" class="g-lab">${unitNum(r.value, u)}</text>`).join('')}
+      ${rows.map((r, i) => `<text x="${pts[i][0].toFixed(1)}" y="132" text-anchor="middle"${i === last ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`).join('')}
+    </svg>`;
+  }
+
+  // Dona plana con el % de la categoría más grande en el centro.
+  function donutSvg(items, total) {
+    const r = 54, c = 2 * Math.PI * r, gap = items.length > 1 ? 2 : 0;
+    let off = 0;
+    const arcs = items.map((it) => {
+      const len = Math.max(0, (it.value / total) * c - gap);
+      const s = `<circle cx="66" cy="66" r="${r}" style="stroke:${it.color}" stroke-dasharray="${len.toFixed(2)} ${c.toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"/>`;
+      off += (it.value / total) * c;
+      return s;
+    }).join('');
+    const top = items[0];
+    const topPct = total > 0 ? Math.round((top.value / total) * 100) : 0;
+    return `<svg viewBox="0 0 132 132" width="120" height="120" role="img" aria-label="${esc(items.map((it) => `${it.label} ${Math.round((it.value / total) * 100)}%`).join(', '))}">
+      <g transform="rotate(-90 66 66)" fill="none" stroke-width="16">${arcs}</g>
+      <text x="66" y="66" text-anchor="middle" style="font:600 22px var(--f-num);fill:var(--t1)">${topPct}%</text>
+      <text x="66" y="84" text-anchor="middle" style="font:500 11px var(--f-text);fill:var(--t2)">es ${esc(top.label.length > 14 ? top.label.slice(0, 13) + '…' : top.label)}</text>
+    </svg>`;
   }
 
   function vCategorias(el) {
     const mk = ui.month;
     const txs = S().transactions;
-    // Toda esta vista es por fecha real de carga, no de vencimiento: solo
-    // "Balance del mes" (en Inicio) respeta ese ajuste — ver el comentario
-    // al principio de vResumen().
-    const inMonth = txs.filter((t) => monthKeyOf(t.date) === mk);
-    const inc = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
-    const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
-    let breakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'gasto'));
-
-    // Variación contra el mes anterior, por grupo y por subcategoría, para
-    // la columna nueva de la tabla — se arman dos mapas (id → monto) a
-    // partir del mismo categoryBreakdown() del mes pasado, así queda
-    // consistente con cómo se agrupan las subcategorías en todos lados.
-    const prevMkCat = addMonthsKey(mk, -1);
-    const inPrevCat = txs.filter((t) => monthKeyOf(t.date) === prevMkCat);
-    const prevBreakdown = categoryBreakdown(inPrevCat.filter((t) => t.type === 'gasto'));
-    const prevGroupTotals = new Map(prevBreakdown.map((g) => [g.id, g.total]));
-    const prevSubTotals = new Map();
-    for (const g of prevBreakdown) for (const s of g.subs) prevSubTotals.set(s.id, s.value);
-    breakdown = withPrevZeros(breakdown, prevBreakdown);
-
-    // Mismo desglose, pero de ingresos: de dónde viene la plata del mes
-    // (sueldo, freelance, etc.), no sólo en qué se gastó.
-    const incomeBreakdown = categoryBreakdown(inMonth.filter((t) => t.type === 'ingreso'));
-    const incPrevTotal = sumDisp(inPrevCat.filter((t) => t.type === 'ingreso'));
-    const prevIncomeBreakdown = categoryBreakdown(inPrevCat.filter((t) => t.type === 'ingreso'));
-    const prevIncomeGroupTotals = new Map(prevIncomeBreakdown.map((g) => [g.id, g.total]));
-    const prevIncomeSubTotals = new Map();
-    for (const g of prevIncomeBreakdown) for (const s of g.subs) prevIncomeSubTotals.set(s.id, s.value);
-    // Celda compacta: % arriba (en una pill, bien visible si aumentó) y el
-    // monto nominal abajo en chico — apilado en vez de "▲ 28% · +$17.000"
-    // en una sola línea, que no entraba en la columna de una tabla angosta.
-    // badWhenUp invierte qué dirección es la "mala" (roja): en gastos,
-    // gastar más es malo; en ingresos, ganar más es bueno, así que se pasa
-    // badWhenUp=false para esa tabla.
-    // Siempre dos líneas (pill + monto), aunque la segunda quede vacía: así
-    // todas las filas de la tabla miden lo mismo — antes una fila "—" o "="
-    // tenía un solo renglón y quedaba más baja que sus vecinas con variación.
-    const momHTML = (cur, prevVal, badWhenUp = true) => {
-      if (!(prevVal > 0)) {
-        if (!(cur > 0)) return '<span class="cat-mom-cell"><span class="cat-mom-pct flat">—</span><span class="cat-mom-amt">&nbsp;</span></span>';
-        return `<span class="cat-mom-cell"><span class="cat-mom-pct new">nuevo</span><span class="cat-mom-amt">${fmtDisp(cur)}</span></span>`;
-      }
-      const diff = cur - prevVal;
-      const pctVar = fmtVarPct((diff / prevVal) * 100);
-      if (pctVar == null) return '<span class="cat-mom-cell"><span class="cat-mom-pct flat">=</span><span class="cat-mom-amt">&nbsp;</span></span>';
-      const up = diff > 0;
-      const bad = badWhenUp ? up : !up;
-      return `<span class="cat-mom-cell">
-        <span class="cat-mom-pct ${bad ? 'up' : 'down'}">${up ? '▲' : '▼'}${pctVar}%</span>
-        <span class="cat-mom-amt">${up ? '+' : '−'}${fmtDisp(Math.abs(diff))}</span>
-      </span>`;
+    const kind = ['general', 'gasto', 'ingreso'].includes(ui.catKind) ? ui.catKind : 'general';
+    const isCurrent = mk === curMonth();
+    const todayDay = new Date().getDate();
+    const [mkY, mkM] = mk.split('-').map(Number);
+    const daysInMk = new Date(mkY, mkM, 0).getDate();
+    const prevMk = addMonthsKey(mk, -1);
+    const monthName = (m) => {
+      const [yy, mm] = m.split('-').map(Number);
+      return new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(new Date(yy, mm - 1, 1));
     };
+    // Todo por fecha real de carga (no de vencimiento) y, en el mes en
+    // curso, solo lo que ya pasó: sin los programados (cuotas y fijos con
+    // fecha futura). Las comparaciones van contra el MISMO DÍA del mes
+    // anterior (del 1 al 19 de octubre contra del 1 al 19 de septiembre).
+    const cutDay = isCurrent ? todayDay : daysInMk;
+    const inMonth = txs.filter((t) => monthKeyOf(t.date) === mk && Number(t.date.slice(8, 10)) <= cutDay);
+    const inPrevSameDay = txs.filter((t) => monthKeyOf(t.date) === prevMk && (!isCurrent || Number(t.date.slice(8, 10)) <= todayDay));
+    const inPrevFull = txs.filter((t) => monthKeyOf(t.date) === prevMk);
 
-    // Últimos 6 meses hasta el mes elegido, para el selector y el gráfico
-    // de evolución (una categoría sin gasto este mes puede igual mostrarse
-    // si tuvo peso en algún mes reciente).
-    const months = [];
-    for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
-    const windowBreakdown = categoryBreakdown(txs.filter((t) => t.type === 'gasto' && months.includes(monthKeyOf(t.date))));
-    // Ids que se pueden elegir en el selector de abajo: cada grupo Y cada
-    // una de sus subcategorías reales (no la fila sintética "Otros (sin
-    // subcategoría)", que no es una categoría de verdad que se pueda
-    // graficar sola).
-    const catAnalysisOptions = windowBreakdown.map((g) => (
-      { id: g.id, name: g.name, subs: g.subs.filter((s) => !s.id.endsWith(':directo')) }
-    ));
-    const validAnalysisIds = new Set(catAnalysisOptions.flatMap((g) => [g.id, ...g.subs.map((s) => s.id)]));
+    const chipsHTML = `
+      <div class="chips" role="tablist" aria-label="Vista">
+        ${[['general', 'General'], ['gasto', 'Gastos'], ['ingreso', 'Ingresos']].map(([k, label]) =>
+          `<button type="button" class="chip${kind === k ? ' on' : ''}" data-catkind="${k}" role="tab" aria-selected="${kind === k}">${label}</button>`).join('')}
+      </div>`;
 
-    if (!validAnalysisIds.has(ui.catAnalysisId)) {
-      ui.catAnalysisId = windowBreakdown[0] ? windowBreakdown[0].id : null;
-    }
-    const selId = ui.catAnalysisId;
-
-    // Meses con ingresos, para los gráficos de evolución de abajo — un mes
-    // sin ingresos (ej. sólo un gasto suelto) no es comparable con el
-    // resto, así que no entra al eje.
-    const activeMonths = months.filter((m) => txs.some((t) => t.type === 'ingreso' && monthKeyOf(t.date) === m));
-    const monthLabels = activeMonths.map((m) => {
-      const [y, mo] = m.split('-').map(Number);
-      return monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', '');
-    });
-    // Serie del gráfico de evolución para una categoría o subcategoría.
-    // Se recalcula sola al cambiar el selector, sin volver a armar toda la
-    // vista (antes render() rehacía la pantalla y el scroll saltaba).
-    function catEvoSeries(id) {
-      // Si el id elegido tiene parentId es una subcategoría (comparar
-      // categoryId directo); si no, es un grupo de arriba (comparar contra
-      // topCatKeyOf, que ya suma las subcategorías propias).
-      const c = id ? catById(id) : null;
-      const isSub = !!(c && c.parentId);
-      const exp = [];
-      const inc = [];
-      activeMonths.forEach((m) => {
-        const listM = txs.filter((t) => monthKeyOf(t.date) === m);
-        const gastoM = listM.filter((t) => t.type === 'gasto');
-        const expM = sumDisp(gastoM);
-        const incM = sumDisp(listM.filter((t) => t.type === 'ingreso'));
-        const catValM = id
-          ? sumDisp(gastoM.filter((t) => isSub ? t.categoryId === id : topCatKeyOf(t) === id))
-          : 0;
-        exp.push(expM > 0 ? (catValM / expM) * 100 : 0);
-        // null (no 0) si no hubo ingresos ese mes: dividir por cero no tiene
-        // sentido, y mostrar 0% sugeriría que la categoría no pesó nada en
-        // vez de "no hay con qué calcularlo" — Charts.lines() salta el punto.
-        inc.push(incM > 0 ? (catValM / incM) * 100 : null);
+    if (kind === 'general') {
+      // Ingresos y gastos de los últimos 4 meses hasta el elegido.
+      const months = [];
+      for (let i = 3; i >= 0; i--) months.push(addMonthsKey(mk, -i));
+      const rows = months.map((m) => {
+        const cut = m === curMonth() ? todayDay : 99;
+        const list = txs.filter((t) => monthKeyOf(t.date) === m && Number(t.date.slice(8, 10)) <= cut);
+        return { label: monthShortLabel(m).toLowerCase(), inc: sumDisp(list.filter((t) => t.type === 'ingreso')), exp: sumDisp(list.filter((t) => t.type === 'gasto')) };
       });
-      return { exp, inc, name: id === '__sin' ? 'Sin categoría' : (c ? c.name : '') };
-    }
-    function drawCatEvo(id) {
-      const evoEl = $('#chart-cat-evo', el);
-      if (!evoEl) return;
-      const sr = catEvoSeries(id);
-      Charts.lines(evoEl, monthLabels, [
-        { label: '% de tus gastos', color: Charts.COLORS.expense, values: sr.exp },
-        { label: '% de tus ingresos', color: Charts.COLORS.income, values: sr.inc },
-      ], {
-        fmtAxis: (v) => Math.round(v) + '%',
-        ariaLabel: `Evolución del peso de ${sr.name} sobre ingresos y gastos`,
-        smooth: true, pointLabels: true, markerRadius: 4,
-      });
-    }
+      const first = rows.findIndex((r) => r.inc > 0 || r.exp > 0);
+      const shown = first >= 0 ? rows.slice(first) : [];
+      const chart = shown.length ? incomeExpenseChartSvg(shown, isCurrent) : null;
 
-    const pct = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0) + '%';
-
-    // Gastos del mes por medio de pago (nominal + % del total), de mayor a
-    // menor; tocar uno abre sus movimientos comparados con el mes anterior.
-    const byMethod = new Map();
-    for (const t of inMonth) {
-      if (t.type !== 'gasto') continue;
-      const v = txDispAmount(t);
-      if (v == null) continue;
-      const key = methodById(t.methodId) ? t.methodId : '__sin';
-      byMethod.set(key, (byMethod.get(key) || 0) + v);
-    }
-    const methodItems = [...byMethod.entries()]
-      .filter(([, v]) => v > 0)
-      .sort((a, b) => b[1] - a[1])
-      .map(([id, value], i) => ({
-        id, value, label: id === '__sin' ? 'Sin medio de pago' : methodName(id),
-        color: CAT_PALETTE[i % CAT_PALETTE.length],
-      }));
-    const methodTxs = (list, id) => list.filter((t) => t.type === 'gasto' &&
-      (id === '__sin' ? !methodById(t.methodId) : t.methodId === id));
-
-    // Un solo color por categoría, asignado según su peso en la ventana de
-    // 6 meses (más estable que el ranking de un solo mes) y reutilizado
-    // tanto en la torta como en las barras apiladas — así una categoría se
-    // reconoce por su color en los dos gráficos, no solo en uno.
-    const catColorOf = new Map(windowBreakdown.map((g, i) => [g.id, CAT_PALETTE[i % CAT_PALETTE.length]]));
-    const OTROS_COLOR = '#64748b';
-    // Mismo criterio para las categorías de ingreso, pero como no comparten
-    // gráficos con las de gasto no hace falta que salga de la ventana de 6
-    // meses: alcanza con las del mes elegido.
-    // Colores de ingresos sacados de la ventana de 6 meses (como los de
-    // gastos), así una categoría tiene el mismo color en la tabla, la torta
-    // y las líneas de evolución.
-    const incomeWindowBreakdown = categoryBreakdown(txs.filter((t) => t.type === 'ingreso' && months.includes(monthKeyOf(t.date))));
-    const incomeColorOf = new Map(incomeWindowBreakdown.map((g, i) => [g.id, CAT_PALETTE[i % CAT_PALETTE.length]]));
-    for (const g of incomeBreakdown) {
-      if (!incomeColorOf.has(g.id)) incomeColorOf.set(g.id, CAT_PALETTE[incomeColorOf.size % CAT_PALETTE.length]);
-    }
-    // Torta de ingresos del mes: hasta 4 orígenes + "Otros".
-    const incPie = incomeBreakdown.filter((g) => g.total > 0);
-    const incPieItems = incPie.slice(0, 4).map((g) => ({ label: g.name, value: g.total, color: incomeColorOf.get(g.id) }));
-    if (incPie.length > 4) incPieItems.push({ label: 'Otros', value: incPie.slice(4).reduce((a, g) => a + g.total, 0), color: '#64748b' });
-    // Evolución de ingresos: una línea por categoría (las 5 con más peso en
-    // la ventana + "Otros"), sólo en los meses con ingresos.
-    const INC_LINES_MAX = 5;
-    const incLineCats = incomeWindowBreakdown.slice(0, INC_LINES_MAX).map((g) => ({ id: g.id, name: g.name, color: incomeColorOf.get(g.id) }));
-    const incLineIds = new Set(incLineCats.map((c) => c.id));
-    if (incomeWindowBreakdown.length > INC_LINES_MAX) incLineCats.push({ id: '__otros', name: 'Otros', color: '#64748b' });
-    // Barras apiladas al 100% de ingresos: mismas categorías, colores y
-    // meses que las líneas, pero como participación de cada una en el mes.
-    const incStackRows = activeMonths.map((m, i) => {
-      const [y, mo] = m.split('-').map(Number);
-      const vals = incLineCats.map((c) => sumDisp(txs.filter((t) => t.type === 'ingreso' && monthKeyOf(t.date) === m &&
-        (c.id === '__otros' ? !incLineIds.has(topCatKeyOf(t)) : topCatKeyOf(t) === c.id))));
-      const totalM = vals.reduce((a, v) => a + v, 0);
-      return {
-        label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
-        total: totalM,
-        shares: vals.map((v) => (totalM > 0 ? (v / totalM) * 100 : 0)),
+      // Gastos acumulados por día.
+      const perDay = (list) => {
+        const o = {};
+        for (const t of list) {
+          if (t.type !== 'gasto') continue;
+          const v = txDispAmount(t);
+          if (v == null) continue;
+          const d = Number(t.date.slice(8, 10));
+          o[d] = (o[d] || 0) + v;
+        }
+        return o;
       };
-    });
-    const incLineSeries = incLineCats.map((c) => ({
-      label: c.name, color: c.color,
-      values: activeMonths.map((m) => {
-        const list = txs.filter((t) => t.type === 'ingreso' && monthKeyOf(t.date) === m &&
-          (c.id === '__otros' ? !incLineIds.has(topCatKeyOf(t)) : topCatKeyOf(t) === c.id));
-        return sumDisp(list);
-      }),
-    }));
+      const curDaily = perDay(inMonth);
+      const prevDaily = perDay(inPrevFull);
+      const [py, pm] = prevMk.split('-').map(Number);
+      const daysInPrev = new Date(py, pm, 0).getDate();
+      for (let d = 1; d <= daysInPrev; d++) if (!(d in prevDaily)) prevDaily[d] = 0;
+      const spentToDate = Object.values(curDaily).reduce((a, v) => a + v, 0);
+      const prevAtSameDay = sumDisp(inPrevSameDay.filter((t) => t.type === 'gasto'));
+      const incomeMonth = sumDisp(txs.filter((t) => monthKeyOf(t.date) === mk && t.type === 'ingreso'));
+      const savMonth = savingsAtEndOf(mk, { excludeOpening: true }) - savingsAtEndOf(prevMk, { excludeOpening: true });
+      const hasPrev = inPrevFull.some((t) => t.type === 'gasto');
+      const diff = spentToDate - prevAtSameDay;
+      // Misma unidad que el gráfico de abajo (M o k), para que se lean igual.
+      const prevMonthTotal = sumDisp(inPrevFull.filter((t) => t.type === 'gasto'));
+      const uDiff = moneyUnit(Math.max(incomeMonth, spentToDate, prevMonthTotal, 1));
+      const diffChip = hasPrev && Math.abs(diff) >= 1
+        ? `<span class="dchip ${diff > 0 ? 'bad' : 'good'}">${diff > 0 ? '▲' : '▼'} ≈ ${unitNum(Math.abs(diff), uDiff)} ${uDiff.axis} vs. ${esc(monthShortLabel(prevMk).toLowerCase())}</span>` : '';
 
-    // Torta cilindro: las 4 categorías con más peso del mes elegido (misma
-    // tabla de arriba, que ya viene ordenada de mayor a menor) + "Otros"
-    // con el resto — así no se amontonan demasiadas porciones finas.
-    const PIE_MAX = 4;
-    // Sobre las categorías con gasto real este mes — las agregadas en $0
-    // solo para la tabla (ver withPrevZeros) no pintan nada en la torta.
-    const pieBreakdown = breakdown.filter((g) => g.total > 0);
-    const pieTop = pieBreakdown.slice(0, PIE_MAX);
-    const pieRest = pieBreakdown.slice(PIE_MAX);
-    const pieItems = pieTop.map((g) => ({
-      label: g.name, value: g.total, color: catColorOf.get(g.id) || CAT_PALETTE[0],
-    }));
-    if (pieRest.length) {
-      pieItems.push({ label: 'Otros', value: pieRest.reduce((a, g) => a + g.total, 0), color: OTROS_COLOR });
+      el.innerHTML = `${chipsHTML}
+        <section class="k-card">
+          <div class="k-card-h k-card-h-tight"><h2>Ingresos y gastos por mes</h2>${chart ? `<span class="t3 k-card-note">${chart.unit.note}</span>` : ''}</div>
+          ${chart ? `
+          <div class="legend">
+            <span><i class="lg-line" style="border-color:var(--brand)"></i>Ingresos</span>
+            <span><i class="lg-line" style="border-color:var(--t1)"></i>Gastos</span>
+            ${isCurrent ? `<span><i class="lg-line lg-dash" style="border-color:var(--t1)"></i>${esc(monthShortLabel(mk))} en curso</span>` : ''}
+          </div>
+          ${chart.svg}
+          <p class="k-note">Lo sombreado es lo que quedó entre lo que entró y lo que salió cada mes.</p>`
+          : '<div class="empty">Todavía no hay movimientos para comparar meses.</div>'}
+        </section>
+
+        <section class="k-card">
+          <div class="k-card-h k-card-h-tight"><h2>Gastos día a día</h2><span class="t3 k-card-note">acumulado</span></div>
+          <div class="daily-head">
+            <span class="num money daily-total">${esc(fmtPlain(spentToDate))}</span>
+            <span class="t2">${isCurrent ? `al día ${todayDay}` : `en ${esc(monthName(mk))}`}</span>
+            ${diffChip}
+          </div>
+          <div class="legend">
+            <span><i class="lg-line" style="border-color:var(--t1)"></i>${esc(monthShortLabel(mk))}</span>
+            ${hasPrev ? `<span><i class="lg-line lg-dash" style="border-color:var(--t3)"></i>${esc(monthShortLabel(prevMk))}</span>` : ''}
+          </div>
+          ${dailySpendChartSvg({ cur: curDaily, prev: hasPrev ? prevDaily : {}, daysInMonth: daysInMk, upTo: cutDay, income: incomeMonth, incomeMinusSav: incomeMonth - savMonth, isCurrent, prevLabel: monthName(prevMk) })}
+        </section>`;
+      wireCatKindChips(el);
+      return;
     }
 
-    // Barras apiladas al 100%: hasta 6 categorías con más peso en la
-    // ventana de 6 meses + "Otros" con el resto, para que no se amontonen
-    // demasiadas tiritas finas en una sola barra.
-    const STACK_MAX = 6;
-    const stackTop = windowBreakdown.slice(0, STACK_MAX);
-    const stackRest = windowBreakdown.slice(STACK_MAX);
-    const stackCats = stackTop.map((g) => ({ id: g.id, name: g.name, color: catColorOf.get(g.id) }));
-    if (stackRest.length) stackCats.push({ id: '__otros', name: 'Otros', color: OTROS_COLOR });
-    const stackIds = new Set(stackTop.map((g) => g.id));
-    const stackRows = activeMonths.map((m) => {
-      const gastoM = txs.filter((t) => t.type === 'gasto' && monthKeyOf(t.date) === m);
-      const totalM = sumDisp(gastoM);
-      const byCat = new Map();
-      for (const t of gastoM) {
+    /* ---------- Gastos / Ingresos ---------- */
+    const isInc = kind === 'ingreso';
+    const type = isInc ? 'ingreso' : 'gasto';
+    const breakdown = categoryBreakdown(inMonth.filter((t) => t.type === type)).filter((g) => g.total > 0);
+    const prevBreakdown = categoryBreakdown(inPrevSameDay.filter((t) => t.type === type));
+    const prevTotals = new Map(prevBreakdown.map((g) => [g.id, g.total]));
+    const total = breakdown.reduce((a, g) => a + g.total, 0);
+    const incMonth = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
+    const pctOf = (v) => (total > 0 ? Math.round((v / total) * 100) : 0);
+    // Dona: hasta 5 categorías + "Otras".
+    const DONUT_MAX = 5;
+    const donutItems = breakdown.slice(0, DONUT_MAX).map((g) => ({ label: g.name, value: g.total, color: g.id === '__sin' ? OTROS_COLOR : catColor(g.id) }));
+    const restDonut = breakdown.slice(DONUT_MAX).reduce((a, g) => a + g.total, 0);
+    if (restDonut > 0) donutItems.push({ label: 'Otras', value: restDonut, color: OTROS_COLOR });
+    // Variación contra el mismo día del mes anterior. En gastos, subir es
+    // malo (rojo); en ingresos, subir es bueno (verde).
+    const varChip = (cur, prev) => {
+      if (!(prev > 0)) return cur > 0 ? '<span class="dchip flat">nuevo</span>' : '';
+      const pctVar = fmtVarPct(((cur - prev) / prev) * 100);
+      if (pctVar == null) return '<span class="dchip flat">= igual</span>';
+      const up = cur > prev;
+      return `<span class="dchip ${up !== isInc ? 'bad' : 'good'}">${up ? '▲' : '▼'} ${pctVar}%</span>`;
+    };
+    const zeroGroups = S().categories.filter((c) => c.type === type && !c.parentId && !breakdown.some((g) => g.id === c.id));
+    const rowsHTML = breakdown.map((g) => {
+      const key = `${type}:${g.id}`;
+      const open = !!ui.catOpen[key];
+      const color = g.id === '__sin' ? OTROS_COLOR : catColor(g.id);
+      const icon = g.id === '__sin' ? spriteIcon('more') : iconSvg(categoryIconName(g.id));
+      const subs = g.subs.filter((s) => s.value > 0);
+      const detail = open ? `
+        ${subs.map((s) => `
+        <button type="button" class="crow sub" data-catmoves="${esc(g.id)}" data-subid="${esc(s.id)}">
+          <div class="l1"><b>${esc(s.name)}</b><span class="num money t2">${esc(fmtPlain(s.value))}</span></div>
+        </button>`).join('')}
+        ${!isInc && incMonth > 0 ? `<div class="crow sub crow-info"><span class="t2">Es el ${Math.round((g.total / incMonth) * 100)}% de lo que entró en ${esc(monthName(mk))}</span></div>` : ''}
+        <div class="crow sub"><button type="button" class="link" data-catmoves="${esc(g.id)}">Ver movimientos de ${esc(g.name)}${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}</button></div>` : '';
+      return `
+      <div class="${open ? 'expanded' : ''}">
+        <button type="button" class="crow" data-catopen="${esc(key)}" aria-expanded="${open}">
+          <span class="cic" style="--c:${color}">${icon}</span>
+          <div class="crow-main">
+            <div class="l1"><b>${esc(g.name)}</b><span class="num money">${esc(fmtPlain(g.total))}</span></div>
+            <div class="l2"><div class="barline" style="--c:${color}"><i style="width:${Math.max(1, pctOf(g.total))}%"></i></div><span>${pctOf(g.total)}%</span>${varChip(g.total, prevTotals.get(g.id) || 0)}</div>
+          </div>
+          ${spriteIcon('cr').replace('class="ic"', `class="ic chev${open ? ' rot' : ''}"`)}
+        </button>${detail}
+      </div>`;
+    }).join('');
+    const zeroOpen = !!ui.catOpen[`${type}:__zero`];
+    const zeroHTML = zeroGroups.length ? `
+      <div class="${zeroOpen ? 'expanded' : ''}">
+        <button type="button" class="crow" data-catopen="${type}:__zero" aria-expanded="${zeroOpen}">
+          <span class="cic" style="--c:var(--t3)">${spriteIcon('more')}</span>
+          <div class="crow-main"><div class="l1"><b class="t2">${zeroGroups.length} sin ${isInc ? 'ingresos' : 'gastos'} todavía</b></div>
+            <div class="st t3">${esc(zeroGroups.map((c) => c.name).join(', '))}</div></div>
+          ${spriteIcon('cd').replace('class="ic"', `class="ic chev${zeroOpen ? ' rot180' : ''}"`)}
+        </button>
+        ${zeroOpen ? zeroGroups.map((c) => `
+        <button type="button" class="crow sub" data-catmoves="${esc(c.id)}">
+          <div class="l1"><b>${esc(c.name)}</b><span class="num money t3">${esc(fmtPlain(0))}</span></div>
+        </button>`).join('') : ''}
+      </div>` : '';
+
+    // Por medio de pago (solo gastos), en grises: son cuentas, no categorías.
+    const byMethod = new Map();
+    if (!isInc) {
+      for (const t of inMonth) {
+        if (t.type !== 'gasto') continue;
         const v = txDispAmount(t);
         if (v == null) continue;
-        const topId = topCatKeyOf(t);
-        const key = stackIds.has(topId) ? topId : '__otros';
-        byCat.set(key, (byCat.get(key) || 0) + v);
+        const k = methodById(t.methodId) || isSavingMethod(t.methodId) ? t.methodId : '__sin';
+        byMethod.set(k, (byMethod.get(k) || 0) + v);
       }
-      const [y, mo] = m.split('-').map(Number);
+    }
+    const methodRows = [...byMethod.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+      .map(([id, value], i) => ({ id, value, name: id === '__sin' ? 'Sin medio de pago' : methodName(id), color: NEUTRAL_PALETTE[Math.min(i + 1, NEUTRAL_PALETTE.length - 1)] }));
+
+    // Evolución de una categoría en los últimos 6 meses.
+    const evoMonths = [];
+    for (let i = 5; i >= 0; i--) evoMonths.push(addMonthsKey(mk, -i));
+    const evoOptions = S().categories.filter((c) => c.type === type && !c.parentId)
+      .filter((c) => txs.some((t) => t.type === type && topCategoryOf(t.categoryId) === c.id && evoMonths.includes(monthKeyOf(t.date))));
+    const evoKey = isInc ? 'catEvoInc' : 'catEvoExp';
+    if (!evoOptions.some((c) => c.id === ui[evoKey])) ui[evoKey] = breakdown[0] && breakdown[0].id !== '__sin' ? breakdown[0].id : (evoOptions[0] ? evoOptions[0].id : null);
+    const evoId = ui[evoKey];
+    const evoRows = evoId ? evoMonths.map((m) => {
+      const cut = m === curMonth() ? todayDay : 99;
       return {
-        label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
-        total: totalM,
-        shares: stackCats.map((c) => (totalM > 0 ? ((byCat.get(c.id) || 0) / totalM) * 100 : 0)),
+        label: monthShortLabel(m).toLowerCase(),
+        value: sumDisp(txs.filter((t) => t.type === type && monthKeyOf(t.date) === m && Number(t.date.slice(8, 10)) <= cut && topCategoryOf(t.categoryId) === evoId)),
       };
-    });
+    }) : [];
+    const evoFirst = evoRows.findIndex((r) => r.value > 0);
 
-    // Transacciones detrás de una fila (grupo o subcategoría puntual), para
-    // el detalle que se abre al tocarla — mismo criterio de agrupación que
-    // categoryBreakdown(): el id ":directo" son los gastos cargados
-    // directo en el grupo, sin subcategoría. Recibe la lista del mes (este
-    // o el anterior) para poder armar el detalle comparando los dos.
-    function txsForBreakdownRow(monthTxs, gid, subId, type = 'gasto') {
-      const matching = monthTxs.filter((t) => t.type === type);
-      if (subId) {
-        if (subId.endsWith(':directo')) return matching.filter((t) => t.categoryId === gid);
-        return matching.filter((t) => t.categoryId === subId);
-      }
-      if (gid === '__sin') return matching.filter((t) => !t.categoryId || !catById(t.categoryId));
-      return matching.filter((t) => topCategoryOf(t.categoryId) === gid);
-    }
-
-    // Tabla compacta (fuente y padding chicos) para que las columnas
-    // numéricas + el nombre entren sin scroll lateral en un celular. De
-    // entrada se ve sólo el nivel categoría: tocar una que tenga
-    // subcategorías las despliega (deslizando) debajo; tocar una
-    // subcategoría, o una categoría sin subcategorías, abre el detalle de
-    // movimientos contra el mes anterior.
-    function breakdownRowsHTML(list, kind) {
-      const isInc = kind === 'ingreso';
-      const colorOf = isInc ? incomeColorOf : catColorOf;
-      const prevGroups = isInc ? prevIncomeGroupTotals : prevGroupTotals;
-      const prevSubs = isInc ? prevIncomeSubTotals : prevSubTotals;
-      const pctCells = (v) => isInc
-        ? `<td class="num">${pct(v, inc)}</td>`
-        : `<td class="num">${pct(v, exp)}</td><td class="num">${pct(v, inc)}</td>`;
-      const wrapCells = (html) => html.replace(/<td([^>]*)>([\s\S]*?)<\/td>/g, '<td$1><div class="cs">$2</div></td>');
-      return list.map((g) => {
-        const showSubs = g.subs.length && !(g.subs.length === 1 && g.total === g.direct && g.subs[0].name === 'Otros (sin subcategoría)');
-        const open = showSubs && !!ui.catOpen[kind + ':' + g.id];
-        const kindAttr = isInc ? ' data-kind="ingreso"' : '';
-        const subsHtml = showSubs ? g.subs.map((s) => `
-          <tr class="cat-sub-row${open ? ' open' : ''}" data-catid="${esc(g.id)}" data-subid="${esc(s.id)}" data-parent="${esc(g.id)}"${kindAttr}>
-            ${wrapCells(`<td class="cell-sub">${esc(s.name)}</td>
-            <td class="num cell-sub">${fmtDisp(s.value)}</td>
-            ${pctCells(s.value).replace(/class="num"/g, 'class="num cell-sub"')}
-            <td class="num cell-sub">${momHTML(s.value, prevSubs.get(s.id) || 0, !isInc)}</td>`)}
-          </tr>`).join('') + `
-          <tr class="cat-sub-row cat-sub-all${open ? ' open' : ''}" data-catid="${esc(g.id)}" data-parent="${esc(g.id)}"${kindAttr}>
-            ${wrapCells(`<td colspan="${isInc ? 4 : 5}" class="cell-sub">Ver todos los movimientos de ${esc(g.name)} ›</td>`)}
-          </tr>` : '';
-        const groupColor = colorOf.get(g.id) || CAT_PALETTE[0];
-        return `<tr class="cat-break-group${showSubs ? ' has-subs' : ''}${open ? ' open' : ''}" data-catid="${esc(g.id)}"${showSubs ? ' data-toggle="1"' : ''}${kindAttr} style="--row-tint:${hexToRgba(groupColor, 0.12)}">
-          <td><span class="cat-chev${showSubs ? '' : ' is-empty'}" aria-hidden="true">›</span>${esc(g.name)}</td>
-          <td class="num amount-out">${fmtDisp(g.total)}</td>
-          ${pctCells(g.total)}
-          <td class="num">${momHTML(g.total, prevGroups.get(g.id) || 0, !isInc)}</td>
-        </tr>${subsHtml}`;
-      }).join('');
-    }
-    const rowsHtml = breakdownRowsHTML(breakdown, 'gasto');
-    const incomeRowsHtml = breakdownRowsHTML(incomeBreakdown, 'ingreso');
-
-    const kindIsInc = ui.catKind === 'ingreso';
-    el.innerHTML = `
-      <div class="subtabs kind-tabs${kindIsInc ? ' is-ingreso' : ''}" role="tablist">
-        <span class="subtabs-thumb" aria-hidden="true"></span>
-        <button type="button" data-catkind="gasto" class="${kindIsInc ? '' : 'active'}" role="tab" aria-selected="${!kindIsInc}">Gastos</button>
-        <button type="button" data-catkind="ingreso" class="${kindIsInc ? 'active' : ''}" role="tab" aria-selected="${kindIsInc}">Ingresos</button>
-      </div>
-      ${kindIsInc ? `
-      <div class="card">
-        <h2 class="card-title"><span>Ingresos por categoría</span></h2>
-        ${incomeBreakdown.length ? `
-        <div class="table-scroll"><table class="data cat-breakdown-table cat-income-table">
-          <colgroup>
-            <col class="cat-col-name"><col class="cat-col-amount">
-            <col class="cat-col-pct"><col class="cat-col-mom">
-          </colgroup>
-          <thead><tr><th>Origen</th><th class="num">Monto</th><th class="num">% ingr.</th><th class="num">vs. ant.</th></tr></thead>
-          <tbody>${incomeRowsHtml}</tbody>
-          <tfoot><tr class="cat-total-row">
-            <td>Total</td>
-            <td class="num amount-out">${fmtDisp(inc)}</td>
-            <td class="num">100%</td>
-            <td class="num">${momHTML(inc, incPrevTotal, false)}</td>
-          </tr></tfoot>
-        </table></div>` : `<div class="empty">Sin ingresos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title"><span>Distribución de ingresos · ${esc(monthLabel(mk))}</span></h2>
-        ${incPieItems.length ? `
-        <div class="pie-cylinder-wrap">
-          <div id="chart-inc-pie"></div>
-          <div class="chart-legend chart-legend-col">
-            ${incPieItems.map((it) => `<span><span class="key" style="background:${it.color}"></span>${esc(it.label)} · ${pct(it.value, inc)}</span>`).join('')}
-          </div>
-        </div>` : `<div class="empty">Sin ingresos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">
-          <span>Evolución de ingresos por categoría</span>
-          ${incLineSeries.length && activeMonths.length ? '<button type="button" class="link-btn" id="btn-detail-incevo">Ver detalle</button>' : ''}
-        </h2>
-        ${incLineSeries.length && activeMonths.length ? `
-        <div class="chart-legend">
-          ${incLineCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
+    el.innerHTML = `${chipsHTML}
+      <section class="k-card donut-card">
+        ${breakdown.length ? donutSvg(donutItems, total) : ''}
+        <div class="donut-text">
+          <span class="ovl">${isInc ? 'Entró' : 'Gastado'} en ${esc(monthName(mk))}</span>
+          <span class="num money donut-total">${esc(fmtPlain(total))}</span>
+          <span class="t2">${isCurrent ? `Hasta hoy, día ${todayDay}. ` : ''}${breakdown.length === 1 ? 'Una categoría' : `${breakdown.length} categorías`} con ${isInc ? 'ingresos' : 'gastos'}.</span>
         </div>
-        <div id="chart-inc-evo"></div>` : '<div class="empty">Todavía no hay suficientes ingresos para ver una evolución.</div>'}
-      </div>
+      </section>
 
-      <div class="card">
-        <h2 class="card-title"><span>Participación de ingresos por categoría · últimos 6 meses</span></h2>
-        ${incStackRows.some((r) => r.total > 0) ? `
-        <div class="chart-legend">
-          ${incLineCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
+      ${breakdown.length || zeroGroups.length ? `<div class="group cat-group">${rowsHTML}${zeroHTML}</div>
+      ${breakdown.length ? `<p class="k-note k-note-out">Variación contra el ${isCurrent ? `${todayDay} de ${esc(monthName(prevMk))}` : esc(monthName(prevMk))}.</p>` : ''}` : ''}
+
+      ${methodRows.length ? `
+      <section class="k-card">
+        <div class="k-card-h"><h2>Por medio de pago</h2></div>
+        <div class="stack">${methodRows.map((r) => `<i style="width:${((r.value / total) * 100).toFixed(2)}%;background:${r.color}"></i>`).join('')}</div>
+        <div class="cat-lines">
+          ${methodRows.map((r) => `
+          <button type="button" class="cat-line" data-methodmoves="${esc(r.id)}">
+            <i style="background:${r.color}"></i><span class="cat-line-name">${esc(r.name)}</span>
+            <span class="t3 cat-line-pct">${pctOf(r.value)}%</span><span class="num">${money(r.value)}</span>
+          </button>`).join('')}
         </div>
-        <div id="chart-inc-stack"></div>
-        <div class="hint" style="margin-top:6px">Cada barra es el 100% de lo que ingresó ese mes: si una franja crece o se achica, cambió el peso de esa categoría.</div>` :
-          '<div class="empty">Todavía no hay suficientes ingresos para ver la participación mes a mes.</div>'}
-      </div>` : `
-      <div class="card">
-        <h2 class="card-title"><span>Distribución de gastos · ${esc(monthLabel(mk))}</span></h2>
-        ${pieItems.length ? `
-        <div class="pie-cylinder-wrap">
-          <div id="chart-cat-pie"></div>
-          <div class="chart-legend chart-legend-col">
-            ${pieItems.map((it) => `<span><span class="key" style="background:${it.color}"></span>${esc(it.label)} · ${pct(it.value, exp)}</span>`).join('')}
-          </div>
-        </div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>
+      </section>` : ''}
 
-      <div class="card">
-        <h2 class="card-title"><span>Gastos por categoría</span></h2>
-        ${breakdown.length ? `
-        <div class="table-scroll"><table class="data cat-breakdown-table">
-          <colgroup>
-            <col class="cat-col-name"><col class="cat-col-amount">
-            <col class="cat-col-pct"><col class="cat-col-pct"><col class="cat-col-mom">
-          </colgroup>
-          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">Gastos</th><th class="num">Ingr.</th><th class="num">vs. ant.</th></tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title"><span>Evolución del peso por categoría</span></h2>
-        ${windowBreakdown.length ? `
-        <div class="field">
-          <select id="cat-analysis-sel" aria-label="Categoría o subcategoría a graficar">
-            ${catAnalysisOptions.map((g) => {
-              const groupOpt = `<option value="${esc(g.id)}" ${g.id === selId ? 'selected' : ''}>${esc(g.name)}${g.subs.length ? ' (todas)' : ''}</option>`;
-              if (!g.subs.length) return groupOpt;
-              const subOpts = g.subs.map((s) => `<option value="${esc(s.id)}" ${s.id === selId ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
-              return `<optgroup label="${esc(g.name)}">${groupOpt}${subOpts}</optgroup>`;
-            }).join('')}
-          </select>
+      ${evoOptions.length ? `
+      <section class="k-card">
+        <div class="k-card-h"><h2>Evolución por categoría</h2></div>
+        <div class="chips chips-scroll evo-chips">
+          ${evoOptions.map((c) => `<button type="button" class="chip${c.id === evoId ? ' on' : ''}" data-evo="${esc(c.id)}">${esc(c.name)}</button>`).join('')}
         </div>
-        <div class="chart-legend">
-          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>% de tus gastos</span>
-          <span><span class="key" style="background:${Charts.COLORS.income}"></span>% de tus ingresos</span>
-        </div>
-        <div id="chart-cat-evo"></div>` : '<div class="empty">Todavía no hay suficientes movimientos para ver una evolución.</div>'}
-      </div>
+        ${evoFirst >= 0 ? categoryEvoSvg(evoRows.slice(evoFirst), catColor(evoId)) : '<div class="empty">Sin movimientos en los últimos meses.</div>'}
+      </section>` : ''}`;
 
-      <div class="card">
-        <h2 class="card-title"><span>Participación por categoría · últimos 6 meses</span></h2>
-        ${stackRows.some((r) => r.total > 0) ? `
-        <div class="chart-legend">
-          ${stackCats.map((c) => `<span><span class="key" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')}
-        </div>
-        <div id="chart-cat-stack"></div>
-        <div class="hint" style="margin-top:6px">Cada barra es el 100% de lo gastado ese mes: si una franja crece o se achica, cambió el peso de esa categoría.</div>` :
-          '<div class="empty">Todavía no hay suficientes movimientos para ver la participación mes a mes.</div>'}
-      </div>
-
-      <div class="card">
-        <h2 class="card-title"><span>Gastos por medio de pago · ${esc(monthLabel(mk))}</span></h2>
-        ${methodItems.length ? `
-        <div id="chart-cat-methods" class="cats-bars method-bars"></div>
-        <div class="method-total"><span>Total gastado</span><b>${fmtDisp(exp)}</b></div>` : `<div class="empty">Sin gastos registrados en ${esc(monthLabel(mk))}.</div>`}
-      </div>`}`;
-
-    if (windowBreakdown.length) drawCatEvo(selId);
-    const incPieEl = $('#chart-inc-pie', el);
-    if (incPieEl) {
-      Charts.pieCylinder(incPieEl, incPieItems, { ariaLabel: `Distribución de ingresos de ${monthLabel(mk)}` });
-    }
-    const incEvoEl = $('#chart-inc-evo', el);
-    if (incEvoEl) {
-      Charts.lines(incEvoEl, monthLabels, incLineSeries, {
-        smooth: true, markerRadius: 4, leftPad: 52,
-        fmtAxis: (v) => Charts.compact(v),
-        ariaLabel: 'Evolución de los ingresos de cada categoría por mes',
-      });
-    }
-    const incStackEl = $('#chart-inc-stack', el);
-    if (incStackEl) {
-      Charts.stacked100(incStackEl, incStackRows, incLineCats, {
-        connectors: true,
-        ariaLabel: 'Participación de cada categoría de ingreso por mes',
-      });
-    }
-    const btnIncEvo = $('#btn-detail-incevo', el);
-    if (btnIncEvo) btnIncEvo.addEventListener('click', () => {
-      // Lo mismo que el gráfico, en números. Un bloque por mes (el más
-      // reciente arriba) con cada categoría, su monto y su % del mes — una
-      // columna por categoría no entraba a lo ancho en un celular.
-      const blocks = activeMonths.map((m, i) => {
-        const vals = incLineSeries.map((sr) => ({ label: sr.label, color: sr.color, v: sr.values[i] || 0 }));
-        const total = vals.reduce((acc, x) => acc + x.v, 0);
-        return `<tr class="inc-det-month"><td>${esc(monthLabel(m))}</td><td class="num">${fmtDisp(total)}</td><td class="num">100%</td></tr>
-          ${vals.filter((x) => x.v > 0).sort((x, y) => y.v - x.v).map((x) => `<tr>
-            <td><span class="key-dot" style="background:${x.color}"></span>${esc(x.label)}</td>
-            <td class="num">${fmtDisp(x.v)}</td>
-            <td class="num">${pct(x.v, total)}</td>
-          </tr>`).join('')}`;
-      }).reverse().join('');
-      openDialog('Ingresos por categoría y mes', `
-        <div class="table-scroll"><table class="data inc-det-table">
-          <thead><tr><th>Categoría</th><th class="num">Monto</th><th class="num">% del mes</th></tr></thead>
-          <tbody>${blocks}</tbody>
-        </table></div>`, { submitLabel: 'Cerrar', viewOnly: true });
-    });
-    if (pieItems.length && $('#chart-cat-pie', el)) {
-      Charts.pieCylinder($('#chart-cat-pie', el), pieItems, {
-        ariaLabel: `Distribución de gastos de ${monthLabel(mk)}`,
-      });
-    }
-    if (methodItems.length && $('#chart-cat-methods', el)) {
-      Charts.hBars($('#chart-cat-methods', el), methodItems, {
-        fmt: fmtDisp,
-        onClick: (it) => categoryCompareDialog(it.label,
-          mk, methodTxs(inMonth, it.id), prevMkCat, methodTxs(inPrevCat, it.id)),
-      });
-    }
-    if (stackRows.some((r) => r.total > 0) && $('#chart-cat-stack', el)) {
-      Charts.stacked100($('#chart-cat-stack', el), stackRows, stackCats, {
-        ariaLabel: 'Participación de cada categoría por mes',
-      });
-    }
-
-    // Gastos / Ingresos: la píldora se desliza ya y la vista se rearma
-    // cuando termina la animación.
-    $$('[data-catkind]', el).forEach((b) => b.addEventListener('click', () => {
-      const k = b.dataset.catkind;
-      if (k === ui.catKind) return;
-      const tabs = $('.kind-tabs', el);
-      tabs.classList.toggle('is-ingreso', k === 'ingreso');
-      $$('[data-catkind]', el).forEach((x) => x.classList.toggle('active', x === b));
-      ui.catKind = k;
-      setTimeout(render, 220);
-    }));
-
-    $$('tr[data-catid]', el).forEach((row) => row.addEventListener('click', () => {
-      // Categoría con subcategorías: despliega/pliega sin rearmar la vista.
-      if (row.dataset.toggle) {
-        const key = (row.dataset.kind || 'gasto') + ':' + row.dataset.catid;
-        const open = !ui.catOpen[key];
-        ui.catOpen[key] = open;
-        row.classList.toggle('open', open);
-        $$(`tr.cat-sub-row[data-parent="${CSS.escape(row.dataset.catid)}"]`, row.closest('tbody'))
-          .forEach((r) => r.classList.toggle('open', open));
+    wireCatKindChips(el);
+    // Los movimientos de una categoría (o subcategoría, o medio de pago)
+    // del mes, comparados con el mes anterior.
+    const forRow = (list, gid, subId) => {
+      const m = list.filter((t) => t.type === type);
+      if (subId) return subId.endsWith(':directo') ? m.filter((t) => t.categoryId === gid) : m.filter((t) => t.categoryId === subId);
+      if (gid === '__sin') return m.filter((t) => !t.categoryId || !catById(t.categoryId));
+      return m.filter((t) => topCategoryOf(t.categoryId) === gid);
+    };
+    const monthAll = txs.filter((t) => monthKeyOf(t.date) === mk);
+    el.addEventListener('click', (e) => {
+      let b;
+      if ((b = e.target.closest('[data-catopen]'))) {
+        const k = b.dataset.catopen;
+        ui.catOpen = { ...ui.catOpen, [k]: !ui.catOpen[k] };
+        render();
         return;
       }
-      const gid = row.dataset.catid;
-      const subId = row.dataset.subid;
-      const isIncome = row.dataset.kind === 'ingreso';
-      const type = isIncome ? 'ingreso' : 'gasto';
-      const g = (isIncome ? incomeBreakdown : breakdown).find((x) => x.id === gid);
-      const label = subId ? ((g.subs.find((s) => s.id === subId) || {}).name || g.name) : g.name;
-      // Se ve el mes actual Y el anterior en el mismo diálogo: si la fila
-      // está en rojo (aumentó), sirve para comparar qué cambió sin tener
-      // que ir y volver entre meses.
-      categoryCompareDialog(label,
-        mk, txsForBreakdownRow(inMonth, gid, subId, type),
-        prevMkCat, txsForBreakdownRow(inPrevCat, gid, subId, type));
-    }));
-    const sel = $('#cat-analysis-sel', el);
-    if (sel) sel.addEventListener('change', (e) => {
-      ui.catAnalysisId = e.target.value;
-      drawCatEvo(ui.catAnalysisId);
+      if ((b = e.target.closest('[data-catmoves]'))) {
+        const gid = b.dataset.catmoves, subId = b.dataset.subid;
+        const g = breakdown.find((x) => x.id === gid);
+        const label = subId ? ((g && g.subs.find((s) => s.id === subId)) || {}).name || catName(gid) : (g ? g.name : catName(gid));
+        categoryCompareDialog(label, mk, forRow(monthAll, gid, subId), prevMk, forRow(inPrevFull, gid, subId));
+        return;
+      }
+      if ((b = e.target.closest('[data-methodmoves]'))) {
+        const id = b.dataset.methodmoves;
+        const pick = (list) => list.filter((t) => t.type === 'gasto' && (id === '__sin' ? !(methodById(t.methodId) || isSavingMethod(t.methodId)) : t.methodId === id));
+        categoryCompareDialog(id === '__sin' ? 'Sin medio de pago' : methodName(id), mk, pick(monthAll), prevMk, pick(inPrevFull));
+        return;
+      }
+      if ((b = e.target.closest('[data-evo]'))) { ui[evoKey] = b.dataset.evo; render(); }
     });
   }
+  function wireCatKindChips(el) {
+    $$('[data-catkind]', el).forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.catkind === ui.catKind) return;
+      ui.catKind = b.dataset.catkind;
+      render();
+    }));
+  }
+
 
   /* ================= Vista: Tarjetas y medios ================= */
   function methodForm(method) {
@@ -3488,7 +3343,7 @@
     const rowsHTML = rows.map((r, i) => {
       const closeLabel = fmtDateShort(dateToStr(r.close));
       const dueLabel = r.due ? `${r.dueAssumed ? '~' : ''}${fmtDateShort(dateToStr(r.due))}` : 'sin cargar';
-      return `<div class="resume-row ${r.real ? '' : 'is-ghost'}" data-resumeidx="${i}">
+      return `<div class="${r.real ? 'swipe swipe-card' : ''}"><div class="resume-row ${r.real ? '' : 'is-ghost'}" data-resumeidx="${i}">
         <div class="resume-row-main">
           <div class="resume-row-top">
             ${i === actualIdx ? '<span class="resume-badge">Actual</span>' : ''}
@@ -3496,13 +3351,12 @@
           </div>
           ${!r.real ? '<div class="hint">Todavía no cargado — tocá para confirmar la fecha real</div>' : ''}
         </div>
-        ${r.real ? `<button type="button" class="row-del" data-resumedel="${esc(r.key)}" aria-label="Quitar">✕</button>` : ''}
-      </div>`;
+      </div>${r.real ? `<div class="swipe-actions"><button type="button" class="sw-del" data-resumedel="${esc(r.key)}" aria-label="Quitar el resumen del ${esc(closeLabel)}">${iconSvg('trash')}<span>Quitar</span></button></div>` : ''}</div>`;
     }).join('');
 
     const body = `
       <div class="resume-list">${rowsHTML}</div>
-      <div class="hint" style="margin-top:10px">Tocá un resumen para cargar o corregir su fecha real de cierre y vencimiento.</div>
+      <div class="hint" style="margin-top:10px">Tocá un resumen para cargar o corregir su fecha real; deslizalo a la izquierda para quitarlo.</div>
       <button type="button" class="link-btn" id="ov-toggle-upcoming">Ver más adelante</button>
       <div id="ov-upcoming" hidden></div>`;
 
@@ -3515,15 +3369,29 @@
     }));
     $$('[data-resumedel]', dlg).forEach((b) => b.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (!confirm('¿Quitar este resumen?')) return;
       const c = methodById(card.id);
       if (!c) { dlg.close(); return; }
-      delete (c.overrides || {})[b.dataset.resumedel];
+      const key = b.dataset.resumedel;
+      const saved = (c.overrides || {})[key];
+      delete (c.overrides || {})[key];
       realignCardInstallments();
       Store.save();
       dlg.close();
       render();
       cardResumesDialog(c);
+      showToast('Se quitó el resumen', {
+        action: 'Deshacer', duration: 5000,
+        onAction: () => {
+          const c2 = methodById(card.id);
+          if (!c2) return;
+          c2.overrides = c2.overrides || {};
+          c2.overrides[key] = saved;
+          realignCardInstallments();
+          Store.save();
+          render();
+          if ($('#dialog').open) { $('#dialog').close(); cardResumesDialog(c2); }
+        },
+      });
     }));
     const upcomingBox = $('#ov-upcoming', dlg);
     $('#ov-toggle-upcoming', dlg).addEventListener('click', (ev) => {
@@ -3692,132 +3560,205 @@
     };
   }
 
+  /* "Cómo vengo" con una tarjeta, en un panel inferior: primero la
+     respuesta (veredicto y proyección al cierre), después el detalle. */
   function cardAnalysisDialog(cardId) {
     const card = methodById(cardId);
     if (!card) return;
     const A = cardAnalysis(card);
     const short = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
     if (!A) {
-      openDialog(`${card.name} · cómo vengo`, '<div class="empty">Cargá al menos el resumen anterior y el actual desde "Resúmenes" para ver cómo venís con esta tarjeta.</div>', { submitLabel: 'Cerrar', viewOnly: true });
+      openPanel({
+        title: 'Cómo vengo', subtitle: card.name,
+        body: '<div class="empty">Cargá al menos el resumen anterior y el actual desde "Resúmenes" para ver cómo venís con esta tarjeta.</div>',
+      });
       return;
     }
     const { cy, history, verdict } = A;
+    // Montos cortos para las etiquetas de la barra y del gráfico ("$ 1,04 M").
+    const shortMoney = (v) => (Math.abs(v) >= 1e6
+      ? `${disp() === 'USD' ? 'US$' : '$'} ${(v / 1e6).toFixed(2).replace('.', ',')} M`
+      : fmtPlain(v));
+    const llevas = A.spent + A.committed;
+    const extra = Math.max(0, A.projected - llevas);
     const last = history[0];
-    const varPct = (cur, prev) => {
-      if (!(prev > 0)) return '';
-      const p = ((cur - prev) / prev) * 100;
-      const lbl = fmtVarPct(p);
-      if (lbl == null) return '<span class="cat-mom-pct flat">=</span>';
-      return `<span class="cat-mom-pct ${p > 0 ? 'up' : 'down'}">${p > 0 ? '▲' : '▼'}${lbl}%</span>`;
-    };
+    const isCap = A.capOwn != null;
+    // de/del, a/al según la referencia ("tu tope" / "el promedio de…").
+    const refWith = (prep) => (A.refLabel.startsWith('el ') ? `${prep}l ${A.refLabel.slice(3)}` : `${prep} ${A.refLabel}`);
 
-    // Barra del resumen en curso: gastado + ya cargado a futuro + proyección, contra la referencia.
-    // La barra termina un poco después del resumen anterior (marcado en
-    // gris), para leer de un vistazo cuánto representa lo de este ciclo
-    // contra el último; si la proyección o la referencia lo pasan, la
-    // escala se estira para que entren.
-    const prevTotal = last ? last.total : 0;
-    const scale = Math.max(prevTotal * 1.1, A.projected * 1.04, (A.ref || 0) * 1.04, 1);
-    const w = (v) => `${Math.max(0, Math.min(100, (v / scale) * 100))}%`;
-    const extra = Math.max(0, A.projected - A.spent - A.committed);
-    const meter = `
-      <div class="ca-meter">
-        <span class="ca-seg ca-spent" style="width:${w(A.spent)}"></span><span class="ca-seg ca-committed" style="width:${w(A.committed)}"></span><span class="ca-seg ca-proj" style="width:${w(extra)}"></span>
-        ${prevTotal > 0 ? `<span class="ca-prev" style="left:${w(prevTotal)}"></span>` : ''}
-        ${A.ref ? `<span class="ca-ref" style="left:${w(A.ref)}"></span>` : ''}
-      </div>
-      <div class="ca-legend">
-        <span><i class="ca-spent"></i>Gastado ${fmtDisp(A.spent)}</span>
-        ${A.committed > 0 ? `<span><i class="ca-committed"></i>Ya cargado (cuotas/fijos) ${fmtDisp(A.committed)}</span>` : ''}
-        ${extra > 0 ? `<span><i class="ca-proj"></i>Proyectado ${fmtDisp(extra)}</span>` : ''}
-        ${prevTotal > 0 ? `<span><i class="ca-prev-key"></i>Resumen anterior ${fmtDisp(prevTotal)}</span>` : ''}
-        ${A.ref ? `<span><i class="ca-ref-key"></i>Referencia ${fmtDisp(A.ref)}</span>` : ''}
+    // 1. Veredicto.
+    const TONE = {
+      ok: { label: 'Vas bien', color: 'var(--brand-text)', soft: 'var(--brand-soft)', icon: 'check' },
+      warn: { label: 'Ojo', color: 'var(--warn)', soft: 'var(--warn-soft)', icon: 'bolt' },
+      crit: { label: 'Te estás pasando', color: 'var(--neg)', soft: 'var(--neg-soft)', icon: 'up' },
+      none: { label: 'Resumen en curso', color: 'var(--t2)', soft: 'var(--s2)', icon: 'card' },
+    };
+    const tone = verdict ? verdict.tone : 'none';
+    const T = TONE[tone];
+    let cmp = '';
+    if (A.ref != null) {
+      const d = A.projected - A.ref;
+      cmp = Math.abs(d) < 1 ? `Igual que ${A.refLabel}` : `${fmtPlain(Math.abs(d))} ${d < 0 ? 'menos' : 'más'} que ${A.refLabel}`;
+    } else {
+      cmp = 'Todavía no hay resúmenes cerrados para comparar.';
+    }
+    const statusHTML = `
+      <div class="statusbox" style="--tone:${T.color};--tone-soft:${T.soft}">
+        <span class="k">${spriteIcon(T.icon)}${T.label}</span>
+        <span class="t2">Al ritmo actual cerrás en</span>
+        <span class="num money statusbox-big">${esc(fmtPlain(A.projected))}</span>
+        <span class="t2 money statusbox-cmp">${esc(cmp)}</span>
       </div>`;
 
-    // "de el promedio" → "del promedio", "a el promedio" → "al promedio".
-    const withPrep = (prep) => (A.refLabel.startsWith('el ') ? `${prep}l ${A.refLabel.slice(3)}` : `${prep} ${A.refLabel}`);
-    let verdictHTML = '';
-    if (verdict) {
-      const nextDay = new Date(cy.close.getTime() + DAY_MS);
-      if (verdict.tone === 'crit') {
-        verdictHTML = `<div class="ca-verdict crit"><b>Conviene dejar de usarla ya.</b> Con lo gastado y lo que ya está cargado superás ${esc(A.refLabel)} por ${fmtDisp(-verdict.room)}. Lo que compres desde el ${esc(short(nextDay))} entra recién en el resumen siguiente.</div>`;
-      } else if (verdict.tone === 'warn') {
-        verdictHTML = `<div class="ca-verdict warn"><b>Dejá de usarla a partir del ${esc(short(verdict.hit))}.</b> Al ritmo actual ese día llegás ${esc(withPrep('a'))}, y el resumen cierra el ${esc(short(cy.close))}. Para no pasarte, gastá como mucho ${fmtDisp(verdict.perDay)} por día.</div>`;
-      } else {
-        verdictHTML = `<div class="ca-verdict ok"><b>Vas bien.</b> Al ritmo actual cerrás en ${fmtDisp(A.projected)}, ${fmtDisp(A.ref - A.projected)} por debajo ${esc(withPrep('de'))}. Te quedan ${fmtDisp(verdict.room)} hasta el cierre (${fmtDisp(verdict.perDay)} por día).</div>`;
-      }
-    } else {
-      verdictHTML = '<div class="ca-verdict">Todavía no hay resúmenes cerrados para comparar. Podés ponerle un tope a la tarjeta para saber cuándo dejar de usarla.</div>';
+    // 2. Barra del resumen en curso con las marcas rotuladas directamente.
+    const scale = Math.max(llevas, A.projected, A.ref || 0, last ? last.total : 0, 1) * 1.04;
+    const pctOf = (v) => Math.max(0, Math.min(100, (v / scale) * 100));
+    const marks = [
+      { key: 'llevas', label: 'Llevás', v: llevas, row: 'top', bar: false },
+      { key: 'ref', label: isCap ? 'Tope' : 'Promedio', v: A.ref, row: 'top', bar: true, color: 'var(--t2)' },
+      { key: 'proj', label: 'Proyectado', v: A.projected, row: 'bottom', bar: false },
+      { key: 'last', label: 'Último', v: last ? last.total : null, row: 'bottom', bar: true, color: 'var(--t3)' },
+    ].filter((m) => m.v != null && m.v > 0 && !(m.key === 'proj' && Math.abs(A.projected - llevas) < 1));
+    // Que las etiquetas no se pisen aunque los montos sean altos: cada una
+    // se centra en su marca, o se alinea a un lado, o pasa a la otra fila;
+    // si no entra en ningún lado, queda solo la marca (el monto está en la
+    // leyenda de abajo).
+    const LW = 27; // ancho estimado de una etiqueta, en % de la barra
+    const rows = { top: [], bottom: [] };
+    for (const m of marks) {
+      const p = m.key === 'llevas' ? 0 : pctOf(m.v);
+      const txs = m.key === 'llevas' ? [0] : [-50, 0, -100];
+      const tryRow = (row) => {
+        for (const tx of txs) {
+          const s0 = p + (tx * LW) / 100, s1 = s0 + LW;
+          if (s0 < -1 || s1 > 101) continue;
+          if (rows[row].every((q) => s0 >= q.s1 + 1 || s1 <= q.s0 - 1)) {
+            rows[row].push({ m, p, tx, s0, s1 });
+            return true;
+          }
+        }
+        return false;
+      };
+      if (!tryRow(m.row)) tryRow(m.row === 'top' ? 'bottom' : 'top');
     }
+    const labelsHTML = ['top', 'bottom'].flatMap((row) => rows[row].map(({ m, p, tx }) =>
+      `<span class="ml ml-${row}" style="left:${p.toFixed(1)}%;transform:translateX(${tx}%)">${m.label}<b class="money">${esc(shortMoney(m.v))}</b></span>`)).join('');
+    const gaugeAria = marks.map((m) => `${m.label} ${hideAmounts ? '' : fmtPlain(m.v)}`).join(', ');
+    const gaugeHTML = `
+      <section class="k-card" style="--tone:${tone === 'none' ? 'var(--brand)' : T.color}">
+        <span class="ovl">Resumen en curso</span>
+        <div class="gauge" role="img" aria-label="${esc(gaugeAria)}">
+          ${labelsHTML}
+          <div class="track">
+            <i style="width:${pctOf(A.spent).toFixed(2)}%;background:var(--tone)"></i><i style="width:${pctOf(A.committed).toFixed(2)}%;background:color-mix(in srgb,var(--tone) 50%,transparent)"></i><i class="hatch" style="width:${pctOf(extra).toFixed(2)}%"></i>
+          </div>
+          ${marks.filter((m) => m.bar).map((m) => `<span class="mk" style="left:${pctOf(m.v).toFixed(1)}%;background:${m.color}"></span>`).join('')}
+        </div>
+        <div class="legend gauge-legend">
+          <span><i style="background:var(--tone)"></i>Gastado <b class="money">${esc(fmtPlain(A.spent))}</b></span>
+          ${A.committed > 0 ? `<span><i style="background:color-mix(in srgb,var(--tone) 50%,transparent)"></i>Cuotas y fijos <b class="money">${esc(fmtPlain(A.committed))}</b></span>` : ''}
+          ${extra > 0 ? `<span><i class="hatch"></i>Proyección <b class="money">${esc(fmtPlain(extra))}</b></span>` : ''}
+        </div>
+      </section>`;
 
-    const histRows = history.map((h, i) => {
-      const prev = history[i + 1];
-      return `<tr class="rowlink" data-hist="${i}">
-        <td>${esc(short(h.to))}</td>
-        <td>${h.due ? esc(short(h.due)) : '—'}</td>
-        <td class="num">${fmtDisp(h.total)}</td>
-        <td class="num">${prev ? varPct(h.total, prev.total) : ''}</td>
-      </tr>`;
+    // 3. Tres datos.
+    const kpisHTML = `
+      <div class="kpis">
+        ${verdict ? `<div><span>Podés gastar</span><span class="num money">${esc(fmtPlain(verdict.perDay))}</span><small>por día</small></div>` : ''}
+        <div><span>Venís gastando</span><span class="num money">${esc(fmtPlain(A.pace))}</span><small>por día${A.paceFromPrev ? ' (ciclo anterior)' : ''}</small></div>
+        <div><span>Ciclo</span><span class="num">Día ${Math.min(A.elapsed, A.totalDays)}</span><small>de ${A.totalDays}</small></div>
+      </div>
+      ${verdict ? `<p class="k-note k-note-out">${verdict.room > 0
+        ? `Te quedan <b class="money">${esc(fmtPlain(verdict.room))}</b> hasta el cierre${tone === 'warn' ? `; al ritmo actual llegás ${esc(refWith('a'))} el ${esc(short(verdict.hit))}` : ''}.`
+        : `Ya superás ${esc(A.refLabel)} por <b class="money">${esc(fmtPlain(-verdict.room))}</b>. Lo que compres desde el ${esc(short(new Date(cy.close.getTime() + DAY_MS)))} entra en el resumen siguiente.`}</p>` : ''}`;
+
+    // 4. En qué se va.
+    const partsTotal = A.parts.consumos + A.parts.cuotas + A.parts.fijos;
+    const PARTS = [
+      ['Consumos', A.parts.consumos, 'var(--brand)'],
+      ['Cuotas', A.parts.cuotas, 'color-mix(in srgb,var(--brand) 50%,transparent)'],
+      ['Fijos', A.parts.fijos, 'var(--s3)'],
+    ];
+    const partsHTML = `
+      <section class="k-card">
+        <div class="k-card-h"><h2>En qué se va</h2></div>
+        <div class="stack">${partsTotal > 0 ? PARTS.filter(([, v]) => v > 0).map(([, v, c]) => `<i style="width:${((v / partsTotal) * 100).toFixed(2)}%;background:${c}"></i>`).join('') : ''}</div>
+        <div class="legend">${PARTS.map(([l, v, c]) => `<span><i style="background:${c}"></i>${l} <b class="money">${esc(fmtPlain(v))}</b></span>`).join('')}</div>
+      </section>`;
+
+    // 5. Últimos resúmenes: barras grises de los cerrados y el en curso con
+    // lo gastado sólido y la proyección rayada; línea punteada de la
+    // referencia.
+    const closed = history.slice(0, 5).reverse();
+    const bars = [...closed.map((h) => ({ label: `Cierre ${short(h.to)}`, value: h.total })), { label: 'En curso', value: llevas, proj: A.projected, current: true }];
+    const W = 320, H = 150, base = 120, topY = 22;
+    const maxV = Math.max(1, ...bars.map((b) => Math.max(b.value, b.proj || 0)), A.ref || 0);
+    const yv = (v) => base - (v / maxV) * (base - topY);
+    const slot = W / bars.length;
+    const bw = Math.min(48, slot * 0.55);
+    const barsSvg = bars.map((b, i) => {
+      const cx = slot * i + slot / 2, x = cx - bw / 2;
+      const lab = hideAmounts ? '•••' : shortMoney(b.current ? b.proj : b.value).replace(/^US?\$ /, '');
+      const body = b.current
+        ? `${b.proj > b.value ? `<rect x="${x.toFixed(1)}" y="${yv(b.proj).toFixed(1)}" width="${bw.toFixed(1)}" height="${(base - yv(b.proj)).toFixed(1)}" rx="6" style="fill:url(#hatch)"/>` : ''}
+           <rect x="${x.toFixed(1)}" y="${yv(b.value).toFixed(1)}" width="${bw.toFixed(1)}" height="${(base - yv(b.value)).toFixed(1)}" rx="4" style="fill:var(--brand)"/>`
+        : `<rect x="${x.toFixed(1)}" y="${yv(b.value).toFixed(1)}" width="${bw.toFixed(1)}" height="${(base - yv(b.value)).toFixed(1)}" rx="6" style="fill:var(--s3)"/>`;
+      const topV = b.current ? Math.max(b.value, b.proj) : b.value;
+      return `${body}
+        <text x="${cx.toFixed(1)}" y="${(yv(topV) - 7).toFixed(1)}" text-anchor="middle" class="g-lab"${b.current ? ' style="fill:var(--brand-text)"' : ''}>${esc(lab)}</text>
+        <text x="${cx.toFixed(1)}" y="138" text-anchor="middle"${b.current ? ' class="g-sel"' : ''}>${esc(bars.length > 4 && !b.current ? b.label.replace('Cierre ', '') : b.label)}</text>`;
     }).join('');
-
-    const body = `
-      <div class="ca-head">
-        <div class="ca-head-top">
-          <span>Resumen en curso · cierra ${esc(short(cy.close))}</span>
-          <span class="ca-days">${A.remaining > 0 ? `faltan ${A.remaining} día${A.remaining === 1 ? '' : 's'}` : 'cierra hoy'}</span>
+    // La referencia se rotula en el encabezado de la tarjeta (no adentro
+    // del gráfico, donde se pisaba con las barras altas).
+    const refLine = A.ref ? `<line x1="4" x2="316" y1="${yv(A.ref).toFixed(1)}" y2="${yv(A.ref).toFixed(1)}" style="stroke:var(--brand-text)" stroke-width="1.5" stroke-dasharray="4 4"/>` : '';
+    const varChip = (cur, prev) => {
+      if (!(prev > 0)) return '';
+      const lbl = fmtVarPct(((cur - prev) / prev) * 100);
+      if (lbl == null) return '<span class="dchip flat">=</span>';
+      return `<span class="dchip ${cur > prev ? 'bad' : 'good'}">${cur > prev ? '▲' : '▼'} ${lbl}%</span>`;
+    };
+    const histHTML = history.length ? `
+      <section class="k-card">
+        <div class="k-card-h"><h2>Últimos resúmenes</h2>${A.ref ? `<span class="legend legend-inline"><span><i class="lg-line lg-dash" style="border-color:var(--brand-text)"></i>${isCap ? 'Tope' : 'Promedio'} <b class="money">${esc(shortMoney(A.ref))}</b></span></span>` : ''}</div>
+        <svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(bars.map((b) => `${b.label} ${hideAmounts ? '' : fmtPlain(b.current ? b.proj : b.value)}${b.current ? ' proyectado' : ''}`).join(', '))}">
+          <defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" style="fill:var(--brand-soft)"/><line x1="0" y1="0" x2="0" y2="5" style="stroke:var(--brand)" stroke-width="2.4"/></pattern></defs>
+          <line x1="0" x2="320" y1="${base}" y2="${base}" class="g-grid"/>
+          ${barsSvg}${refLine}
+        </svg>
+        <div class="stmt-table">
+          <div class="stmt-row stmt-head"><span>Cierre</span><span>Vence</span><span>Total</span><span></span></div>
+          ${history.map((h, i) => `
+          <button type="button" class="stmt-row" data-hist="${i}">
+            <span>${esc(short(h.to))}</span><span class="t2">${h.due ? esc(short(h.due)) : '—'}</span>
+            <span class="num money">${esc(fmtPlain(h.total))}</span><span>${history[i + 1] ? varChip(h.total, history[i + 1].total) : ''}</span>
+          </button>`).join('')}
         </div>
-        <div class="ca-kpis">
-          <div><span class="ca-k">Llevás</span><b class="ca-v">${fmtDisp(A.spent + A.committed)}</b></div>
-          <div><span class="ca-k">Proyectado al cierre</span><b class="ca-v">${fmtDisp(A.projected)}</b></div>
-          <div><span class="ca-k">vs. último</span><b class="ca-v">${last ? varPct(A.projected, last.total) || '—' : '—'}</b></div>
-        </div>
-        ${meter}
-        <div class="ca-note">Día ${Math.min(A.elapsed, A.totalDays)} de ${A.totalDays} del ciclo. Ritmo de consumos: ${fmtDisp(A.pace)} por día${A.paceFromPrev ? ' (del resumen anterior, recién arranca el ciclo)' : ''}.</div>
-      </div>
-      ${verdictHTML}
-      <div class="ca-ref-row">
-        <span>Referencia: ${A.capOwn != null ? `tu tope de ${fmtMoney(card.cap.amount, card.cap.currency)}` : (A.avg != null ? `${esc(A.refLabel)} (${fmtDisp(A.avg)})` : 'sin datos')}</span>
-        <button type="button" class="link-btn" id="ca-cap">${A.capOwn != null ? 'Cambiar tope' : 'Poner un tope'}</button>
-      </div>
+        <p class="k-note">Según lo cargado en la app (sin impuestos ni cargos del banco).</p>
+      </section>` : '';
 
-      <div class="ca-section-title">En qué se va este resumen</div>
-      <div class="ca-parts">
-        <div><span>Consumos</span><b>${fmtDisp(A.parts.consumos)}</b></div>
-        <div><span>Cuotas</span><b>${fmtDisp(A.parts.cuotas)}</b></div>
-        <div><span>Fijos</span><b>${fmtDisp(A.parts.fijos)}</b></div>
-      </div>
-      <button type="button" class="link-btn" id="ca-cur-detail">Ver los movimientos del resumen en curso ›</button>
-
-      ${history.length ? `
-      <div class="ca-section-title">Últimos resúmenes</div>
-      <div id="chart-card-stmts"></div>
-      <div class="table-scroll"><table class="data ca-hist">
-        <thead><tr><th>Cierre</th><th>Vence</th><th class="num">Total</th><th class="num">vs. ant.</th></tr></thead>
-        <tbody>${histRows}</tbody>
-      </table></div>
-      <div class="hint">Según lo cargado en la app (sin impuestos ni cargos del banco). Tocá un resumen para ver sus movimientos.</div>` : ''}`;
-
-    const dlg = openDialog(`${card.name} · cómo vengo`, body, { submitLabel: 'Cerrar', viewOnly: true });
-    const chartEl = $('#chart-card-stmts', dlg);
-    if (chartEl) {
-      const rows = history.slice().reverse().map((h) => ({ label: short(h.to), value: h.total }));
-      rows.push({ label: 'En curso', value: A.spent + A.committed, extra: extra, current: true });
-      Charts.statementBars(chartEl, rows, {
-        ref: A.ref || 0, refLabel: A.ref ? (A.capOwn != null ? 'Tope' : 'Promedio') : '',
-        fmt: (v) => (!hideAmounts && Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1).replace('.', ',')} M` : Charts.compact(v)),
-        ariaLabel: `Total de los últimos resúmenes de ${card.name} y proyección del actual`,
-      });
-    }
-    $$('[data-hist]', dlg).forEach((row) => row.addEventListener('click', () => {
-      const h = history[Number(row.dataset.hist)];
-      dlg.close();
-      methodPeriodDetailDialog(`${card.name} · resumen ${short(h.to)}`, h.txs);
-    }));
-    $('#ca-cur-detail', dlg).addEventListener('click', () => {
-      dlg.close();
-      methodPeriodDetailDialog(`${card.name} · resumen en curso`, A.curTxs);
+    const days = A.remaining > 0 ? `faltan ${A.remaining} día${A.remaining === 1 ? '' : 's'}` : 'cierra hoy';
+    openPanel({
+      title: 'Cómo vengo',
+      subtitle: `${card.name} · cierra ${short(cy.close)} · ${days}`,
+      body: `<div class="como">
+        ${statusHTML}${gaugeHTML}${kpisHTML}${partsHTML}${histHTML}
+        <button type="button" class="btn btn-full btn-sec" data-cap>${spriteIcon('target')}${isCap ? 'Cambiar el tope' : 'Poner un tope'}</button>
+        <button type="button" class="btn-ter" data-curmoves>Ver los movimientos del resumen</button>
+      </div>`,
+      onClick(e, dlg) {
+        let b;
+        if ((b = e.target.closest('[data-hist]'))) {
+          const h = history[Number(b.dataset.hist)];
+          closeSheet(dlg).then(() => methodPeriodDetailDialog(`${card.name} · resumen ${short(h.to)}`, h.txs));
+          return;
+        }
+        if (e.target.closest('[data-curmoves]')) {
+          closeSheet(dlg).then(() => methodPeriodDetailDialog(`${card.name} · resumen en curso`, A.curTxs));
+          return;
+        }
+        if (e.target.closest('[data-cap]')) closeSheet(dlg).then(() => cardCapForm(card.id));
+      },
     });
-    $('#ca-cap', dlg).addEventListener('click', () => { dlg.close(); cardCapForm(card.id); });
   }
 
   /* Tope propio por tarjeta para el pop-up "Cómo vengo" (vacío = usar el
@@ -3857,11 +3798,15 @@
 
   function vTarjetas(el) {
     const methods = S().methods;
+    // Reordenar va en un modo "Editar" aparte; borrar y editar, detrás del ⋯.
+    const editMode = !!ui.editMethods;
     el.innerHTML = `
-      <div class="toolbar">
-        <h2 class="card-title" style="margin:0">Tarjetas y medios de pago</h2>
-        <div class="spacer"></div>
-        <button class="btn btn-primary btn-sm" id="btn-add-method">+ Agregar medio</button>
+      <div class="bar">
+        <h2 class="ovl">Tarjetas y medios</h2>
+        <span class="bar-actions">
+          ${methods.length > 1 ? `<button type="button" class="link" id="btn-edit-methods">${editMode ? 'Listo' : 'Ordenar'}</button>` : ''}
+          <button type="button" class="link" id="btn-add-method">${spriteIcon('plus')}Agregar</button>
+        </span>
       </div>
       <div class="entity-grid">
         ${methods.map((m, i) => {
@@ -3883,7 +3828,7 @@
               (t) => t.methodId === m.id && t.type === 'gasto' && monthKeyOf(t.date) === curMonth()));
             details = `<dl><dt>Gastado este mes</dt><dd><button type="button" class="dd-link" data-detail="month:${esc(m.id)}">${fmtDisp(monthTotal)}</button></dd></dl>`;
           }
-          const kindColor = KIND_COLOR[m.kind] || CAT_PALETTE[0];
+          const kindColor = KIND_COLOR[m.kind] || OTROS_COLOR;
           return `<div class="entity entity-method" style="--kind-color:${kindColor}">
             <div class="entity-head">
               <span class="entity-name">${esc(m.name)}</span>
@@ -3891,13 +3836,12 @@
             </div>
             ${details}
             <div class="entity-actions">
-              <div class="entity-reorder">
-                <button type="button" class="icon-btn" data-move="${esc(m.id)}:-1" ${i === 0 ? 'disabled' : ''} aria-label="Mover arriba">↑</button>
-                <button type="button" class="icon-btn" data-move="${esc(m.id)}:1" ${i === methods.length - 1 ? 'disabled' : ''} aria-label="Mover abajo">↓</button>
-              </div>
-              ${m.kind === 'credito' ? `<button class="btn btn-sm" data-adjust="${esc(m.id)}">Resúmenes</button>` : ''}
-              <button class="btn btn-sm" data-edit="${esc(m.id)}">Editar</button>
-              <button class="btn btn-sm btn-danger" data-del="${esc(m.id)}">Eliminar</button>
+              ${editMode ? `<div class="entity-reorder">
+                <button type="button" class="icb" data-move="${esc(m.id)}:-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir ${esc(m.name)}">${spriteIcon('up')}</button>
+                <button type="button" class="icb" data-move="${esc(m.id)}:1" ${i === methods.length - 1 ? 'disabled' : ''} aria-label="Bajar ${esc(m.name)}">${spriteIcon('down')}</button>
+              </div>` : `
+              ${m.kind === 'credito' ? `<button class="btn btn-sm btn-sec" data-adjust="${esc(m.id)}">Resúmenes</button>` : '<span></span>'}
+              <button type="button" class="icb" data-more="${esc(m.id)}" aria-label="Opciones de ${esc(m.name)}">${spriteIcon('more')}</button>`}
             </div>
           </div>`;
         }).join('')}
@@ -3906,12 +3850,33 @@
         '<div class="card"><div class="empty">Todavía no cargaste ninguna tarjeta de crédito. Agregala y después cargá el cierre y vencimiento de tu resumen actual con "Resúmenes".</div></div>'}`;
 
     $('#btn-add-method', el).addEventListener('click', () => methodForm(null));
+    const editBtn = $('#btn-edit-methods', el);
+    if (editBtn) editBtn.addEventListener('click', () => { ui.editMethods = !ui.editMethods; render(); });
+    $$('[data-more]', el).forEach((b) => b.addEventListener('click', () => {
+      const m = methodById(b.dataset.more);
+      if (!m) return;
+      openPanel({
+        title: m.name,
+        body: `<div class="pick-list">
+          <button type="button" class="pick-row" data-mopt="edit"><span class="cic" style="--c:var(--t2)">${spriteIcon('note')}</span><span>Editar</span></button>
+          <button type="button" class="pick-row pick-danger" data-mopt="del"><span class="cic" style="--c:var(--neg)">${iconSvg('trash')}</span><span>Borrar</span></button>
+        </div>`,
+        onClick(e, dlg) {
+          const o = e.target.closest('[data-mopt]');
+          if (!o) return;
+          if (o.dataset.mopt === 'edit') { closeSheet(dlg).then(() => methodForm(m)); return; }
+          const used = S().transactions.some((t) => t.methodId === m.id) || S().recurring.some((r) => r.methodId === m.id);
+          if (used) {
+            $('[data-shbody]', dlg).innerHTML = '<p class="t2">Este medio tiene movimientos o fijos asociados. Borrá o pasá esos movimientos a otra cuenta primero.</p>';
+            return;
+          }
+          closeSheet(dlg).then(() => removeWithUndo('methods', m, `Se borró ${m.name}`));
+        },
+      });
+    }));
     $$('[data-move]', el).forEach((b) => b.addEventListener('click', () => {
       const [id, dir] = b.dataset.move.split(':');
       moveMethod(id, Number(dir));
-    }));
-    $$('[data-edit]', el).forEach((b) => b.addEventListener('click', () => {
-      methodForm(methodById(b.dataset.edit));
     }));
     $$('[data-adjust]', el).forEach((b) => b.addEventListener('click', () => {
       cardResumesDialog(methodById(b.dataset.adjust));
@@ -3935,19 +3900,7 @@
         (t) => t.type === 'gasto' && t.methodId === id && t.date > a && t.date <= bStr);
       methodPeriodDetailDialog(`${m.name} · ${kind === 'cur' ? 'Resumen en curso' : 'Último resumen'}`, txs);
     }));
-    $$('[data-del]', el).forEach((b) => b.addEventListener('click', () => {
-      const id = b.dataset.del;
-      const used = S().transactions.some((t) => t.methodId === id) ||
-                   S().recurring.some((r) => r.methodId === id);
-      if (used) {
-        alert('Este medio tiene movimientos asociados. Eliminá o reasigná esos movimientos primero.');
-        return;
-      }
-      if (!confirm('¿Eliminar este medio de pago?')) return;
-      S().methods = S().methods.filter((m) => m.id !== id);
-      Store.save();
-      render();
-    }));
+;
   }
 
   /* Una fila de movimiento, igual en Movimientos y en todos los pop-ups
@@ -3959,7 +3912,7 @@
     const usdLine = (t.currency === 'ARS' && t.usdSnapshot != null)
       ? `<div class="usd">≈ ${esc(fmtMoney(t.usdSnapshot, 'USD'))}</div>` : '';
     if (t.type === 'transferencia') {
-      return `<div class="tx-card-row" data-tx="${esc(t.id)}">
+      return `<div class="tx-card-row${ui.newTxIds && ui.newTxIds.ids.has(t.id) ? ' is-new' : ''}" data-tx="${esc(t.id)}">
         <div class="row-icon row-icon-transfer">${iconSvg('swap')}</div>
         <div class="tx-card-main">
           <div class="tx-card-title">${esc(t.note || 'Transferencia')}</div>
@@ -3982,8 +3935,8 @@
     const subParts = [];
     if (t.note) subParts.push(catName(t.categoryId));
     subParts.push(methodName(t.methodId));
-    return `<div class="tx-card-row" data-tx="${esc(t.id)}">
-      <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(categoryIconName(t.categoryId))}</div>
+    return `<div class="tx-card-row${ui.newTxIds && ui.newTxIds.ids.has(t.id) ? ' is-new' : ''}" data-tx="${esc(t.id)}">
+      <div class="row-icon cic" style="--c:${catColor(t.categoryId)}">${iconSvg(categoryIconName(t.categoryId))}</div>
       <div class="tx-card-main">
         <div class="tx-card-title">${esc(title)}</div>
         <div class="tx-card-sub">${esc(subParts.join(' · '))}${inst}${rec}${cur}</div>
@@ -4061,23 +4014,21 @@
         (t) => t.methodId === method.id && t.type === 'gasto' && monthKeyOf(t.date) === month);
       dlg.innerHTML = `
         <div class="dialog-head">
-          <span>${esc(method.name)}</span>
-          <button type="button" class="row-del" data-close aria-label="Cerrar">✕</button>
+          <button type="button" class="icb" data-close aria-label="Cerrar">${spriteIcon('x')}</button>
+          <span class="dialog-title">${esc(method.name)}</span>
+          <span></span>
         </div>
         <div class="dialog-body">
-          <div class="hero-month-bar">
-            <button type="button" class="icon-btn" data-mnav="-1" aria-label="Mes anterior">‹</button>
-            <span class="hero-month-bar-label">${iconSvg('calendar')}${esc(monthLabel(month))}</span>
-            <button type="button" class="icon-btn" data-mnav="1" aria-label="Mes siguiente">›</button>
+          <div class="month panel-month">
+            <button type="button" class="icb ghost" data-mnav="-1" aria-label="Mes anterior">${spriteIcon('cl')}</button>
+            <span class="topbar-title">${esc(topbarMonthLabel(month))}</span>
+            <button type="button" class="icb ghost" data-mnav="1" aria-label="Mes siguiente">${spriteIcon('cr')}</button>
+            ${month === curMonth() ? '' : '<button type="button" class="link" data-mtoday>Volver al actual</button>'}
           </div>
-          ${month === curMonth() ? '' : '<button type="button" class="link-btn hero-mtoday" data-mtoday>volver al mes actual</button>'}
           <div class="dialog-total">Total: ${fmtDisp(sumDisp(txs))}</div>
           ${txDayGroupsHTML(txs, 'No hay movimientos en este período.')}
-        </div>
-        <div class="dialog-foot">
-          <button type="button" class="btn" data-close>Cerrar</button>
         </div>`;
-      $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => dlg.close()));
+      $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => closeSheet(dlg)));
       $$('[data-mnav]', dlg).forEach((b) => b.addEventListener('click', () => {
         month = addMonthsKey(month, Number(b.dataset.mnav));
         paint();
@@ -4563,7 +4514,7 @@
 
     // Cada cuenta con su saldo en la moneda elegida, para la barra de
     // composición del total (mismo color en la barra y en la lista).
-    const accounts = savings.map((s, i) => ({ s, ...savingBalances(s), color: CAT_PALETTE[i % CAT_PALETTE.length] }));
+    const accounts = savings.map((s, i) => ({ s, ...savingBalances(s), color: SERIES_PALETTE[i % SERIES_PALETTE.length] }));
     const posTotal = accounts.reduce((a, x) => a + Math.max(0, x.inDisp), 0);
 
     const CHARTS = {
@@ -4710,9 +4661,9 @@
   }
 
   /* ================= Vista: Planificar ================= */
-  function budgetForm(budget) {
+  function budgetForm(budget, preset = {}) {
     const editing = !!budget;
-    const b = budget || { categoryId: '', amount: '', currency: 'ARS' };
+    const b = budget || { categoryId: '', amount: '', currency: 'ARS', ...preset };
     // Al editar, la categoría actual del presupuesto tiene que seguir en la
     // lista (si no, no habría forma de "no cambiarla") aunque ya esté
     // usada — lo que no puede pasar es elegir una categoría que YA tiene
@@ -4767,12 +4718,12 @@
     return `${base}<optgroup label="Pagar con un ahorro">${selOptions(S().savings, selId)}</optgroup>`;
   }
 
-  function recurringForm(rec) {
+  function recurringForm(rec, preset = {}) {
     const editing = !!rec;
     const r = rec || {
       name: '', type: 'gasto', amount: '', currency: 'ARS',
       categoryId: '', methodId: S().methods[0] ? S().methods[0].id : '', day: 1,
-      freq: 'monthly',
+      freq: 'monthly', ...preset,
     };
     const freq = r.freq || 'monthly';
     const body = `
@@ -4971,7 +4922,7 @@
     const barRows = rows.map((r, i) => ({
       groupId: r.groupId,
       label: r.note || catName(r.categoryId),
-      color: CAT_PALETTE[i % CAT_PALETTE.length],
+      color: catColor(r.categoryId),
       startIdx: months.indexOf(effectiveMonthOf(r.all[0])),
       endIdx: months.indexOf(effectiveMonthOf(r.all[r.all.length - 1])),
     }));
@@ -5014,7 +4965,7 @@
     const prog = Math.round((r.nextK / r.n) * 100);
     return `
           <div class="inst-row ${link ? 'rowlink' : ''}" ${link ? `data-instgroup="${esc(r.groupId)}"` : ''} style="--prog:${prog}%">
-            <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(r.categoryId))}</div>
+            <div class="row-icon cic" style="--c:${catColor(r.categoryId)}">${iconSvg(categoryIconName(r.categoryId))}</div>
             <div class="inst-row-main">
               <div class="inst-row-title">${esc(r.note || catName(r.categoryId))}</div>
               <div class="inst-row-sub">${esc(methodName(r.methodId))} · cuota ${r.nextK}/${r.n} · ${paymentDateOf(r.next) > todayStr() ? 'próx. ' + esc(fmtDateShort(paymentDateOf(r.next))) : 'este mes'}</div>
@@ -5143,6 +5094,59 @@
   // Más → Cuotas / Presupuestos / Fijos: antes era una sola hoja
   // "Planificar" con las tres tarjetas una debajo de la otra; ahora cada
   // una es su propia sub-pestaña (section) y sólo se arma esa.
+  /* Estados vacíos con una sugerencia concreta a partir de tus datos. */
+  // Presupuestos: la categoría en la que más gastaste este mes.
+  function budgetSuggestionHTML(monthTx) {
+    const by = new Map();
+    for (const t of monthTx) {
+      const v = txDispAmount(t);
+      if (v == null) continue;
+      const top = topCategoryOf(t.categoryId);
+      if (catById(top)) by.set(top, (by.get(top) || 0) + v);
+    }
+    const best = [...by.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (!best) return '<div class="empty">Definí cuánto querés gastar por mes en cada categoría y seguí el avance acá.</div>';
+    return `<div class="suggest">
+      <span class="cic" style="--c:${catColor(best[0])}">${iconSvg(categoryIconName(best[0]))}</span>
+      <div><p><b>${esc(catName(best[0]))}</b> va <span class="money">${esc(fmtPlain(best[1]))}</span> este mes. ¿Le ponés un presupuesto?</p>
+      <button type="button" class="btn btn-primary btn-sm" data-suggest-budget="${esc(best[0])}">Poner presupuesto</button></div>
+    </div>`;
+  }
+  // Fijos: algo que se repite (misma nota o categoría y monto parecido) en
+  // al menos dos de los últimos tres meses.
+  function recurringSuggestionHTML() {
+    const cm = curMonth();
+    const months = [addMonthsKey(cm, -2), addMonthsKey(cm, -1), cm];
+    const groups = new Map();
+    for (const t of S().transactions) {
+      if (t.type === 'transferencia' || t.recurringId || t.installment || !months.includes(monthKeyOf(t.date))) continue;
+      const key = `${t.type}|${(t.note || '').trim().toLowerCase() || t.categoryId}|${t.currency}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(t);
+    }
+    let best = null;
+    for (const list of groups.values()) {
+      const ms = new Set(list.map((t) => monthKeyOf(t.date)));
+      if (ms.size < 2) continue;
+      const amounts = list.map((t) => t.amount);
+      const avg = amounts.reduce((a, v) => a + v, 0) / amounts.length;
+      if (amounts.some((a) => Math.abs(a - avg) > avg * 0.15)) continue;
+      if (!best || ms.size > best.n || (ms.size === best.n && avg > best.avg)) best = { list, n: ms.size, avg };
+    }
+    if (!best) return '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos todos los meses.</div>';
+    const last = best.list.slice().sort((a, b) => b.date.localeCompare(a.date))[0];
+    const name = last.note || catName(last.categoryId);
+    const preset = {
+      name, type: last.type, amount: Math.round(best.avg * 100) / 100, currency: last.currency,
+      categoryId: last.categoryId, methodId: last.methodId, day: Number(last.date.slice(8, 10)), freq: 'monthly',
+    };
+    return `<div class="suggest">
+      <span class="cic" style="--c:${catColor(last.categoryId)}">${spriteIcon('repeat')}</span>
+      <div><p><b>${esc(name)}</b> se repite todos los meses (<span class="money">${esc(fmtPlain(best.avg, last.currency))}</span>). ¿Lo cargás como fijo?</p>
+      <button type="button" class="btn btn-primary btn-sm" data-suggest-rec="${esc(JSON.stringify(preset))}">Cargar como fijo</button></div>
+    </div>`;
+  }
+
   function vPlan(el, section) {
     const mk = curMonth();
     // Presupuestos por fecha real de carga, no de vencimiento — mismo
@@ -5204,7 +5208,7 @@
           ${budgetRows.map(({ b, spent, limit, pct }) => {
             const cls = pct == null ? 'meter-ok' : pct >= 100 ? 'meter-crit' : pct >= 80 ? 'meter-warn' : 'meter-ok';
             const over = pct != null && pct >= 100;
-            return `<div class="budget-row rowlink" data-bid="${esc(b.id)}">
+            return `<div class="swipe swipe-card"><div class="budget-row rowlink" data-bid="${esc(b.id)}">
               <div class="budget-row-main">
                 <div class="budget-row-top">
                   <span class="budget-row-name">${esc(catName(b.categoryId))}</span>
@@ -5213,11 +5217,11 @@
                 <div class="meter ${cls}"><span style="width:${Math.min(100, pct || 0)}%"></span></div>
                 <div class="budget-row-amounts">${fmtDisp(spent)} <span class="inst-row-amount-label">de</span> ${fmtMoney(b.amount, b.currency)}</div>
               </div>
-              <button class="row-del" data-bdel="${esc(b.id)}" aria-label="Eliminar">✕</button>
-            </div>`;
+            </div>
+            <div class="swipe-actions"><button type="button" class="sw-del" data-bdel="${esc(b.id)}" aria-label="Borrar el presupuesto de ${esc(catName(b.categoryId))}">${iconSvg('trash')}<span>Borrar</span></button></div></div>`;
           }).join('')}
         </div>`
-        : '<div class="empty">Definí cuánto querés gastar por mes en cada categoría y controlá el avance acá.</div>'}
+        : budgetSuggestionHTML(monthTx)}
       </div>`;
     // Total por mes de los fijos: cada uno multiplicado por las veces que
     // cae en el mes (un semanal suma 4 o 5 veces), en moneda visible.
@@ -5254,7 +5258,7 @@
               : r.freq === 'biweekly' ? 'Quincenal'
               : `Día ${r.day}`;
             const perOcc = convOrNull(r.amount, r.currency);
-            return `<div class="tx-card-row" data-rid="${esc(r.id)}">
+            return `<div class="swipe swipe-card"><div class="tx-card-row" data-rid="${esc(r.id)}">
               <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(isIncome ? 'trend' : 'cash')}</div>
               <div class="tx-card-main">
                 <div class="tx-card-title">${esc(r.name)}</div>
@@ -5264,12 +5268,12 @@
                 <div class="v ${isIncome ? 'pos' : ''}">${isIncome ? '+' : '−'} ${fmtMoney(r.amount, r.currency)}</div>
                 ${multi && perOcc != null ? `<div class="rec-times">× ${times} = ${fmtDisp(perOcc * times)}/mes</div>` : ''}
               </div>
-              <button class="tx-card-del" data-rdel="${esc(r.id)}" aria-label="Eliminar">✕</button>
-            </div>`;
+            </div>
+            <div class="swipe-actions"><button type="button" class="sw-del" data-rdel="${esc(r.id)}" aria-label="Borrar ${esc(r.name)}">${iconSvg('trash')}<span>Borrar</span></button></div></div>`;
           }).join('')}
         </div>
         <div class="hint" style="margin-top:8px">Se cargan solos según su frecuencia (mensual, semanal o quincenal). Los ya generados se pueden editar o borrar como cualquier movimiento.</div>`
-        : '<div class="empty">Cargá tus gastos e ingresos fijos (alquiler, suscripciones, sueldo) y se registran solos, mensual, semanal o quincenalmente.</div>'}
+        : recurringSuggestionHTML()}
       </div>`;
     el.innerHTML = cards[section];
 
@@ -5302,24 +5306,26 @@
     if (addBudgetBtn) addBudgetBtn.addEventListener('click', () => budgetForm(null));
     const addRecBtn = $('#btn-add-rec', el);
     if (addRecBtn) addRecBtn.addEventListener('click', () => recurringForm(null));
+    // Sugerencias de los estados vacíos.
+    const sugB = $('[data-suggest-budget]', el);
+    if (sugB) sugB.addEventListener('click', () => budgetForm(null, { categoryId: sugB.dataset.suggestBudget }));
+    const sugR = $('[data-suggest-rec]', el);
+    if (sugR) sugR.addEventListener('click', () => recurringForm(null, JSON.parse(sugR.dataset.suggestRec)));
     $$('.budget-row[data-bid]', el).forEach((row) => row.addEventListener('click', (e) => {
       if (e.target.closest('[data-bdel]')) return;
       budgetForm(S().budgets.find((b) => b.id === row.dataset.bid));
     }));
     $$('[data-bdel]', el).forEach((b) => b.addEventListener('click', () => {
-      S().budgets = S().budgets.filter((x) => x.id !== b.dataset.bdel);
-      Store.save();
-      render();
+      const bud = S().budgets.find((x) => x.id === b.dataset.bdel);
+      if (bud) removeWithUndo('budgets', bud, `Se borró el presupuesto de ${catName(bud.categoryId)}`);
     }));
     $$('[data-rid]', el).forEach((row) => row.addEventListener('click', (e) => {
       if (e.target.closest('[data-rdel]')) return;
       recurringForm(S().recurring.find((r) => r.id === row.dataset.rid));
     }));
     $$('[data-rdel]', el).forEach((b) => b.addEventListener('click', () => {
-      if (!confirm('¿Eliminar este movimiento fijo? Los ya generados no se borran.')) return;
-      S().recurring = S().recurring.filter((r) => r.id !== b.dataset.rdel);
-      Store.save();
-      render();
+      const rec = S().recurring.find((r) => r.id === b.dataset.rdel);
+      if (rec) removeWithUndo('recurring', rec, `Se borró ${rec.name} (los ya cargados quedan)`);
     }));
   }
 
@@ -5606,7 +5612,7 @@
 
     function renderIntro() {
       dlg.innerHTML = `
-        <div class="dialog-head"><span>Importar movimientos desde CSV</span><button type="button" class="row-del" data-close aria-label="Cerrar">✕</button></div>
+        <div class="dialog-head"><button type="button" class="icb" data-close aria-label="Cerrar">${spriteIcon('x')}</button><span class="dialog-title">Importar movimientos</span><span></span></div>
         <div class="dialog-body">
           <div class="hint">Descargá la plantilla, completala en Excel (una fila por movimiento) y subila acá. El separador decimal es la coma (,), igual que en el resto de la app.</div>
           <button type="button" class="btn btn-sm" id="btn-dl-template">Descargar plantilla (CSV)</button>
@@ -5619,11 +5625,8 @@
             <input type="file" id="csv-import-file" accept=".csv,text/csv" hidden>
           </div>
           <div id="csv-import-preview" style="min-width:0"></div>
-        </div>
-        <div class="dialog-foot">
-          <button type="button" class="btn" data-close>Cerrar</button>
         </div>`;
-      $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => dlg.close()));
+      $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => closeSheet(dlg)));
       $('#btn-dl-template', dlg).addEventListener('click', () => {
         downloadFile('finpepe-plantilla-movimientos.csv', csvImportTemplate(), 'text/csv');
       });
@@ -5696,6 +5699,16 @@
         <label for="cg-name">Nombre</label>
         <input type="text" name="name" id="cg-name" required maxlength="30" value="${esc(editing ? group.name : '')}">
       </div>
+      <div class="field">
+        <label>Color</label>
+        <div class="cat-colors" role="radiogroup" aria-label="Color de la categoría">
+          ${Store.CATEGORY_COLORS.map((k) => `<label class="cat-color" style="--c:var(--c-${k})">
+            <input type="radio" name="cgcolor" value="${k}" ${(editing ? catColorKey(group.id) : 'otros') === k ? 'checked' : ''}>
+            <span class="cat-color-dot" aria-hidden="true"></span>
+            <span class="cat-color-name">${CAT_COLOR_LABELS[k]}</span>
+          </label>`).join('')}
+        </div>
+      </div>
       ${editing ? `
       <div class="field">
         <label>Subcategorías</label>
@@ -5716,10 +5729,13 @@
       onSubmit(d) {
         const name = d.name.trim();
         if (!name) return false;
+        const picked = $('input[name="cgcolor"]:checked', dlg);
+        const color = picked ? picked.value : 'otros';
         if (editing) {
           group.name = name;
+          group.color = color;
         } else {
-          S().categories.push({ id: Store.uid(), name, type, parentId: null });
+          S().categories.push({ id: Store.uid(), name, type, parentId: null, color });
         }
         Store.save();
         render();
@@ -5851,36 +5867,45 @@
     // servidor solo manda los tildados.
     const prefs = S().settings.notifPrefs || {};
     const NOTIF_OPTS = [
-      ['due', '💳 Vencimientos de tarjeta', 'Un día antes y el día que vence, con el total del resumen.'],
-      ['alerts', '⚠️ Alertas de tope', 'Cuando el resumen en curso llega al 85% y al 100% del tope (o del promedio).'],
-      ['fixed', '🔁 Se genera un fijo', 'El día que se carga cada gasto o ingreso fijo.'],
-      ['partner', '👥 Tu pareja carga un gasto', 'Apenas tu pareja carga un gasto compartido.'],
-      ['reminder', '📅 Recordatorio', 'A las 21 h, si ese día no cargaste ningún movimiento.'],
+      ['due', 'card', 'Vencimientos de tarjeta', 'Un día antes y el día que vence, con el total del resumen.'],
+      ['alerts', 'target', 'Alertas de tope', 'Cuando el resumen en curso llega al 85% y al 100% del tope (o del promedio).'],
+      ['fixed', 'repeat', 'Se genera un fijo', 'El día que se carga cada gasto o ingreso fijo.'],
+      ['partner', 'users', 'Tu pareja carga un gasto', 'Apenas tu pareja carga un gasto compartido.'],
+      ['reminder', 'cal', 'Recordatorio', 'A las 21 h, si ese día no cargaste ningún movimiento.'],
     ];
-    const what = `<div class="notif-opts">${NOTIF_OPTS.map(([k, t, d]) => `
-      <label class="notif-opt"><input type="checkbox" data-notif="${k}" ${prefs[k] === false ? '' : 'checked'}>
-        <span><b>${t}</b><small>${d}</small></span></label>`).join('')}</div>`;
+    const what = `<h3 class="ovl set-h">Qué avisos querés</h3><div class="group">${NOTIF_OPTS.map(([k, icon, t, d]) => `
+      <label class="row set-row">
+        <span class="cic" style="--c:var(--t2)">${spriteIcon(icon)}</span>
+        <div class="row-main"><div class="tt">${t}</div><div class="st st-wrap">${d}</div></div>
+        <input type="checkbox" switch class="switch" data-notif="${k}" ${prefs[k] === false ? '' : 'checked'}>
+      </label>`).join('')}</div>`;
     const wirePrefs = () => $$('[data-notif]', box).forEach((cb) => cb.addEventListener('change', () => {
       S().settings.notifPrefs = { ...(S().settings.notifPrefs || {}), [cb.dataset.notif]: cb.checked };
       Store.save();
       paintNotifSummary();
     }));
-    if (!Cloud.user()) { box.innerHTML = `<div class="hint">Iniciá sesión (más abajo) para activar las notificaciones.</div>${what}`; return; }
+    if (!Cloud.user()) { box.innerHTML = `<p class="t2">Iniciá sesión (en Ajustes › Cuenta) para activar las notificaciones.</p>${what}`; wirePrefs(); return; }
     if (isIOS() && !isStandalone()) {
-      box.innerHTML = `<div class="hint">En iPhone las notificaciones funcionan solo con FinPep agregada a la pantalla de inicio: en Safari tocá <b>Compartir → Agregar a inicio</b> y abrila desde ese ícono.</div>${what}`;
+      box.innerHTML = `<p class="t2">En iPhone las notificaciones funcionan solo con FinPep agregada a la pantalla de inicio: en Safari tocá <b>Compartir → Agregar a inicio</b> y abrila desde ese ícono.</p>${what}`;
       wirePrefs();
       return;
     }
-    if (!pushSupported()) { box.innerHTML = `<div class="hint">Este navegador no soporta notificaciones push.</div>`; return; }
+    if (!pushSupported()) { box.innerHTML = '<p class="t2">Este navegador no soporta notificaciones push.</p>'; return; }
     const sub = await currentPushSub();
     const on = !!sub && Notification.permission === 'granted';
+    // Activadas: un interruptor para apagarlas y "Enviar prueba" como link.
+    // Desactivadas: un solo botón primario para activarlas.
     box.innerHTML = `
-      <div class="notif-status ${on ? 'on' : ''}">${on ? '🔔 Activadas en este dispositivo' : '🔕 Desactivadas en este dispositivo'}</div>
+      ${on ? `<div class="group">
+        <label class="row set-row">
+          <span class="cic" style="--c:var(--brand-text)">${spriteIcon('bolt')}</span>
+          <div class="row-main"><div class="tt">En este dispositivo</div><div class="st">Activadas</div></div>
+          <input type="checkbox" switch class="switch" id="sw-push" checked>
+        </label>
+      </div>` : ''}
       ${what}
-      <div class="inline-form">
-        ${on ? '<button class="btn btn-sm" id="btn-push-test">Enviar prueba</button><button class="btn btn-sm" id="btn-push-off">Desactivar</button>'
-          : '<button class="btn btn-primary btn-sm" id="btn-push-on">Activar notificaciones</button>'}
-      </div>
+      ${on ? '<button type="button" class="btn-ter" id="btn-push-test">Enviar una prueba</button>'
+        : '<button type="button" class="btn btn-primary btn-full btn-save" id="btn-push-on">Activar notificaciones</button>'}
       <div class="hint notif-msg" aria-live="polite"></div>`;
     wirePrefs();
     const msg = (t) => { const m = $('.notif-msg', box); if (m) m.textContent = t; };
@@ -5889,8 +5914,14 @@
       try { await fn(); } catch (e) { msg(e.message || String(e)); b.disabled = false; return; }
       b.disabled = false;
     }); };
-    run('#btn-push-on', async () => { msg('Activando…'); await enablePush(); await paintNotifCard(card); paintNotifSummary(); msg('Listo. Probá con "Enviar prueba".'); });
-    run('#btn-push-off', async () => { await disablePush(); await paintNotifCard(card); paintNotifSummary(); });
+    run('#btn-push-on', async () => { msg('Activando…'); await enablePush(); await paintNotifCard(card); paintNotifSummary(); msg('Listo. Probá con "Enviar una prueba".'); });
+    const sw = $('#sw-push', box);
+    if (sw) sw.addEventListener('change', async () => {
+      sw.disabled = true;
+      try { await disablePush(); } catch (e) { msg(e.message || String(e)); }
+      await paintNotifCard(card);
+      paintNotifSummary();
+    });
     run('#btn-push-test', async () => {
       msg('Enviando…');
       const r = await Cloud.notifyFn({ action: 'test' });
@@ -5906,17 +5937,62 @@
     const prefs = S().settings.notifPrefs || {};
     const nOn = ['due', 'alerts', 'fixed', 'partner', 'reminder'].filter((k) => prefs[k] !== false).length;
     let state;
-    if (!Cloud.user()) state = 'Iniciá sesión para usarlas';
-    else if (!pushSupported() || (isIOS() && !isStandalone())) state = 'No disponibles en este navegador';
+    if (!Cloud.user()) state = 'Sin sesión';
+    else if (!pushSupported() || (isIOS() && !isStandalone())) state = 'No disponibles';
     else {
       const sub = await currentPushSub().catch(() => null);
-      state = sub && Notification.permission === 'granted' ? '🔔 Activadas en este dispositivo' : '🔕 Desactivadas en este dispositivo';
+      state = sub && Notification.permission === 'granted' ? 'Activadas' : 'Desactivadas';
     }
-    box.innerHTML = `<span>${state}</span><span class="hint">${nOn} de 5 tipos de aviso</span>`;
+    box.textContent = state;
   }
   function notifDialog() {
-    const dlg = openDialog('Notificaciones', '<div class="notif-body"><div class="hint">Cargando…</div></div>', { submitLabel: 'Cerrar', viewOnly: true });
+    const dlg = openDialog('Notificaciones', '<div class="notif-body"><div class="skeleton-list"><i></i><i></i><i></i></div></div>', { viewOnly: true });
     paintNotifCard(dlg).catch((e) => console.error(e));
+  }
+
+  /* Confirmación dentro de un panel (en vez de confirm() nativo). */
+  function confirmPanel({ title, text, confirmLabel, onConfirm }) {
+    openPanel({
+      title,
+      body: `<div class="confirm-box">
+        <p class="t2">${esc(text)}</p>
+        <button type="button" class="btn btn-full btn-danger-fill" data-cyes>${esc(confirmLabel)}</button>
+        <button type="button" class="btn-ter" data-cno>Cancelar</button>
+      </div>`,
+      onClick(e, dlg) {
+        if (e.target.closest('[data-cno]')) { closeSheet(dlg); return; }
+        if (e.target.closest('[data-cyes]')) closeSheet(dlg).then(onConfirm);
+      },
+    });
+  }
+
+  /* Ajustes como lista agrupada estilo iOS: cada fila con su ícono, el
+     valor a la derecha y chevron; interruptores en vez de checkboxes. Lo
+     destructivo (cerrar sesión, borrar todo) va al final, aparte. */
+  function setRow({ id, icon, color = 'var(--t2)', label, value = '', chevron = true, sub = '' }) {
+    return `<button type="button" class="row set-row" id="${id}">
+      <span class="cic" style="--c:${color}">${spriteIcon(icon)}</span>
+      <div class="row-main"><div class="tt">${esc(label)}</div>${sub ? `<div class="st">${esc(sub)}</div>` : ''}</div>
+      <span class="set-value">${value}</span>
+      ${chevron ? spriteIcon('cr').replace('class="ic"', 'class="ic chev"') : '<span></span>'}
+    </button>`;
+  }
+  function setSelectRow({ id, icon, color = 'var(--t2)', label, options, selected }) {
+    const sel = options.find((o) => o.value === selected) || options[0];
+    return `<label class="row set-row set-select">
+      <span class="cic" style="--c:${color}">${spriteIcon(icon)}</span>
+      <div class="row-main"><div class="tt">${esc(label)}</div></div>
+      <span class="set-value">${esc(sel ? sel.label : '')}</span>
+      ${spriteIcon('cd').replace('class="ic"', 'class="ic chev"')}
+      <select id="${id}" aria-label="${esc(label)}">${options.map((o) => `<option value="${esc(o.value)}" ${o.value === selected ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select>
+    </label>`;
+  }
+  function setSwitchRow({ id, icon, color = 'var(--t2)', label, sub = '', checked }) {
+    return `<label class="row set-row">
+      <span class="cic" style="--c:${color}">${spriteIcon(icon)}</span>
+      <div class="row-main"><div class="tt">${esc(label)}</div>${sub ? `<div class="st st-wrap">${esc(sub)}</div>` : ''}</div>
+      <input type="checkbox" switch class="switch" id="${id}" ${checked ? 'checked' : ''}>
+    </label>`;
   }
 
   function vAjustes(el) {
@@ -5924,117 +6000,81 @@
     const updated = s.ratesUpdatedAt
       ? new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(s.ratesUpdatedAt))
       : 'nunca';
+    const r = rate();
+    const nCats = S().categories.filter((c) => !c.parentId).length;
 
     el.innerHTML = `
-      <div class="settings-grid">
-        <div class="card">
-          <h2 class="card-title">Apariencia</h2>
-          <div class="inline-form">
-            <button class="btn btn-sm" id="btn-theme-toggle" type="button">
-              ${currentTheme() === 'dark' ? '☀ Cambiar a modo claro' : '◐ Cambiar a modo oscuro'}
-            </button>
-          </div>
-        </div>
+      <h2 class="ovl set-h">Apariencia</h2>
+      <div class="group">
+        ${setSwitchRow({ id: 'set-light', icon: 'eye', color: 'var(--c-super)', label: 'Modo claro', checked: currentTheme() === 'light' })}
+      </div>
 
-        <div class="card" id="notif-card">
-          <h2 class="card-title">Notificaciones</h2>
-          <div class="notif-summary" id="notif-summary"><span class="hint">Cargando…</span></div>
-          <button class="btn btn-sm" id="btn-notif-config">Configurar notificaciones</button>
-        </div>
+      <h2 class="ovl set-h">General</h2>
+      <div class="group">
+        ${setRow({ id: 'btn-notif-config', icon: 'bolt', color: 'var(--c-comida)', label: 'Notificaciones', value: '<span id="notif-summary" class="t3"></span>' })}
+        ${setRow({ id: 'btn-open-categories', icon: 'target', color: 'var(--c-compras)', label: 'Categorías', value: `${nCats}` })}
+      </div>
 
-        <div class="card">
-          <h2 class="card-title">Categorías</h2>
-          <div class="hint" style="margin-bottom:10px">Organizá tus categorías y subcategorías de gastos e ingresos.</div>
-          <button class="btn btn-sm" id="btn-open-categories">Configurar categorías</button>
-        </div>
+      <h2 class="ovl set-h">Cotización del dólar</h2>
+      <div class="group">
+        ${setSelectRow({ id: 'set-fx', icon: 'dollar', color: 'var(--brand-text)', label: 'Tipo de cambio', selected: s.fxSource, options: FX.SOURCES.map((x) => ({ value: x.id, label: x.name })) })}
+        ${setRow({ id: 'btn-manual', icon: 'note', label: 'Cotización', value: r ? `US$ 1 = ${esc(fmtPlain(r.value, 'ARS'))}` : 'Sin datos', sub: s.manualRate ? 'Manual (pisa la automática)' : `Automática · ${updated}` })}
+        ${setRow({ id: 'btn-fx-refresh', icon: 'repeat', label: 'Actualizar ahora', chevron: false })}
+      </div>
+      <p class="set-foot">Se usa para convertir ARS ⇄ USD en toda la app. Fuente: DolarAPI.</p>
 
-        <div class="card">
-          <h2 class="card-title">Cotización del dólar</h2>
-          <div class="fx-current">
-            ${rate() ? `US$ 1 = ${esc(fmtMoney(rate().value, 'ARS'))} <span class="cell-sub">(${esc(rate().label)})</span>` : '<span class="cell-sub">Sin cotización disponible</span>'}
-          </div>
-          <div class="inline-form" style="margin-bottom:10px">
-            <label for="set-fx" class="hint">Tipo de cambio:</label>
-            <select id="set-fx">
-              ${FX.SOURCES.map((x) => `<option value="${x.id}" ${s.fxSource === x.id ? 'selected' : ''}>${x.name}</option>`).join('')}
-            </select>
-            <button class="btn btn-sm" id="btn-fx-refresh">Actualizar ahora</button>
-            <span class="hint">Última actualización: ${esc(updated)} · fuente: DolarAPI</span>
-          </div>
-          <div class="inline-form">
-            <label for="set-manual" class="hint">Cotización manual (pisa la automática):</label>
-            <input type="number" id="set-manual" min="0" step="0.01" placeholder="p. ej. 1250"
-                   value="${s.manualRate ?? ''}" style="width:120px">
-            <button class="btn btn-sm" id="btn-manual-save">Aplicar</button>
-            ${s.manualRate ? '<button class="btn btn-sm" id="btn-manual-clear">Volver a automática</button>' : ''}
-          </div>
-          <div class="hint" style="margin-top:10px">Se usa para convertir ARS ⇄ USD en toda la app.</div>
-        </div>
+      <h2 class="ovl set-h">Balance del mes</h2>
+      <div class="group">
+        ${setSelectRow({ id: 'set-cardmonth', icon: 'card', color: 'var(--c-auto)', label: 'Tarjetas de crédito cuentan por', selected: s.cardMonthBasis, options: [{ value: 'compra', label: 'Fecha de compra' }, { value: 'vencimiento', label: 'Vencimiento' }] })}
+        ${setSwitchRow({ id: 'set-leftover', icon: 'wallet', color: 'var(--c-tel)', label: 'Sobrante del mes anterior', sub: 'Acredita como ingreso lo que sobró el mes anterior, al empezar cada mes.', checked: !!s.autoLeftoverIncome })}
+      </div>
 
-        <div class="card">
-          <h2 class="card-title">Tarjetas de crédito</h2>
-          <div class="inline-form">
-            <label for="set-cardmonth" class="hint">Un gasto con tarjeta de crédito cuenta en el balance del mes de:</label>
-            <select id="set-cardmonth">
-              <option value="compra" ${s.cardMonthBasis === 'compra' ? 'selected' : ''}>la compra</option>
-              <option value="vencimiento" ${s.cardMonthBasis === 'vencimiento' ? 'selected' : ''}>el vencimiento del resumen</option>
-            </select>
-          </div>
-          <div class="hint" style="margin-top:8px">Solo afecta a tarjetas de crédito; el resto siempre cuenta por su fecha real.</div>
-        </div>
+      <h2 class="ovl set-h">Datos</h2>
+      <div class="group">
+        ${setRow({ id: 'btn-export-json', icon: 'down', label: 'Descargar respaldo (JSON)', chevron: false })}
+        ${setRow({ id: 'btn-import-json', icon: 'up', label: 'Restaurar respaldo…' })}
+        ${setRow({ id: 'btn-export-csv', icon: 'down', label: 'Exportar movimientos (CSV)', chevron: false })}
+        ${setRow({ id: 'btn-import-csv', icon: 'up', label: 'Importar movimientos (CSV)…' })}
+      </div>
+      <input type="file" id="file-import" accept="application/json,.json" hidden>
+      <p class="set-foot">Todo se guarda en este dispositivo${Cloud.user() ? ' y en la nube' : ''}. Descargá un respaldo cada tanto.</p>
 
-        <div class="card">
-          <h2 class="card-title">
-            <span>Sobrante del mes anterior</span>
-            <label class="subcats-toggle">
-              Automático
-              <input type="checkbox" id="set-leftover" ${s.autoLeftoverIncome ? 'checked' : ''}>
-            </label>
-          </h2>
-          <div class="hint">Acredita como Ingreso, al empezar cada mes, lo que sobró del mes anterior (si dio positivo) — para no perderle el rastro cuando lo usás más adelante. Se puede editar o borrar como cualquier movimiento.</div>
-        </div>
+      <h2 class="ovl set-h">Cuenta</h2>
+      <div class="k-card set-account" id="account-card">${accountCardHTML()}</div>
 
-        <div class="card">
-          <h2 class="card-title">Datos y copias de seguridad</h2>
-          <div class="hint" style="margin-bottom:10px">Todo se guarda en este navegador — exportá un respaldo cada tanto por si lo borrás o cambiás de dispositivo.</div>
-          <div class="inline-form">
-            <button class="btn btn-sm" id="btn-export-json">Descargar respaldo (JSON)</button>
-            <button class="btn btn-sm" id="btn-import-json">Restaurar respaldo…</button>
-            <button class="btn btn-sm" id="btn-export-csv">Exportar movimientos (CSV)</button>
-            <button class="btn btn-sm" id="btn-import-csv">Importar movimientos (CSV)…</button>
-            <input type="file" id="file-import" accept="application/json,.json" hidden>
-          </div>
-          <div class="inline-form" style="margin-top:14px">
-            <button class="btn btn-sm btn-danger" id="btn-wipe">Borrar todos los datos</button>
-          </div>
-        </div>
-
-        <div class="card" id="account-card">${accountCardHTML()}</div>
+      <div class="group set-danger-group">
+        ${Cloud.user() ? '<button type="button" class="row set-row set-danger" id="btn-signout"><span class="tt">Cerrar sesión</span></button>' : ''}
+        <button type="button" class="row set-row set-danger" id="btn-wipe"><span class="tt">Borrar todos los datos</span></button>
       </div>`;
 
     wireAccountCard(el);
-    $('#btn-theme-toggle', el).addEventListener('click', toggleTheme);
+    $('#set-light', el).addEventListener('change', toggleTheme);
     paintNotifSummary().catch((e) => console.error(e));
     $('#btn-notif-config', el).addEventListener('click', notifDialog);
+    $('#btn-open-categories', el).addEventListener('click', () => categoriesSettingsDialog());
     $('#set-fx', el).addEventListener('change', (e) => {
       S().settings.fxSource = e.target.value;
       Store.save();
       render();
     });
     $('#btn-fx-refresh', el).addEventListener('click', refreshRates);
-    $('#btn-manual-save', el).addEventListener('click', () => {
-      const v = parseFloat($('#set-manual', el).value);
-      S().settings.manualRate = v > 0 ? v : null;
-      Store.save();
-      render();
+    $('#btn-manual', el).addEventListener('click', () => {
+      const dlg = openDialog('Cotización manual', `
+        <div class="field">
+          <label for="set-manual">Pesos por dólar</label>
+          <input type="number" name="manual" id="set-manual" min="0" step="0.01" inputmode="decimal" placeholder="Vacío = automática" value="${S().settings.manualRate ?? ''}">
+          <span class="hint">Si la cargás, pisa la cotización automática en toda la app. Dejala vacía para volver a la automática.</span>
+        </div>`, {
+        submitLabel: 'Guardar',
+        onSubmit(d) {
+          const v = parseFloat(d.manual);
+          S().settings.manualRate = v > 0 ? v : null;
+          Store.save();
+          render();
+        },
+      });
+      $('#set-manual', dlg).focus();
     });
-    const clearBtn = $('#btn-manual-clear', el);
-    if (clearBtn) clearBtn.addEventListener('click', () => {
-      S().settings.manualRate = null;
-      Store.save();
-      render();
-    });
-
     $('#set-cardmonth', el).addEventListener('change', (e) => {
       S().settings.cardMonthBasis = e.target.value;
       Store.save();
@@ -6044,8 +6084,7 @@
       S().settings.autoLeftoverIncome = e.target.checked;
       // Al activarlo por primera vez, arranca desde el mes actual (no
       // acredita retroactivamente años de historial sin que el usuario lo
-      // pida) — igual que un movimiento fijo nuevo, que tampoco genera
-      // meses pasados.
+      // pida) — igual que un movimiento fijo nuevo.
       if (e.target.checked && !S().settings.leftoverLastGen) {
         S().settings.leftoverLastGen = addMonthsKey(curMonth(), -1);
       }
@@ -6053,8 +6092,6 @@
       generateLeftoverIncome();
       render();
     });
-    $('#btn-open-categories', el).addEventListener('click', () => categoriesSettingsDialog());
-
     $('#btn-export-json', el).addEventListener('click', () => {
       downloadFile(`finpepe-respaldo-${todayStr()}.json`, Store.exportJSON(), 'application/json');
     });
@@ -6065,22 +6102,34 @@
       try {
         const data = JSON.parse(await file.text());
         if (!data || !Array.isArray(data.transactions)) throw new Error('Formato inválido');
-        if (!confirm('Esto reemplaza todos los datos actuales por el respaldo. ¿Continuar?')) return;
-        Store.replace(data);
-        render();
+        confirmPanel({
+          title: 'Restaurar respaldo',
+          text: 'Esto reemplaza todos los datos actuales por los del respaldo.',
+          confirmLabel: 'Reemplazar mis datos',
+          onConfirm: () => { Store.replace(data); render(); showToast('Se restauró el respaldo'); },
+        });
       } catch (err) {
         alert('No se pudo leer el respaldo: ' + err.message);
       }
+      e.target.value = '';
     });
     $('#btn-export-csv', el).addEventListener('click', exportCSV);
     $('#btn-import-csv', el).addEventListener('click', importCSVDialog);
-    $('#btn-wipe', el).addEventListener('click', () => {
-      if (!confirm('Se borran TODOS los datos de la app en este navegador. Esta acción no se puede deshacer.')) return;
-      if (!confirm('¿Seguro? Si no tenés un respaldo JSON, no hay forma de recuperarlos.')) return;
-      Store.reset();
-      render();
-    });
+    const out = $('#btn-signout', el);
+    if (out) out.addEventListener('click', () => confirmPanel({
+      title: 'Cerrar sesión',
+      text: 'Tus datos quedan guardados en la nube. En este dispositivo se borran hasta que vuelvas a entrar.',
+      confirmLabel: 'Cerrar sesión',
+      onConfirm: signOutNow,
+    }));
+    $('#btn-wipe', el).addEventListener('click', () => confirmPanel({
+      title: 'Borrar todos los datos',
+      text: 'Se borran TODOS los datos de la app en este dispositivo. No se puede deshacer: si no tenés un respaldo, no hay forma de recuperarlos.',
+      confirmLabel: 'Borrar todo',
+      onConfirm: () => { Store.reset(); render(); },
+    }));
   }
+
 
   /* ================= Nube / cuenta (Supabase) ================= */
   // Supabase Auth pide un email, pero acá se usa como un login simple de
@@ -6131,7 +6180,6 @@
              </div>`}
         <div class="inline-form">
           <button class="btn btn-sm" id="btn-cloud-pull">Traer datos de la nube</button>
-          <button class="btn btn-sm btn-danger" id="btn-cloud-signout">Cerrar sesión</button>
         </div>`;
     }
     if (Cloud.isConfigured()) {
@@ -6170,6 +6218,20 @@
     renderAccountChip();
   }
 
+  async function signOutNow() {
+    // Sube lo pendiente ANTES de cerrar sesión (una vez deslogueado,
+    // Cloud.push ya no tiene usuario y no podría subir nada).
+    try { await Cloud.push(S()); } catch (e) { console.error(e); }
+    await Cloud.signOut();
+    // Si no se borrara lo local acá, quien abra la app después en este
+    // mismo navegador (por ejemplo tu pareja con su propia cuenta) vería
+    // — o peor, terminaría subiendo a su cuenta — los datos de la sesión
+    // anterior. Store.reset() ya no dispara sincronización porque para
+    // este momento Cloud.user() es null.
+    Store.reset();
+    onAuthChanged();
+  }
+
   function wireAccountCard(root) {
     const save = $('#btn-cloud-save', root);
     if (save) save.addEventListener('click', () => {
@@ -6184,20 +6246,6 @@
     if (config) config.addEventListener('click', () => { Cloud.clearConfig(); refreshAccountCard(); });
     const login = $('#btn-cloud-login', root);
     if (login) login.addEventListener('click', authDialog);
-    const out = $('#btn-cloud-signout', root);
-    if (out) out.addEventListener('click', async () => {
-      // Sube lo pendiente ANTES de cerrar sesión (una vez deslogueado,
-      // Cloud.push ya no tiene usuario y no podría subir nada).
-      try { await Cloud.push(S()); } catch (e) { console.error(e); }
-      await Cloud.signOut();
-      // Si no se borrara lo local acá, quien abra la app después en este
-      // mismo navegador (por ejemplo tu pareja con su propia cuenta) vería
-      // — o peor, terminaría subiendo a su cuenta — los datos de la sesión
-      // anterior. Store.reset() ya no dispara sincronización porque para
-      // este momento Cloud.user() es null.
-      Store.reset();
-      onAuthChanged();
-    });
     const linkGoogle = $('#btn-cloud-link-google', root);
     if (linkGoogle) linkGoogle.addEventListener('click', async () => {
       try {
@@ -6397,9 +6445,14 @@
 
   async function initCloud() {
     if (!Cloud.available() || !Cloud.isConfigured()) { renderAccountChip(); return; }
+    // Mientras se sincroniza con la nube, los montos se muestran como
+    // esqueletos (body.syncing) en vez de números que después cambian.
+    document.body.classList.add('syncing');
+    setTimeout(() => document.body.classList.remove('syncing'), 10000); // por si la red no responde
     try {
       await Cloud.init(onAuthChanged);
       await onAuthChanged();
+      document.body.classList.remove('syncing');
       // Lo primero que se ve al abrir la app (si no hay sesión): invitar a
       // iniciar sesión o crear cuenta, con Google o usuario/contraseña. El
       // diálogo tiene su propio botón para seguir sin cuenta, así que no
@@ -6407,6 +6460,7 @@
       if (!Cloud.user()) authDialog();
     } catch (e) {
       console.error('Init nube', e);
+      document.body.classList.remove('syncing');
       renderAccountChip();
       // Si falló acá (ej. sin señal) nunca se llega a onAuthChanged(): sin
       // esto, un recurrente o el sobrante del mes no se generarían nunca
@@ -6653,6 +6707,7 @@
         <input type="text" name="note" id="se-note" maxlength="60" placeholder="Supermercado, alquiler, salida…">
       </div>`;
     openDialog('Nuevo gasto compartido', body, {
+      submitLabel: 'Guardar gasto',
       async onSubmit(d) {
         const amount = Math.round(parseFloat(d.amount) * 100) / 100;
         const pct = Math.min(100, Math.max(0, parseFloat(d.payerPct)));
@@ -6672,22 +6727,26 @@
     });
   }
 
-  function settlementForm() {
+  // Saldar la deuda (todo o una parte): viene con el monto y la dirección
+  // de la deuda actual, y se puede cambiar el monto para un pago parcial.
+  function settlementForm(prefill = {}) {
     const partner = sharedPartner();
     const me = sharedMe();
     if (!partner) return;
+    const meToPartner = prefill.meToPartner !== false;
     const body = `
       <div class="field">
         <label for="st-dir">¿Quién le paga a quién?</label>
         <select name="dir" id="st-dir">
-          <option value="me-to-partner">Yo le pago a ${esc(partnerLabel(partner))}</option>
-          <option value="partner-to-me">${esc(partnerLabel(partner))} me paga a mí</option>
+          <option value="me-to-partner" ${meToPartner ? 'selected' : ''}>Yo le pago a ${esc(partnerLabel(partner))}</option>
+          <option value="partner-to-me" ${meToPartner ? '' : 'selected'}>${esc(partnerLabel(partner))} me paga a mí</option>
         </select>
       </div>
       <div class="field-row">
         <div class="field">
           <label for="st-amount">Monto</label>
-          <input type="number" name="amount" id="st-amount" min="0.01" step="0.01" required inputmode="decimal">
+          <input type="number" name="amount" id="st-amount" min="0.01" step="0.01" required inputmode="decimal" value="${prefill.amount ? Math.round(prefill.amount * 100) / 100 : ''}">
+          <span class="hint">Podés pagar una parte.</span>
         </div>
         <div class="field">
           <label for="st-currency">Moneda</label>
@@ -6705,8 +6764,8 @@
         <label for="st-note">Detalle <span class="hint">(opcional)</span></label>
         <input type="text" name="note" id="st-note" maxlength="60">
       </div>`;
-    openDialog('Registrar pago', body, {
-      submitLabel: 'Registrar',
+    openDialog('Saldar deuda', body, {
+      submitLabel: 'Registrar pago',
       async onSubmit(d) {
         const amount = Math.round(parseFloat(d.amount) * 100) / 100;
         if (!(amount > 0)) return false;
@@ -6740,7 +6799,8 @@
     }
 
     if (!shared.loaded) {
-      el.innerHTML = `<div class="card"><div class="empty">Cargando…</div></div>`;
+      el.innerHTML = `<div class="k-card skeleton-card" aria-busy="true" aria-label="Cargando"><i class="sk sk-avs"></i><i class="sk sk-line"></i><i class="sk sk-big"></i><i class="sk sk-line"></i></div>
+        <div class="group skeleton-list" aria-hidden="true"><i></i><i></i><i></i></div>`;
       loadShared();
       return;
     }
@@ -6789,13 +6849,13 @@
     const myName = meLabel();
     const partnerName = partner ? partnerLabel(partner) : null;
     const meIsDebtor = bal < -0.01;
-    const totals = partner ? sharedTotals() : { mine: 0, theirs: 0 };
     const hasDebt = partner && balAbs >= 0.01;
     const me = sharedMe();
-    const totalCommon = totals.mine + totals.theirs;
+    // Un color fijo por persona, el mismo en avatares, barras y gráfico.
+    const ME_COLOR = 'var(--c-tel)', PARTNER_COLOR = 'var(--c-super)';
+    const avatar = (name, color) => `<span class="av" style="background:${color}">${esc(initials(name))}</span>`;
 
-    // Frase principal del balance (quién le debe a quién), en el bloque de
-    // arriba con el mismo degradé que Inicio y Ahorros.
+    // Deber plata no es una alerta ni un logro: el monto va en color neutro.
     const headline = !partner
       ? 'Esperando a que tu pareja se una'
       : !hasDebt ? 'Están a mano'
@@ -6806,137 +6866,174 @@
       const amt = Number(e.amount);
       return e.paid_by === me.id ? amt * Number(e.payer_share) : amt * (1 - Number(e.payer_share));
     };
+    const conv = (v, cur) => convOrNull(Number(v), cur);
 
-    // Combina gastos y pagos en una sola lista cronológica, agrupada por
-    // día con el mismo formato que Movimientos.
-    const feed = [
-      ...shared.expenses.map((e) => ({ kind: 'expense', ...e })),
-      ...shared.settlements.map((x) => ({ kind: 'settlement', ...x })),
-    ].sort((x, y) => y.date.localeCompare(x.date) || y.created_at.localeCompare(x.created_at));
-    const feedRow = (item) => {
-      if (item.kind === 'settlement') {
-        const fromMe = item.from_user === me.id;
-        return `<div class="tx-card-row" data-shared-item="settlement:${esc(item.id)}">
-          <div class="row-icon row-icon-income">${iconSvg('swap')}</div>
-          <div class="tx-card-main">
-            <div class="tx-card-title">${fromMe ? `Le pagaste a ${esc(partnerName)}` : `${esc(partnerName)} te pagó`}</div>
-            <div class="tx-card-sub">Pago${item.note ? ' · ' + esc(item.note) : ''}</div>
-          </div>
-          <div class="tx-card-amount"><div class="v pos">${fmtMoney(item.amount, item.currency)}</div></div>
-        </div>`;
-      }
-      const paidByMe = item.paid_by === me.id;
-      const who = paidByMe ? myName : partnerName;
-      return `<div class="tx-card-row" data-shared-item="expense:${esc(item.id)}">
-        <div class="shared-avatar ${paidByMe ? 'me' : 'partner'}">${esc(initials(who))}</div>
-        <div class="tx-card-main">
-          <div class="tx-card-title">${esc(item.note || 'Gasto compartido')}</div>
-          <div class="tx-card-sub">Pagó ${esc(paidByMe ? 'vos' : who)} · tu parte ${fmtMoney(myPart(item), item.currency)}</div>
-        </div>
-        <div class="tx-card-amount"><div class="v">${fmtMoney(item.amount, item.currency)}</div></div>
-      </div>`;
-    };
-    const feedHTML = dayGroups(feed).map(({ dateStr, items }) => `
-      <div class="tx-card-list tx-list-compact">
-        <div class="tx-day-head">${esc(dayGroupLabel(dateStr))}</div>
-        ${items.map(feedRow).join('')}
-      </div>`).join('');
+    // Quién pagó en el mes en curso.
+    const cm = curMonth();
+    const paidIn = (m, uid) => shared.expenses.reduce((acc, e) => {
+      if (monthKeyOf(e.date) !== m || e.paid_by !== uid) return acc;
+      const v = conv(e.amount, e.currency);
+      return v == null ? acc : acc + v;
+    }, 0);
+    const mineCm = paidIn(cm, me.id);
+    const theirsCm = partner ? paidIn(cm, partner.user_id) : 0;
+    const totalCm = mineCm + theirsCm;
 
-    // Últimos 6 meses (hasta el actual) desde el primero con algún gasto
-    // compartido: cuánto pagó cada uno y el total en común por mes.
-    const cmSh = curMonth();
+    // Gastos en común por mes (los últimos 6 desde el primero con gastos):
+    // barras apiladas por persona con el total arriba.
     const shMonths = [];
     if (shared.expenses.length) {
       const first = shared.expenses.map((e) => monthKeyOf(e.date)).sort()[0];
-      for (let i = 5; i >= 0; i--) { const m = addMonthsKey(cmSh, -i); if (m >= first) shMonths.push(m); }
+      for (let i = 5; i >= 0; i--) { const m = addMonthsKey(cm, -i); if (m >= first) shMonths.push(m); }
     }
-    const paidIn = (m, uid) => shared.expenses.reduce((acc, e) => {
-      if (monthKeyOf(e.date) !== m || e.paid_by !== uid) return acc;
-      const v = convOrNull(Number(e.amount), e.currency);
-      return v == null ? acc : acc + v;
-    }, 0);
-    const shMine = shMonths.map((m) => paidIn(m, me.id));
-    const shTheirs = partner ? shMonths.map((m) => paidIn(m, partner.user_id)) : [];
+    const monthRows = shMonths.map((m) => ({ label: monthShortLabel(m).toLowerCase(), mine: paidIn(m, me.id), theirs: partner ? paidIn(m, partner.user_id) : 0 }));
+    const chartSvg = (() => {
+      if (!partner || !monthRows.length) return '';
+      const W = 320, H = 140, base = 118, top = 26;
+      const max = Math.max(1, ...monthRows.map((r) => r.mine + r.theirs));
+      const slot = W / monthRows.length, bw = Math.min(44, slot * 0.55);
+      const yh = (v) => (v / max) * (base - top);
+      const short = (v) => (hideAmounts ? '•••' : v >= 1e6 ? `${(v / 1e6).toFixed(2).replace('.', ',')} M` : v >= 1e3 ? `${Math.round(v / 1e3)} mil` : String(Math.round(v)));
+      return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(`Gastos en común por mes: ${monthRows.map((r) => `${r.label} ${hideAmounts ? '' : fmtPlain(r.mine + r.theirs)} (${myName} ${hideAmounts ? '' : fmtPlain(r.mine)}, ${partnerName} ${hideAmounts ? '' : fmtPlain(r.theirs)})`).join('; ')}`)}">
+        <line x1="0" x2="320" y1="${base}" y2="${base}" class="g-grid"/>
+        ${monthRows.map((r, i) => {
+          const x = slot * i + (slot - bw) / 2, cx = slot * i + slot / 2;
+          const hMe = yh(r.mine), hTh = yh(r.theirs), tot = r.mine + r.theirs;
+          return `${hMe > 0 ? `<rect x="${x.toFixed(1)}" y="${(base - hMe).toFixed(1)}" width="${bw.toFixed(1)}" height="${hMe.toFixed(1)}" rx="${hTh > 0 ? 0 : 5}" style="fill:${ME_COLOR}"/>` : ''}
+            ${hTh > 0 ? `<rect x="${x.toFixed(1)}" y="${(base - hMe - hTh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hTh.toFixed(1)}" rx="5" style="fill:${PARTNER_COLOR}"/>` : ''}
+            ${tot > 0 ? `<text x="${cx.toFixed(1)}" y="${(base - hMe - hTh - 8).toFixed(1)}" text-anchor="middle" class="g-lab">${short(tot)}</text>` : ''}
+            <text x="${cx.toFixed(1)}" y="135" text-anchor="middle"${shMonths[i] === cm ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`;
+        }).join('')}
+      </svg>`;
+    })();
+
+    // Últimos en común (gastos y pagos), los más nuevos primero.
+    const feed = [
+      ...shared.expenses.map((e) => ({ kind: 'expense', ...e })),
+      ...shared.settlements.map((x) => ({ kind: 'settlement', ...x })),
+    ].sort((x, y) => y.date.localeCompare(x.date) || (y.created_at || '').localeCompare(x.created_at || ''));
+    const shortDate = (d) => new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short' }).format(parseDate(d)).replace('.', '');
+    const feedRow = (item) => {
+      if (item.kind === 'settlement') {
+        const fromMe = item.from_user === me.id;
+        return `<button type="button" class="row sh-row" data-shared-item="settlement:${esc(item.id)}">
+          <span class="cic" style="--c:var(--brand-text)">${spriteIcon('swap')}</span>
+          <div class="row-main"><div class="tt">${fromMe ? `Le pagaste a ${esc(partnerName)}` : `${esc(partnerName)} te pagó`}</div><div class="st">Pago · ${esc(shortDate(item.date))}${item.note ? ' · ' + esc(item.note) : ''}</div></div>
+          <div class="amt"><span class="num money">${esc(fmtPlain(Number(item.amount), item.currency))}</span></div>
+        </button>`;
+      }
+      const paidByMe = item.paid_by === me.id;
+      // Si el gasto salió de un movimiento tuyo, toma el ícono y el color de
+      // su categoría; si no, el color de quien pagó.
+      const myTx = S().transactions.find((t) => t.sharedExpenseId === item.id);
+      const icon = myTx ? `<span class="cic" style="--c:${catColor(myTx.categoryId)}">${iconSvg(categoryIconName(myTx.categoryId))}</span>`
+        : `<span class="cic" style="--c:${paidByMe ? ME_COLOR : PARTNER_COLOR}">${spriteIcon('users')}</span>`;
+      return `<button type="button" class="row sh-row" data-shared-item="expense:${esc(item.id)}">
+        ${icon}
+        <div class="row-main"><div class="tt">${esc(item.note || (myTx ? catName(myTx.categoryId) : 'Gasto compartido'))}</div><div class="st">Pagó ${esc(paidByMe ? myName : partnerName)} · ${esc(shortDate(item.date))}</div></div>
+        <div class="amt"><span class="num money">${esc(fmtPlain(Number(item.amount), item.currency))}</span><small class="money">tu parte ${esc(fmtPlain(myPart(item), item.currency))}</small></div>
+      </button>`;
+    };
 
     el.innerHTML = `
-      <div class="card sh-hero">
-        <div class="sh-hero-top">
-          <span class="sh-hero-label">${iconSvg('heart')}${esc(shared.household.name || 'Hogar compartido')}</span>
-          <span class="sh-hero-tools">
-            ${partner ? '<button type="button" class="sh-icon-btn" id="btn-edit-name" aria-label="Cambiar tu nombre" title="Tu nombre">✎</button>' : ''}
-            <button type="button" class="sh-icon-btn" id="btn-refresh-shared" aria-label="Actualizar" title="Actualizar">↻</button>
-          </span>
+      <section class="k-card sh-card">
+        <div class="sh-who">
+          <span class="avs">${avatar(myName, ME_COLOR)}${partner ? avatar(partnerName, PARTNER_COLOR) : ''}</span>
+          <span class="ovl">${esc(shared.household.name || 'Hogar compartido')}</span>
         </div>
-        <div class="sh-hero-head">${esc(headline)}</div>
-        ${hasDebt ? `<div class="sh-hero-amount">${fmtDisp(balAbs)}</div>` : ''}
+        <p class="t2 sh-headline">${esc(headline)}</p>
+        ${hasDebt ? `<div class="big num money sh-big">${esc(fmtPlain(balAbs))}</div>` : ''}
+        <div class="sh-actions${hasDebt ? '' : ' single'}">
+          ${hasDebt ? '<button type="button" class="btn btn-primary" data-settle>Saldar deuda</button>' : ''}
+          ${partner ? `<button type="button" class="btn btn-sec" data-addse>${spriteIcon('plus')}Gasto</button>` : '<button type="button" class="btn btn-primary" data-invite>Generar código para tu pareja</button>'}
+        </div>
+        <div id="invite-box"></div>
         ${partner ? `
-        <div class="sh-people">
-          <div class="sh-person"><span class="shared-avatar me">${esc(initials(myName))}</span><div><span>Pagó ${esc(myName)}</span><b>${fmtDisp(totals.mine)}</b></div></div>
-          <div class="sh-person"><span class="shared-avatar partner">${esc(initials(partnerName))}</span><div><span>Pagó ${esc(partnerName)}</span><b>${fmtDisp(totals.theirs)}</b></div></div>
-        </div>
-        ${totalCommon > 0 ? `
-        <div class="sh-split"><span class="me" style="width:${(totals.mine / totalCommon) * 100}%"></span><span class="partner" style="width:${(totals.theirs / totalCommon) * 100}%"></span></div>
-        <div class="sh-split-txt"><span>Total en común</span><b>${fmtDisp(totalCommon)}</b></div>` : ''}` : ''}
-        <div class="sh-hero-actions">
-          <button type="button" class="btn btn-sm sh-btn-primary" id="btn-add-se">+ Gasto compartido</button>
-          ${hasDebt ? '<button type="button" class="btn btn-sm sh-btn-ghost" id="btn-settle-debt">Registrar pago</button>' : ''}
-          ${!partner ? '<button type="button" class="btn btn-sm sh-btn-ghost" id="btn-invite">Generar código para tu pareja</button>' : ''}
-        </div>
-      </div>
-      <div id="invite-box"></div>
+        <div class="sh-paid">
+          <div class="sh-paid-h"><span class="ovl">Quién pagó en ${esc(new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(parseDate(cm + '-01')))}</span><span class="t2 num money">${esc(fmtPlain(totalCm))}</span></div>
+          <div class="stack">${totalCm > 0 ? `<i style="width:${((mineCm / totalCm) * 100).toFixed(2)}%;background:${ME_COLOR}"></i><i style="width:${((theirsCm / totalCm) * 100).toFixed(2)}%;background:${PARTNER_COLOR}"></i>` : ''}</div>
+          <div class="sh-paid-who"><span><span class="t2">${esc(myName)}</span> <b class="num money">${esc(fmtPlain(mineCm))}</b></span><span><span class="t2">${esc(partnerName)}</span> <b class="num money">${esc(fmtPlain(theirsCm))}</b></span></div>
+        </div>` : ''}
+      </section>
 
-      ${partner && shMonths.length ? `
-      <div class="card">
-        <h2 class="card-title"><span>Gastos de cada uno por mes</span></h2>
-        <div class="chart-legend">
-          <span><span class="key" style="background:var(--accent)"></span>${esc(myName)}</span>
-          <span><span class="key" style="background:var(--warn)"></span>${esc(partnerName)}</span>
-        </div>
-        <div id="chart-sh-people"></div>
-      </div>
-      <div class="card">
-        <h2 class="card-title"><span>Total gastado en común por mes</span></h2>
-        <div id="chart-sh-total"></div>
-      </div>` : ''}
+      ${chartSvg ? `
+      <section class="k-card">
+        <div class="k-card-h k-card-h-tight"><h2>Gastos en común por mes</h2></div>
+        <div class="legend"><span><i style="background:${ME_COLOR}"></i>${esc(myName)}</span><span><i style="background:${PARTNER_COLOR}"></i>${esc(partnerName)}</span></div>
+        ${chartSvg}
+      </section>` : ''}
 
-      <button type="button" class="card sh-feed-btn" id="btn-sh-feed">
-        <span>${iconSvg('swap')}Movimientos compartidos</span>
-        <span class="sh-feed-count">${feed.length} ›</span>
-      </button>
-      <button class="link-btn shared-leave" id="btn-leave-house">Salir del hogar</button>`;
+      ${feed.length ? `
+      <div class="sh-feed-h"><span class="ovl">Últimos en común</span>${feed.length > 3 ? `<button type="button" class="link" data-allfeed>Ver los ${feed.length}${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}</button>` : ''}</div>
+      <div class="group">${feed.slice(0, 3).map(feedRow).join('')}</div>` : (partner ? '<div class="empty">Todavía no cargaron ningún gasto compartido. Tocá "+ Gasto" o marcá un gasto como compartido al cargarlo.</div>' : '')}`;
 
-    if ($('#chart-sh-people', el)) {
-      const labels = shMonths.map((m) => monthShortLabel(m));
-      Charts.lines($('#chart-sh-people', el), labels, [
-        { label: myName, color: 'var(--accent)', values: shMine },
-        { label: partnerName, color: 'var(--warn)', values: shTheirs },
-      ], {
-        smooth: true, markerRadius: 5, pointLabels: true, pointLabelSize: 16, topPad: 30, leftPad: 52,
-        labelAuto: true, skipZeroLabels: true,
-        fmtAxis: (v) => Charts.compact(v),
-        ariaLabel: 'Gastos compartidos pagados por cada uno, por mes',
-      });
-      Charts.singleBars($('#chart-sh-total', el), shMonths.map((m, i) => ({ label: labels[i], value: shMine[i] + shTheirs[i] })), {
-        valueLabels: true, valueLabelSize: 18, topPad: 30, bottomPad: 30,
-        fmt: (v) => Charts.compact(v),
-        ariaLabel: 'Total gastado en común por mes',
+    // Menú ⋮ de la hoja: editar, actualizar y salir del hogar (con la
+    // confirmación adentro del mismo panel, sin diálogo nativo).
+    const right = $('#bar-right');
+    if (right) {
+      right.innerHTML = `<button type="button" class="icb" data-shmenu aria-label="Opciones del hogar">${spriteIcon('dots-v')}</button>`;
+      $('[data-shmenu]', right).addEventListener('click', sharedMenuSheet);
+    }
+    function sharedMenuSheet() {
+      const item = (key, icon, label, danger) => `<button type="button" class="pick-row${danger ? ' pick-danger' : ''}" data-shopt="${key}"><span class="cic" style="--c:${danger ? 'var(--neg)' : 'var(--t2)'}">${icon}</span><span>${esc(label)}</span></button>`;
+      openPanel({
+        title: shared.household.name || 'Hogar compartido',
+        body: `<div class="pick-list" data-shmenu-list>
+          ${partner ? item('name', spriteIcon('note'), 'Cambiar tu nombre') : item('invite', spriteIcon('users'), 'Generar código para tu pareja')}
+          ${item('refresh', spriteIcon('repeat'), 'Actualizar')}
+          ${item('leave', spriteIcon('back'), 'Salir del hogar', true)}
+        </div>`,
+        onClick(e, dlg) {
+          const b = e.target.closest('[data-shopt]');
+          if (!b) return;
+          const k = b.dataset.shopt;
+          if (k === 'name') { closeSheet(dlg).then(editNameForm); return; }
+          if (k === 'invite') { closeSheet(dlg).then(makeInvite); return; }
+          if (k === 'refresh') { closeSheet(dlg).then(() => { shared.loaded = false; render(); }); return; }
+          if (k === 'leave') {
+            $('[data-shbody]', dlg).innerHTML = `
+              <div class="confirm-box">
+                <p><b>¿Salir de este hogar?</b></p>
+                <p class="t2">Vas a dejar de ver el historial de gastos en común. Tu pareja lo sigue viendo.</p>
+                <button type="button" class="btn btn-full btn-danger-fill" data-shopt="leave-yes">Salir del hogar</button>
+                <button type="button" class="btn-ter" data-shopt="leave-no">No, quedarme</button>
+              </div>`;
+            return;
+          }
+          if (k === 'leave-no') { closeSheet(dlg); return; }
+          if (k === 'leave-yes') {
+            b.disabled = true;
+            Cloud.leaveHousehold(shared.household.id)
+              .then(() => { shared.loaded = false; return closeSheet(dlg); })
+              .then(() => loadShared())
+              .catch((err) => { b.disabled = false; alert('No se pudo salir: ' + friendlyCloudError(err)); });
+          }
+        },
       });
     }
+    async function makeInvite() {
+      try {
+        const code = await Cloud.createInvite(shared.household.id);
+        const box = $('#invite-box', el);
+        if (box) box.innerHTML = `<div class="invite-code">
+          <div class="t2">Compartile este código a tu pareja (vale 7 días). Lo carga en <b>Compartido → Ya tengo un código</b>:</div>
+          <div class="num invite-code-v">${esc(code)}</div>
+        </div>`;
+      } catch (e) { alert('No se pudo generar el código: ' + friendlyCloudError(e)); }
+    }
 
-    // Movimientos compartidos en un pop-up (antes siempre desplegados).
-    $('#btn-sh-feed', el).addEventListener('click', () => {
-      const dlg = openDialog('Movimientos compartidos', feed.length
-        ? `<div class="tx-day-blocks">${feedHTML}</div><div class="hint">Tocá un movimiento para ver el detalle o eliminarlo.</div>`
-        : '<div class="empty">Todavía no cargaron ningún gasto compartido.</div>', { submitLabel: 'Cerrar', viewOnly: true });
+    // Todos los movimientos compartidos en un panel.
+    const allFeed = $('[data-allfeed]', el);
+    if (allFeed) allFeed.addEventListener('click', () => {
+      const dlg = openDialog('Movimientos compartidos', `<div class="group">${feed.map(feedRow).join('')}</div>`, { viewOnly: true });
       $$('[data-shared-item]', dlg).forEach((row) => row.addEventListener('click', () => {
-        dlg.close();
-        openSharedItem(row.dataset.sharedItem);
+        closeSheet(dlg).then(() => openSharedItem(row.dataset.sharedItem));
       }));
     });
+    $$('[data-shared-item]', el).forEach((row) => row.addEventListener('click', () => openSharedItem(row.dataset.sharedItem)));
 
-    // Detalle de un gasto o pago compartido (antes: una ✕ en cada fila).
+    // Detalle de un gasto o pago compartido: borrar va detrás del ⋯.
     function openSharedItem(key) {
-      {
       const [kind, id] = key.split(':');
       const item = kind === 'expense' ? shared.expenses.find((x) => x.id === id) : shared.settlements.find((x) => x.id === id);
       if (!item) return;
@@ -6958,68 +7055,96 @@
           ${r('Para', esc(fromMe ? partnerName : myName))}
           ${item.note ? r('Nota', esc(item.note)) : ''}`;
       }
-      const dlg = openDialog(kind === 'expense' ? (item.note || 'Gasto compartido') : 'Pago', body, {
-        submitLabel: 'Cerrar', viewOnly: true,
-        footExtra: '<button type="button" class="btn btn-danger" data-sh-del style="margin-right:auto">Eliminar</button>',
-      });
-      $('[data-sh-del]', dlg).addEventListener('click', async () => {
-        // Si el gasto compartido salió de un movimiento tuyo, se borra
-        // también ese movimiento (y viceversa, ver deleteTx).
-        const myTx = kind === 'expense' ? (S().transactions.find((t) => t.sharedExpenseId === id)
-          || (item.paid_by === me.id ? S().transactions.find((t) => t.shared && !t.sharedExpenseId && t.date === item.date
-            && t.currency === item.currency && Math.abs(Number(t.amount) - Number(item.amount)) < 0.01) : null)) : null;
-        if (!confirm(kind === 'expense'
-          ? (myTx ? '¿Eliminar este gasto compartido? También se va a borrar de tus movimientos.' : '¿Eliminar este gasto compartido?')
-          : '¿Eliminar este pago?')) return;
-        try {
-          if (kind === 'expense') {
-            await Cloud.deleteSharedExpense(id);
-            shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
-            if (myTx) {
-              const drop = myTx.groupId ? S().transactions.filter((t) => t.groupId === myTx.groupId) : [myTx];
-              for (const t of drop) removeLinkedSavingEntry(t.id);
-              const ids = new Set(drop.map((t) => t.id));
-              S().transactions = S().transactions.filter((t) => !ids.has(t.id));
-              Store.save();
-            }
-          } else {
-            await Cloud.deleteSettlement(id);
-            shared.settlements = await Cloud.listSettlements(shared.household.id);
+      const myTx = kind === 'expense' ? (S().transactions.find((t) => t.sharedExpenseId === id)
+        || (item.paid_by === me.id ? S().transactions.find((t) => t.shared && !t.sharedExpenseId && t.date === item.date
+          && t.currency === item.currency && Math.abs(Number(t.amount) - Number(item.amount)) < 0.01) : null)) : null;
+      // Borrar pide confirmación adentro del mismo panel: es un dato que
+      // también ve tu pareja, así que no hay "Deshacer".
+      openPanel({
+        title: kind === 'expense' ? (item.note || 'Gasto compartido') : 'Pago',
+        body: `<div class="tx-detail">${body}
+          <button type="button" class="btn-ter btn-ter-danger" data-shdel>${kind === 'expense' ? 'Borrar gasto' : 'Borrar pago'}</button></div>`,
+        onClick(e, dlg) {
+          if (e.target.closest('[data-shdel]')) {
+            $('[data-shbody]', dlg).innerHTML = `
+              <div class="confirm-box">
+                <p><b>${kind === 'expense' ? '¿Borrar este gasto compartido?' : '¿Borrar este pago?'}</b></p>
+                <p class="t2">${myTx ? 'También se va a borrar de tus movimientos. ' : ''}Tu pareja tampoco lo va a ver más.</p>
+                <button type="button" class="btn btn-full btn-danger-fill" data-shdel-yes>Borrar</button>
+                <button type="button" class="btn-ter" data-shdel-no>No, dejarlo</button>
+              </div>`;
+            return;
           }
-          dlg.close();
-          render();
-        } catch (e) { alert('No se pudo eliminar: ' + friendlyCloudError(e)); }
+          if (e.target.closest('[data-shdel-no]')) { closeSheet(dlg); return; }
+          const yes = e.target.closest('[data-shdel-yes]');
+          if (!yes) return;
+          yes.disabled = true;
+          (async () => {
+            try {
+              if (kind === 'expense') {
+                await Cloud.deleteSharedExpense(id);
+                shared.expenses = await Cloud.listSharedExpenses(shared.household.id);
+                if (myTx) {
+                  const drop = myTx.groupId ? S().transactions.filter((t) => t.groupId === myTx.groupId) : [myTx];
+                  for (const t of drop) removeLinkedSavingEntry(t.id);
+                  const ids = new Set(drop.map((t) => t.id));
+                  S().transactions = S().transactions.filter((t) => !ids.has(t.id));
+                  Store.save();
+                }
+              } else {
+                await Cloud.deleteSettlement(id);
+                shared.settlements = await Cloud.listSettlements(shared.household.id);
+              }
+              await closeSheet(dlg);
+              render();
+              showToast(kind === 'expense' ? 'Se borró el gasto compartido' : 'Se borró el pago');
+            } catch (err) { yes.disabled = false; alert('No se pudo eliminar: ' + friendlyCloudError(err)); }
+          })();
+        },
       });
-      }
     }
 
-    $('#btn-add-se', el).addEventListener('click', sharedExpenseForm);
-    const settleDebt = $('#btn-settle-debt', el);
-    if (settleDebt) settleDebt.addEventListener('click', settlementForm);
-    const editName = $('#btn-edit-name', el);
-    if (editName) editName.addEventListener('click', editNameForm);
-    $('#btn-refresh-shared', el).addEventListener('click', () => {
-      shared.loaded = false;
+    const addSe = $('[data-addse]', el);
+    if (addSe) addSe.addEventListener('click', sharedExpenseForm);
+    const settle = $('[data-settle]', el);
+    if (settle) settle.addEventListener('click', () => settlementForm({ amount: balAbs, meToPartner: meIsDebtor }));
+    const invite = $('[data-invite]', el);
+    if (invite) invite.addEventListener('click', makeInvite);
+  }
+
+
+  /* ================= Vista: Más (lista) ================= */
+  function vMas(el) {
+    const today = todayStr();
+    const instGroups = new Set(S().transactions.filter((t) => t.groupId && t.installment && t.date > today).map((t) => t.groupId));
+    const nB = S().budgets.length, nR = S().recurring.length;
+    let sharedSub = 'Gastos en común con tu pareja';
+    if (shared.household && sharedPartner()) {
+      const bal = sharedBalance();
+      const who = partnerLabel(sharedPartner());
+      sharedSub = Math.abs(bal) < 0.01 ? 'Están a mano' : (bal > 0 ? `${who} te debe ${fmtPlain(Math.abs(bal))}` : `Le debés a ${who} ${fmtPlain(Math.abs(bal))}`);
+    }
+    const row = (view, icon, color, title, sub) => `
+      <button type="button" class="row mas-row" data-goview="${view}">
+        <span class="cic" style="--c:${color}">${icon}</span>
+        <div class="row-main"><div class="tt">${esc(title)}</div><div class="st${view === 'compartido' ? ' money' : ''}">${esc(sub)}</div></div>
+        ${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}
+      </button>`;
+    el.innerHTML = `
+      <div class="group">
+        ${row('cuotas', spriteIcon('repeat'), 'var(--c-auto)', 'Cuotas', instGroups.size ? `${instGroups.size} compra${instGroups.size === 1 ? '' : 's'} con cuotas pendientes` : 'Sin cuotas pendientes')}
+        ${row('presupuestos', spriteIcon('target'), 'var(--c-comida)', 'Presupuestos', nB ? `${nB} presupuesto${nB === 1 ? '' : 's'}` : 'Ponele un tope a cada categoría')}
+        ${row('fijos', spriteIcon('cal'), 'var(--c-casa)', 'Fijos', nR ? `${nR} movimiento${nR === 1 ? '' : 's'} fijo${nR === 1 ? '' : 's'}` : 'Alquiler, suscripciones, sueldo')}
+        ${row('compartido', spriteIcon('users'), 'var(--c-tel)', 'Compartido', sharedSub)}
+      </div>
+      <div class="group">
+        ${row('ajustes', spriteIcon('bolt'), 'var(--t2)', 'Ajustes', 'Tema, cotización y datos')}
+      </div>`;
+    $$('[data-goview]', el).forEach((b) => b.addEventListener('click', () => {
+      ui.view = b.dataset.goview;
+      if (ui.view === 'compartido') loadShared();
       render();
-    });
-    const inviteBtn = $('#btn-invite', el);
-    if (inviteBtn) inviteBtn.addEventListener('click', async () => {
-      try {
-        const code = await Cloud.createInvite(shared.household.id);
-        $('#invite-box', el).innerHTML = `<div class="card">
-          <div class="hint">Compartile este código a tu pareja (vale 7 días). Lo carga en <b>Compartido → Ya tengo un código</b>:</div>
-          <div class="tile-value" style="letter-spacing:0.08em;margin-top:6px">${esc(code)}</div>
-        </div>`;
-      } catch (e) { alert('No se pudo generar el código: ' + friendlyCloudError(e)); }
-    });
-    $('#btn-leave-house', el).addEventListener('click', async () => {
-      if (!confirm('¿Salir de este hogar compartido? Vas a dejar de ver el historial de gastos en común.')) return;
-      try {
-        await Cloud.leaveHousehold(shared.household.id);
-        shared.loaded = false;
-        await loadShared();
-      } catch (e) { alert('No se pudo salir: ' + friendlyCloudError(e)); }
-    });
+    }));
   }
 
   /* ================= Router / render ================= */
@@ -7035,6 +7160,7 @@
     presupuestos: (el) => vPlan(el, 'presupuestos'),
     fijos: (el) => vPlan(el, 'fijos'),
     ajustes: vAjustes,
+    mas: vMas,
   };
 
   // Navegación de 4 botones abajo (máximo); cada uno puede contener más de
@@ -7043,16 +7169,16 @@
     { key: 'inicio', views: ['resumen'] },
     { key: 'movimientos', views: ['movimientos', 'categorias', 'calendario'] },
     { key: 'cuentas', views: ['tarjetas', 'ahorros'] },
-    { key: 'mas', views: ['cuotas', 'presupuestos', 'fijos', 'compartido'] },
+    // Más es una lista (vMas) y cada opción se abre como su propia hoja,
+    // con "‹ Más" para volver (sin pestañas).
+    { key: 'mas', views: ['mas', 'cuotas', 'presupuestos', 'fijos', 'compartido', 'ajustes'], list: true },
   ];
   const VIEW_LABELS = {
-    resumen: 'Resumen', movimientos: 'Movimientos', calendario: 'Calendario',
+    resumen: 'Resumen', movimientos: 'Lista', calendario: 'Calendario',
     categorias: 'Categorías', tarjetas: 'Tarjetas y medios', ahorros: 'Ahorros',
-    cuotas: 'Cuotas', presupuestos: 'Presupuestos', fijos: 'Fijos', compartido: 'Compartido', ajustes: 'Ajustes',
+    cuotas: 'Cuotas', presupuestos: 'Presupuestos', fijos: 'Fijos', compartido: 'Compartido', ajustes: 'Ajustes', mas: 'Más',
   };
-  // Ajustes ya no vive dentro de ningún grupo de la nav inferior — se abre
-  // directo con el botón del encabezado, así que groupOf() puede no
-  // encontrar nada para esa vista (y para ninguna otra que se agregue suelta).
+  // Puede no encontrar nada para una vista que se agregue suelta.
   function groupOf(view) { return GROUPS.find((g) => g.views.includes(view)) || null; }
 
   // Al cambiar de hoja (no en cualquier re-render — eso incluiría cosas
@@ -7061,6 +7187,133 @@
   // en una hoja, la siguiente no debería abrir en ese mismo nivel.
   let lastRenderedView = null;
   const lastSubIdx = {};
+
+  /* El saldo de Inicio anima su cambio (de lo que mostraba antes a lo
+     nuevo) cuando cambia sin cambiar de mes ni de moneda, por ejemplo al
+     guardar un movimiento. */
+  let lastHeroBalance = null;
+  function animateHeroBalance(el) {
+    const box = $('.hero-value[data-balance]', el);
+    if (!box) return;
+    const to = Number(box.dataset.balance);
+    const key = box.dataset.balanceKey;
+    const prev = lastHeroBalance;
+    lastHeroBalance = { key, value: to };
+    const out = $('.hero-amount-int', box);
+    if (!prev || prev.key !== key || prev.value === to || !out || hideAmounts || prefersReducedMotion()) return;
+    const from = prev.value;
+    const t0 = performance.now(), dur = 600;
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / dur);
+      const v = from + (to - from) * (1 - Math.pow(1 - k, 3));
+      if (!out.isConnected) return;
+      out.textContent = nfHero.format(Math.abs(k === 1 ? to : v));
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  /* ---------- Mes elegido (barra superior) ----------
+     Inicio y Movimientos (con Categorías y Calendario) dependen del mes:
+     la barra superior muestra el mes con flechas ‹ › y, en esas hojas, se
+     cambia también deslizando el contenido hacia los costados. El resto de
+     las secciones muestra su nombre en ese lugar. */
+  const MONTH_GROUPS = ['inicio', 'movimientos'];
+  const GROUP_TITLES = { inicio: 'Inicio', movimientos: 'Movimientos', cuentas: 'Cuentas', mas: 'Más' };
+  const usesMonth = (grp) => !!grp && MONTH_GROUPS.includes(grp.key);
+  const topbarMonthLabel = (mk) => {
+    const [y, m] = mk.split('-').map(Number);
+    const name = new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(new Date(y, m - 1, 1));
+    return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${y}`;
+  };
+  // Título grande que se achica al scrollear: cuando sale de la pantalla
+  // (queda debajo de la barra superior), su nombre aparece chico arriba.
+  let largeTitleObserver = null;
+  function watchLargeTitle(el) {
+    if (largeTitleObserver) largeTitleObserver.disconnect();
+    document.body.classList.remove('title-collapsed');
+    const t = $('.largetitle', el);
+    if (!t || !('IntersectionObserver' in window)) return;
+    const topbar = $('.topbar');
+    const h = topbar ? topbar.getBoundingClientRect().height : 60;
+    largeTitleObserver = new IntersectionObserver(([entry]) => {
+      document.body.classList.toggle('title-collapsed', !entry.isIntersecting && entry.boundingClientRect.top < h);
+    }, { rootMargin: `-${Math.round(h)}px 0px 0px 0px`, threshold: 0 });
+    largeTitleObserver.observe(t);
+  }
+
+  function renderTopbar(grp) {
+    const left = $('#topbar-left');
+    if (!left) return;
+    if (!usesMonth(grp)) {
+      // El nombre de la hoja aparece arriba recién cuando el título grande
+      // sale de la pantalla al scrollear (ver watchLargeTitle()).
+      const title = grp && grp.list && ui.view !== grp.views[0] ? VIEW_LABELS[ui.view] : ((grp && GROUP_TITLES[grp.key]) || VIEW_LABELS[ui.view] || '');
+      left.innerHTML = `<span class="topbar-title section-title" aria-hidden="true">${esc(title)}</span>`;
+      return;
+    }
+    // Fuera del mes actual, el nombre del mes queda en verde y al tocarlo
+    // vuelve al mes actual (no entra un botón "Hoy" al lado sin cortar
+    // "Septiembre 2026" en un celular).
+    const isCur = ui.month === curMonth();
+    const label = topbarMonthLabel(ui.month);
+    const longCls = label.length > 13 ? ' is-long' : '';
+    left.innerHTML = `
+      <button type="button" class="icb ghost" data-mnav="-1" aria-label="Mes anterior">${spriteIcon('cl')}</button>
+      ${isCur
+        ? `<h1 class="topbar-title topbar-month${longCls}">${esc(label)}</h1>`
+        : `<h1 class="topbar-title topbar-month${longCls}"><button type="button" class="topbar-month-btn" data-mtoday aria-label="${esc(label)}. Volver a ${esc(topbarMonthLabel(curMonth()))}">${esc(label)}</button></h1>`}
+      <button type="button" class="icb ghost" data-mnav="1" aria-label="Mes siguiente">${spriteIcon('cr')}</button>`;
+  }
+  // Cambia de mes (delta = ±1, o 0 para volver al actual). Si el navegador
+  // tiene View Transitions, el contenido se desliza hacia el lado que
+  // corresponde; si no (o con "reducir movimiento"), cambia sin animación.
+  function changeMonth(delta) {
+    const target = delta ? addMonthsKey(ui.month, delta) : curMonth();
+    if (target === ui.month) return;
+    const dir = target > ui.month ? 'next' : 'prev';
+    const go = () => { ui.month = target; ui.fAllMonths = false; render(); };
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!document.startViewTransition || reduce) { go(); return; }
+    const root = document.documentElement;
+    root.dataset.slide = dir;
+    const t = document.startViewTransition(go);
+    t.finished.finally(() => { delete root.dataset.slide; });
+  }
+  // Deslizar el contenido hacia los costados cambia de mes. Se ignora si el
+  // gesto empieza adentro de algo que se scrollea de costado (tablas,
+  // gráficos anchos, chips) o de un campo de texto, y si es más vertical
+  // que horizontal (eso es scrollear la página).
+  function initMonthSwipe() {
+    const view = $('#view');
+    let start = null;
+    const scrollsSideways = (node) => {
+      for (let n = node; n && n !== view; n = n.parentElement) {
+        if (n.matches('input, select, textarea, [data-noswipe]')) return true;
+        if (n.scrollWidth > n.clientWidth + 1) {
+          const ox = getComputedStyle(n).overflowX;
+          if (ox === 'auto' || ox === 'scroll') return true;
+        }
+      }
+      return false;
+    };
+    view.addEventListener('touchstart', (e) => {
+      start = null;
+      if (e.touches.length !== 1 || !usesMonth(groupOf(ui.view)) || scrollsSideways(e.target)) return;
+      const t = e.touches[0];
+      start = { x: t.clientX, y: t.clientY, at: Date.now() };
+    }, { passive: true });
+    view.addEventListener('touchend', (e) => {
+      if (!start) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - start.x, dy = t.clientY - start.y;
+      const quick = Date.now() - start.at < 600;
+      start = null;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5 || !quick) return;
+      changeMonth(dx < 0 ? 1 : -1);
+    }, { passive: true });
+    view.addEventListener('touchcancel', () => { start = null; }, { passive: true });
+  }
   function render() {
     const changingView = ui.view !== lastRenderedView;
     // Re-render en la misma hoja (ej. cambiar de moneda): mientras se arma
@@ -7070,45 +7323,35 @@
     const prevScrollY = window.scrollY;
     lastRenderedView = ui.view;
     const grp = groupOf(ui.view);
-    $$('.bottom-nav button').forEach((b) => b.classList.toggle('active', !!grp && b.dataset.group === grp.key));
+    $$('.tabbar [data-group]').forEach((b) => {
+      const on = !!grp && b.dataset.group === grp.key;
+      b.classList.toggle('active', on);
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    renderTopbar(grp);
     $$('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.cur === disp()));
     const eye = $('#btn-privacy');
     if (eye) {
-      eye.innerHTML = hideAmounts ? EYE_OFF_SVG : EYE_SVG;
+      eye.innerHTML = spriteIcon(hideAmounts ? 'eyeoff' : 'eye');
       eye.classList.toggle('active', hideAmounts);
       eye.setAttribute('aria-pressed', String(hideAmounts));
       eye.setAttribute('aria-label', hideAmounts ? 'Mostrar montos' : 'Ocultar montos');
       eye.title = hideAmounts ? 'Mostrar montos' : 'Ocultar montos';
     }
+    document.body.classList.toggle('hide-amounts', hideAmounts);
     const thumb = $('.seg-thumb');
     if (thumb) thumb.classList.toggle('pos-usd', disp() === 'USD');
     renderRateChip();
     renderAccountChip();
     renderBanner();
-    // Dentro de Ajustes el engranaje pasa a ser un ícono de "volver a
-    // Inicio" (antes no había forma de salir de Ajustes salvo la nav de
-    // abajo, que ni siquiera queda resaltada ahí).
-    const settingsBtn = $('#btn-open-settings');
-    if (settingsBtn) {
-      settingsBtn.innerHTML = ui.view === 'ajustes' ? iconSvg('home') : SETTINGS_GEAR_SVG;
-      settingsBtn.setAttribute('aria-label', ui.view === 'ajustes' ? 'Volver a Inicio' : 'Ajustes');
-    }
     const el = $('#view');
-    // Movimientos/Categorías/Calendario comparten un solo mes (ui.month):
-    // el selector va antes que las sub-pestañas y afuera de cualquier
-    // tarjeta de contenido en particular, con el mismo look que el de
-    // Inicio — así no parece "pertenecer" a una sola de las tres vistas.
-    const showMonthBar = grp && grp.key === 'movimientos';
-    const monthBarHTML = showMonthBar ? `
-      <div class="month-head-card">${heroHeadHTML(ui.month)}</div>
-      ${ui.month !== curMonth() ? '<button class="link-btn hero-mtoday shared-month-today" data-mtoday>volver al mes actual</button>' : ''}` : '';
     // Sub-pestañas con el mismo look que el selector de moneda: una píldora
     // que se desliza atrás de la activa. Se dibuja primero en la posición
     // de la pestaña anterior del mismo grupo y en el próximo frame se mueve
     // a la nueva, así el cambio se ve animado aunque se re-arme todo el HTML.
     let subtabsHTML = '';
     let subIdx = -1, fromIdx = -1;
-    if (grp && grp.views.length > 1) {
+    if (grp && grp.views.length > 1 && !grp.list) {
       subIdx = grp.views.indexOf(ui.view);
       fromIdx = lastSubIdx[grp.key] != null ? lastSubIdx[grp.key] : subIdx;
       lastSubIdx[grp.key] = subIdx;
@@ -7117,7 +7360,36 @@
         ${grp.views.map((v) => `<button type="button" data-subview="${v}" class="${v === ui.view ? 'active' : ''}">${esc(VIEW_LABELS[v])}</button>`).join('')}
       </div>`;
     }
-    el.innerHTML = monthBarHTML + subtabsHTML + '<div class="view-content"></div>';
+    // Movimientos (Lista, Categorías, Calendario): título grande y chip del
+    // mes arriba del segmentado. El chip abre el selector de mes (con
+    // "Todos los meses" para la lista).
+    let titleBarHTML = '';
+    if (grp && grp.key === 'movimientos') {
+      titleBarHTML = `
+      <div class="bar">
+        <h1 class="largetitle">Movimientos</h1>
+        <button type="button" class="chip" data-monthchip>${esc(ui.view === 'movimientos' && ui.fAllMonths ? 'Todos los meses' : monthShortLabel(ui.month) + ' ' + ui.month.slice(0, 4))}${spriteIcon('cd')}</button>
+      </div>`;
+    } else if (grp && grp.key === 'cuentas') {
+      titleBarHTML = '<h1 class="largetitle">Cuentas</h1>';
+    } else if (grp && grp.key === 'mas' && ui.view !== 'mas') {
+      // Cada opción de Más: "‹ Más" para volver y, a la derecha, el lugar
+      // para un menú propio de la hoja (ver vCompartido).
+      titleBarHTML = `
+      <div class="bar">
+        <button type="button" class="back-btn" data-backmas>${spriteIcon('cl')}Más</button>
+        <span class="bar-right" id="bar-right"></span>
+      </div>
+      <h1 class="largetitle">${esc(VIEW_LABELS[ui.view] || '')}</h1>`;
+    } else if (grp && grp.key === 'mas') {
+      titleBarHTML = '<h1 class="largetitle">Más</h1>';
+    }
+    el.innerHTML = titleBarHTML + subtabsHTML + '<div class="view-content"></div>';
+    const monthChip = $('[data-monthchip]', el);
+    if (monthChip) monthChip.addEventListener('click', monthPickerSheet);
+    const backMas = $('[data-backmas]', el);
+    if (backMas) backMas.addEventListener('click', () => { ui.view = 'mas'; render(); });
+    watchLargeTitle(el);
     if (subIdx >= 0) {
       // Las pestañas miden según su texto (no todas iguales), así que la
       // píldora toma la posición y el ancho reales del botón.
@@ -7138,14 +7410,6 @@
         requestAnimationFrame(() => { thumbEl.style.transition = ''; });
       }
     }
-    if (showMonthBar) {
-      $$('[data-mnav]', el).forEach((b) => b.addEventListener('click', () => {
-        ui.month = addMonthsKey(ui.month, Number(b.dataset.mnav));
-        render();
-      }));
-      const btnToday = $('[data-mtoday]', el);
-      if (btnToday) btnToday.addEventListener('click', () => { ui.month = curMonth(); render(); });
-    }
     $$('[data-subview]', el).forEach((b) => b.addEventListener('click', () => {
       b.blur();
       ui.view = b.dataset.subview;
@@ -7155,6 +7419,10 @@
       render();
     }));
     VIEWS[ui.view]($('.view-content', el));
+    // El resaltado de lo recién guardado se ve una sola vez (en la primera
+    // lista que lo muestre, dentro de los 15 segundos de guardarlo).
+    if (ui.newTxIds && ($('.is-new', el) || Date.now() - ui.newTxIds.at > 15000)) ui.newTxIds = null;
+    animateHeroBalance(el);
     if (changingView) window.scrollTo(0, 0);
     else if (window.scrollY !== prevScrollY) window.scrollTo(0, prevScrollY);
   }
@@ -7194,14 +7462,16 @@
     }
     sortMethodsOnce();
 
-    $$('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
+    $$('.tabbar [data-group]').forEach((b) => b.addEventListener('click', () => {
       // El botón queda enfocado al tocarlo, y en algunos navegadores
       // mobile eso dispara un scroll automático para "mostrar" el elemento
       // enfocado — aunque sea uno fijo (position: fixed) que ya está
       // siempre a la vista. Sacarle el foco apenas se toca evita ese salto.
       b.blur();
       const grp = GROUPS.find((g) => g.key === b.dataset.group);
-      if (!grp.views.includes(ui.view)) ui.view = grp.views[0];
+      // Tocar Más estando adentro de una de sus opciones vuelve a la lista.
+      if (grp.list && grp.views.includes(ui.view)) ui.view = grp.views[0];
+      else if (!grp.views.includes(ui.view)) ui.view = grp.views[0];
       // "Compartido" vive en la nube y lo puede cambiar la otra persona en
       // cualquier momento, así que se refresca al entrar — pero en segundo
       // plano, sin borrar lo que ya se había mostrado (loadShared() re-
@@ -7227,10 +7497,13 @@
       Charts.setMasked(hideAmounts);
       render();
     });
-    $('#btn-open-settings').addEventListener('click', () => {
-      ui.view = ui.view === 'ajustes' ? 'resumen' : 'ajustes';
-      render();
+    $('#btn-fab').addEventListener('click', (e) => { e.currentTarget.blur(); txForm(null); });
+    $('#topbar-left').addEventListener('click', (e) => {
+      const nav = e.target.closest('[data-mnav]');
+      if (nav) changeMonth(Number(nav.dataset.mnav));
+      else if (e.target.closest('[data-mtoday]')) changeMonth(0);
     });
+    initMonthSwipe();
     // La píldora de las sub-pestañas está en px (ver render()): si cambia el
     // ancho de pantalla (ej. girar el celular) se reacomoda sobre la activa.
     window.addEventListener('resize', () => {
@@ -7243,7 +7516,7 @@
     });
     // Restaura el scroll de la página al cerrar el diálogo, sin importar
     // cómo se cerró (botón, Escape, o dlg.close() desde código): ver openModal().
-    $('#dialog').addEventListener('close', () => { document.body.style.overflow = ''; });
+    $('#dialog').addEventListener('close', (e) => { if (!e.target.open) document.body.style.overflow = ''; });
 
     // Cada guardado local se sube a la nube (si hay sesión activa).
     Store.onSave((state) => Cloud.schedulePush(state));
@@ -7258,7 +7531,9 @@
     // chequeo solo corrió una vez, al abrir la app la última vez de cero.
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') maybeRefreshRates();
+      else flushPendingDelete(); // un borrado con "Deshacer" pendiente se hace ya
     });
+    window.addEventListener('pagehide', flushPendingDelete);
   }
 
   document.addEventListener('DOMContentLoaded', init);
