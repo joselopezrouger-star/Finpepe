@@ -2444,3 +2444,28 @@ body[data-grp="mas"] .topbar-inner, body[data-grp="cuentas"] .topbar-inner { min
 @media (min-height: 640px) {
   .brand-mark { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h) + 20px); margin: 0; z-index: 0; }
 }
+
+/* ---------- Categorías: cifras de cada fila (share y variación) ---------- */
+.cmet {
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 2px 16px; align-items: end; margin-top: 8px;
+}
+.cmet.cmet-2 { grid-template-columns: auto minmax(0, 1fr); }
+.cmet > div { display: grid; gap: 3px; min-width: 0; }
+.cmet-l { font: 500 11px/1.1 var(--f-text); color: var(--t3); white-space: nowrap; }
+.cmet b { font: 600 13.5px/1.2 var(--f-text); font-variant-numeric: tabular-nums; color: var(--t1); }
+.cmet-var { justify-items: end; text-align: right; }
+.cmet-var b { white-space: nowrap; }
+.cmet-var.bad b { color: var(--neg); }
+.cmet-var.good b { color: var(--brand-text); }
+.cmet-var.flat b { color: var(--t2); }
+.crow.sub .cmet { margin-top: 6px; }
+.crow.sub .cmet b { font-size: 13px; font-weight: 500; color: var(--t2); }
+.crow.sub .cmet-var.bad b { color: var(--neg); }
+.crow.sub .cmet-var.good b { color: var(--brand-text); }
+.crow .l2:has(> .barline:only-child) { margin-top: 8px; }
+.cat-cmp-note { margin-bottom: -4px; }
+.cmet { align-items: start; }
+.cmet-sub { font: 500 12px/1.2 var(--f-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cmet-var.bad .cmet-sub { color: var(--neg); }
+.cmet-var.good .cmet-sub { color: var(--brand-text); }
+.cmet-var.flat .cmet-sub { color: var(--t2); }
