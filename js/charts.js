@@ -783,5 +783,61 @@ const Charts = (() => {
     }
   }
 
-  return { COLORS, setMasked, hBars, lines, singleBars, statementBars, dailyBalance, pieCylinder, stacked100, compact, smoothPathD };
+
+  /* ---------- Ayudantes del rediseño (docs/rediseno/graficos.js) ----------
+     Líneas suaves que pasan exactamente por cada punto sin pasarse de los
+     datos (tangentes horizontales), áreas, escalones para acumulados,
+     grilla y marcadores. Devuelven strings SVG; los colores van siempre
+     como var(--token). */
+  const f1 = (n) => Math.round(n * 10) / 10;
+  const g = {
+    escala([d0, d1], [r0, r1]) { return (v) => r0 + ((v - d0) / ((d1 - d0) || 1)) * (r1 - r0); },
+    lineaSuave(puntos) {
+      if (!puntos.length) return '';
+      let d = `M${f1(puntos[0][0])} ${f1(puntos[0][1])}`;
+      for (let i = 1; i < puntos.length; i++) {
+        const [x0, y0] = puntos[i - 1], [x1, y1] = puntos[i];
+        const mx = (x0 + x1) / 2;
+        d += ` C${f1(mx)} ${f1(y0)} ${f1(mx)} ${f1(y1)} ${f1(x1)} ${f1(y1)}`;
+      }
+      return d;
+    },
+    areaSuave(puntos, baseY) {
+      if (!puntos.length) return '';
+      const last = puntos[puntos.length - 1], first = puntos[0];
+      return `${g.lineaSuave(puntos)} L${f1(last[0])} ${f1(baseY)} L${f1(first[0])} ${f1(baseY)} Z`;
+    },
+    areaEntre(arriba, abajo) {
+      const vuelta = [...abajo].reverse();
+      return `${g.lineaSuave(arriba)} L${f1(vuelta[0][0])} ${f1(vuelta[0][1])} ${g.lineaSuave(vuelta).replace(/^M[^C]*/, '')} Z`;
+    },
+    escalones(puntos) {
+      if (!puntos.length) return '';
+      let d = `M${f1(puntos[0][0])} ${f1(puntos[0][1])}`;
+      for (let i = 1; i < puntos.length; i++) {
+        const [x, y] = puntos[i], yPrev = puntos[i - 1][1];
+        d += ` L${f1(x)} ${f1(yPrev)}`;
+        if (y !== yPrev) d += ` L${f1(x)} ${f1(y)}`;
+      }
+      return d;
+    },
+    acumulado(porDia, hasta) {
+      const out = []; let total = 0;
+      for (let d = 1; d <= hasta; d++) { total += porDia[d] || 0; out.push([d, total]); }
+      return out;
+    },
+    millones(v, dec = 2) { return (v / 1e6).toFixed(dec).replace('.', ','); },
+    grillaY(valores, y, x0, x1, etiqueta = (v) => v) {
+      return valores.map((v, i) =>
+        `<line x1="${x0}" x2="${x1}" y1="${f1(y(v))}" y2="${f1(y(v))}" class="g-grid"${i ? ' stroke-dasharray="2 4"' : ''}/>` +
+        `<text x="${x0 - 6}" y="${f1(y(v) + 3.5)}" text-anchor="end">${etiqueta(v)}</text>`).join('');
+    },
+    marcador(x, y, color, destacado = false) {
+      return destacado
+        ? `<circle cx="${f1(x)}" cy="${f1(y)}" r="5" stroke-width="2.4" style="fill:${color};stroke:var(--s1)"/>`
+        : `<circle cx="${f1(x)}" cy="${f1(y)}" r="4" stroke-width="2.4" style="fill:var(--s1);stroke:${color}"/>`;
+    },
+  };
+
+  return { COLORS, setMasked, hBars, lines, singleBars, statementBars, dailyBalance, pieCylinder, stacked100, compact, smoothPathD, g };
 })();

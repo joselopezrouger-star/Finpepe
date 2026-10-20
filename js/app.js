@@ -111,6 +111,11 @@
     ? `${cur === 'USD' ? 'US$' : '$'} ${MASK}`
     : (cur === 'USD' ? nfUSD : nfARS).format(n));
   const nfHero = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+  // Monto sin ocultar, para las pantallas del rediseño: ahí el ojo no
+  // reemplaza el número por puntos sino que lo desenfoca (.money dentro de
+  // body.hide-amounts), así no cambia el ancho ni se mueve nada.
+  const fmtPlain = (n, cur) => ((cur || disp()) === 'USD' ? nfUSD : nfARS).format(n);
+  const money = (n, cur) => `<span class="money">${esc(fmtPlain(n, cur))}</span>`;
 
   /* Puntos de miles en vivo para inputs de monto sueltos (presupuesto,
      movimiento fijo) — la calculadora de "+ Movimiento" ya los mostraba a
@@ -280,17 +285,6 @@
     return arsSnapshotFor(amount, currency);
   }
 
-  // Número protagonista (ej. Patrimonio neto): sin decimales, como el resto
-  // de los montos de la app.
-  function heroMoneyHTML(n, cur) {
-    if (n == null || !isFinite(n)) return '—';
-    const symbol = cur === 'USD' ? 'US$' : '$';
-    const sign = n < 0 ? '−' : '';
-    return `<span class="hero-amount">
-      <span class="hero-amount-sym">${symbol}</span>${hideAmounts ? '' : sign}<span class="hero-amount-int">${hideAmounts ? MASK : esc(nfHero.format(Math.abs(n)))}</span>
-    </span>`;
-  }
-
   /* Suma una lista de transacciones en la moneda de visualización.
      Las que no se pueden convertir (sin cotización) se omiten. */
   function sumDisp(txs) {
@@ -405,35 +399,8 @@
     <path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.68 9c0-.593.102-1.17.284-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"/>
     <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"/>
   </svg>`;
-  // Engranaje de verdad (dientes, no rayos): el ícono anterior -un círculo
-  // con líneas radiales- se confundía con el típico ícono de "sol" para
-  // cambiar a modo claro. Este es el clásico ícono de ajustes (viewBox
-  // propio de 24x24, no encaja en el sistema de 20x20 de ICON_PATHS).
   // Íconos del sprite de index.html (docs/rediseno/iconos.svg).
   const spriteIcon = (id) => `<svg class="ic" aria-hidden="true"><use href="#i-${id}"/></svg>`;
-  // Anillo doble: aro externo = % del ingreso que todavía no se gastó, aro
-  // interno = % del mes que todavía falta transcurrir. Comparar los dos de
-  // un vistazo muestra si el ritmo de gasto va por delante o por detrás del
-  // calendario (ej. "me queda 50% de plata pero 70% del mes", voy flojo).
-  function ringSvg2(pctOuter, pctInner, size) {
-    size = size || 76;
-    const arc = (r, stroke, pct, colorVar) => {
-      const c = 2 * Math.PI * r;
-      const p = Math.max(0, Math.min(100, pct));
-      const off = c * (1 - p / 100);
-      return `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(--border)" stroke-width="${stroke}"/>
-        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(${colorVar})" stroke-width="${stroke}"
-          stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
-          transform="rotate(-90 ${size / 2} ${size / 2})"/>`;
-    };
-    const strokeO = 9.5, strokeI = 8.5, gap = 3;
-    const rO = size / 2 - strokeO / 2 - 1;
-    const rI = rO - strokeO / 2 - gap - strokeI / 2;
-    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-      ${arc(rO, strokeO, pctOuter, '--accent')}
-      ${arc(rI, strokeI, pctInner, '--warn')}
-    </svg>`;
-  }
   // Tendencia de la tasa de ahorro (media tarjeta del Resumen): curva suave
   // con marcador en cada mes y relleno en degradé debajo. Sin eje numérico:
   // los valores los dan las etiquetas. rows: [{label, rate}] (rate en %,
@@ -2052,6 +2019,56 @@
   }
 
   /* ================= Vista: Resumen ================= */
+  const INSIGHT_COLOR = { neg: 'var(--neg)', warn: 'var(--warn)', good: 'var(--brand-text)', info: 'var(--t2)' };
+  // Saldo grande de Inicio: "$" chico y el número (que anima su cambio,
+  // ver animateHeroBalance()).
+  function heroBigHTML(n) {
+    const sym = disp() === 'USD' ? 'US$' : '$';
+    return `<small>${sym}</small><span class="money">${n < 0 ? '−' : ''}<span class="hero-amount-int">${esc(nfHero.format(Math.abs(n)))}</span></span>`;
+  }
+  // Tasa de ahorro por mes: línea suave con marcadores, degradé verde
+  // debajo, grilla cada 25% (de 0 a 75% como mínimo) y el mes elegido
+  // destacado con una pastilla. rows: [{label, rate, isSel}].
+  let rateChartSeq = 0;
+  function savingsRateChartSvg(rows) {
+    const G = Charts.g;
+    const W = 320, H = 140, x0 = 44, x1 = 290, yTop = 18, yBase = 112;
+    const rates = rows.map((r) => r.rate);
+    const lo = Math.min(0, Math.floor(Math.min(...rates) / 25) * 25);
+    const hi = Math.max(75, Math.ceil(Math.max(...rates) / 25) * 25);
+    const step = (hi - lo) > 100 ? 50 : 25;
+    const ticks = [];
+    for (let v = lo; v <= hi; v += step) ticks.push(v);
+    const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
+    const y = G.escala([lo, hi], [yBase, yTop]);
+    const pts = rows.map((r, i) => [x(i), y(r.rate)]);
+    const selFound = rows.findIndex((r) => r.isSel);
+    const selIdx = selFound >= 0 ? selFound : rows.length - 1;
+    const id = `gAh${++rateChartSeq}`;
+    const baseY = y(Math.max(lo, 0));
+    const labels = rows.map((r, i) => {
+      const [px, py] = pts[i];
+      if (i === selIdx) {
+        const txt = `${r.rate}%`;
+        const w = 12 + txt.length * 7.5;
+        const ty = py - 28 < 2 ? py + 10 : py - 28;
+        return `<rect x="${(px - w / 2).toFixed(1)}" y="${ty.toFixed(1)}" width="${w.toFixed(1)}" height="19" rx="9.5" style="fill:var(--brand)"/>
+          <text x="${px.toFixed(1)}" y="${(ty + 13.5).toFixed(1)}" text-anchor="middle" class="g-pill">${txt}</text>`;
+      }
+      return `<text x="${px.toFixed(1)}" y="${(py - 12).toFixed(1)}" text-anchor="middle" class="g-lab">${r.rate}%</text>`;
+    }).join('');
+    const months = rows.map((r, i) => `<text x="${pts[i][0].toFixed(1)}" y="132" text-anchor="middle"${i === selIdx ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`).join('');
+    const aria = `Tasa de ahorro: ${rows.map((r) => `${r.label} ${r.rate}%`).join(', ')}`;
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--brand);stop-opacity:.32"/><stop offset="1" style="stop-color:var(--brand);stop-opacity:0"/></linearGradient></defs>
+      ${G.grillaY(ticks, y, 34, 312, (v) => `${v}%`)}
+      ${pts.length > 1 ? `<path d="${G.areaSuave(pts, baseY)}" style="fill:url(#${id})"/>
+      <path d="${G.lineaSuave(pts)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:var(--brand)"/>` : ''}
+      ${pts.map((p, i) => (i === selIdx ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="10" style="fill:var(--brand);opacity:.18"/>` : '') + G.marcador(p[0], p[1], 'var(--brand)', i === selIdx)).join('')}
+      ${labels}${months}
+    </svg>`;
+  }
+
   function vResumen(el) {
     const mk = ui.month;
     const txs = S().transactions;
@@ -2087,51 +2104,25 @@
     // ahorros, en cambio, sería un aporte negativo y sumaría).
     const balance = inc - exp - savingsMonth;
 
-    // Cada variación va en una sola línea: "▲ X% MoM" (MoM = month over
-    // month, contra el mes anterior). El monto nominal se saca para que
-    // entre en un renglón sin importar el ancho de pantalla.
-    const delta = (cur, prev, upIsGood) => {
-      if (!(prev > 0)) return '';
-      const diff = cur - prev;
-      const pctLabel = fmtVarPct((diff / prev) * 100);
-      if (pctLabel == null) return `<div class="tile-delta">= MoM</div>`;
-      const up = diff > 0;
-      const cls = (up === upIsGood) ? 'up-good' : 'down-bad';
-      return `<div class="tile-delta"><span class="${cls}">${up ? '▲' : '▼'} ${pctLabel}% MoM</span></div>`;
-    };
-    // Variación de Ahorros: el aporte mensual puede ser $0 o negativo (un
-    // retiro), así que si no hay un aporte previo positivo contra el cual
-    // comparar, el % no tiene una base válida ("nuevo" en vez de un
-    // porcentaje inventado).
-    const savingsDelta = (() => {
-      const diff = savingsMonth - savingsMonthPrev;
-      if (diff === 0) return `<div class="tile-delta">= MoM</div>`;
-      const up = diff > 0;
-      const cls = up ? 'up-good' : 'down-bad';
-      const pctLabel = savingsMonthPrev > 0
-        ? `${up ? '▲' : '▼'} ${fmtVarPct((diff / savingsMonthPrev) * 100) || '0'}% MoM`
-        : `${up ? '▲' : '▼'} nuevo`;
-      return `<div class="tile-delta"><span class="${cls}">${pctLabel}</span></div>`;
-    })();
-
     // Tasa de ahorro del mes: qué % de los ingresos terminó ahorrado (puede
     // ser negativa si el aporte del mes fue un retiro). Sin ingresos ese mes
     // el % no tiene una base válida.
     const savingsRatePct = inc > 0 ? Math.round((savingsMonth / inc) * 100) : null;
     const savingsRatePctPrev = incPrev > 0 ? Math.round((savingsMonthPrev / incPrev) * 100) : null;
-    const savingsRateDeltaHTML = (() => {
-      if (savingsRatePct == null || savingsRatePctPrev == null) return '';
-      const diff = savingsRatePct - savingsRatePctPrev;
-      if (diff === 0) return `<span class="savings-rate-pill">= MoM</span>`;
-      const up = diff > 0;
-      const cls = up ? 'pos' : 'neg';
-      return `<span class="savings-rate-pill ${cls}">${up ? '▲' : '▼'} ${Math.abs(diff)} pp MoM</span>`;
-    })();
+    const monthName = (m) => {
+      const [y, mo] = m.split('-').map(Number);
+      return new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(new Date(y, mo - 1, 1));
+    };
+    const isCurMonth = mk === curMonth();
+    const todayDay = new Date().getDate();
+    // Comparaciones contra el MISMO DÍA del mes anterior (no contra el mes
+    // anterior completo) mientras el mes elegido está en curso: el 19 de
+    // octubre se compara con lo que había al 19 de septiembre.
+    const upToToday = (dateStr) => !isCurMonth || Number(dateStr.slice(8, 10)) <= todayDay;
 
-    // Gastos por categoría (top 5, sin agrupar el resto en "Otros" — para
-    // que la tarjeta principal entre compacta al lado del anillo) — por
-    // fecha real de carga, no por el mes de vencimiento (ver comentario al
-    // principio de la función).
+    // Gastos por categoría — por fecha real de carga, no por el mes de
+    // vencimiento (ver comentario al principio de la función). El % es
+    // sobre el TOTAL del mes, el mismo que muestra Categorías.
     const byCat = new Map();
     for (const t of inMonthCal.filter((x) => x.type === 'gasto')) {
       const v = txDispAmount(t);
@@ -2139,80 +2130,52 @@
       const topId = topCategoryOf(t.categoryId);
       byCat.set(topId, (byCat.get(topId) || 0) + v);
     }
-    const catItems = [...byCat.entries()]
-      .map(([id, value]) => ({ label: catName(id), value, color: catColor(id) }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
+    const catRanked = [...byCat.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const catTotal = catRanked.reduce((a, [, v]) => a + v, 0);
+    const CAT_TOP = 4;
+    const catRows = catRanked.slice(0, CAT_TOP).map(([id, value]) => ({ id, name: catName(id), value, color: catColor(id) }));
+    const catRest = catRanked.slice(CAT_TOP);
+    if (catRest.length) {
+      catRows.push({ id: null, name: `Otras ${catRest.length}`, value: catRest.reduce((a, [, v]) => a + v, 0), color: OTROS_COLOR });
+    }
+    const pctOf = (v) => (catTotal > 0 ? Math.round((v / catTotal) * 100) : 0);
+    // Con "contar tarjetas por vencimiento", el Gastos de arriba y este total
+    // (por fecha de compra) no coinciden: se aclara acá, una sola vez.
+    const basisNote = S().settings.cardMonthBasis === 'vencimiento' && Math.abs(catTotal - exp) >= 1
+      ? `<p class="k-note">Por fecha de compra: ${money(catTotal)}. En Gastos de arriba las tarjetas cuentan por mes de vencimiento.</p>`
+      : '';
 
-    // "Cómo vas este mes": comentario automático a partir de reglas simples
-    // (nada de IA, son heurísticas sobre los datos que ya tenemos) — junta
-    // candidatos con una severidad, se queda con los 1-2 más urgentes, y si
-    // no hay nada de qué preocuparse suma un par de líneas positivas. Solo
-    // tiene sentido para el mes EN CURSO: un mes pasado ya está cerrado y
-    // uno futuro todavía no tiene datos que analizar.
-    let insights = mk !== curMonth() ? [] : (() => {
+    // "Para tener en cuenta": avisos de una línea a partir de reglas simples
+    // (heurísticas sobre los datos, nada de IA). Solo para el mes EN CURSO:
+    // uno pasado ya está cerrado y uno futuro no tiene datos.
+    const insights = !isCurMonth ? [] : (() => {
       const out = [];
-      // QUÉ comentarios aparecen se decide siempre en PESOS, sin importar
-      // la moneda elegida arriba: antes todo se calculaba en la moneda de
-      // visualización, así que al pasar a USD cambiaban los avisos — un
-      // umbral fijo ($3.000) pensado en pesos era inalcanzable en dólares,
-      // y cada moneda valúa los movimientos a la cotización de su fecha,
-      // así que una comparación contra el mes pasado podía inclinarse para
-      // un lado en pesos y para el otro en dólares. Los montos del texto sí
-      // se muestran en la moneda elegida (sumDisp / fmtDisp).
+      // QUÉ avisos aparecen se decide siempre en PESOS, sin importar la
+      // moneda elegida arriba (un umbral pensado en pesos no sirve en
+      // dólares, y cada moneda valúa a la cotización de su fecha). Los
+      // montos del texto sí van en la moneda elegida.
       const BASE = 'ARS';
       const amtA = (t) => amountInCurrency(t, BASE);
       const sumA = (list) => list.reduce((acc, t) => { const v = amtA(t); return v == null ? acc : acc + v; }, 0);
       const incA = sumA(inMonth.filter((t) => t.type === 'ingreso'));
       const expA = sumA(inMonth.filter((t) => t.type === 'gasto'));
-      const incPrevA = sumA(inPrev.filter((t) => t.type === 'ingreso'));
-      const expPrevA = sumA(inPrev.filter((t) => t.type === 'gasto'));
       const savA = (m) => savingsAtEndOf(m, { excludeOpening: true, cur: BASE });
       const savMonthA = savA(mk) - savA(prevMk);
-      const savMonthPrevA = savA(prevMk) - savA(addMonthsKey(mk, -2));
       const balanceA = incA - expA - savMonthA;
-      const srA = incA > 0 ? Math.round((savMonthA / incA) * 100) : null;
-      const srPrevA = incPrevA > 0 ? Math.round((savMonthPrevA / incPrevA) * 100) : null;
+      const prevName = monthName(prevMk);
 
-      // El aviso de ritmo de gasto (más abajo) compara contra la fecha REAL
-      // de cada movimiento (inMonthCal/inPrevCal, definidas arriba), no el
-      // "mes efectivo" que puede correr una compra con tarjeta al mes de
-      // vencimiento (ver ajuste "contar tarjetas por"). Si no, con esa
-      // opción activada un resumen grande que vence este mes infla la
-      // proyección aunque esas compras se hayan hecho en calendario el mes
-      // pasado — y el aviso queda contradiciendo lo que se ve en "Balance
-      // por día", que también usa la fecha real.
+      // Fecha REAL de cada movimiento (no el mes de vencimiento de la
+      // tarjeta), igual que Categorías y Presupuestos.
       const gastoCal = inMonthCal.filter((t) => t.type === 'gasto');
       const gastoPrevCal = inPrevCal.filter((t) => t.type === 'gasto');
-      // Mismo criterio de fecha real (no efectiva) para las dos, así el
-      // aviso de categoría de abajo tampoco lo dispara un resumen de
-      // tarjeta que vence este mes pero es de compras de otro mes. Cada
-      // categoría se acumula en pesos (para decidir) y en la moneda
-      // elegida (para mostrar).
-      const byCat = (list) => {
-        const m = new Map();
-        for (const t of list) {
-          const topId = topCategoryOf(t.categoryId);
-          const cur = m.get(topId) || { a: 0, d: 0 };
-          cur.a += amtA(t) || 0;
-          cur.d += txDispAmount(t) || 0;
-          m.set(topId, cur);
-        }
-        return m;
-      };
-      const byCatCal = byCat(gastoCal);
-      const byCatPrev = byCat(gastoPrevCal);
+      const gastoPrevSameDay = gastoPrevCal.filter((t) => upToToday(t.date));
 
       if (balanceA < 0) {
-        out.push({ tone: 'warn', severity: 5, icon: '🔴',
-          text: balance < 0
-            ? `Este mes vas en rojo: el balance es de ${fmtDisp(balance)}.`
-            : 'Este mes vas en rojo: gastaste más de lo que ingresó.' });
+        out.push({ tone: 'neg', severity: 6, icon: 'down', go: 'movimientos',
+          title: 'Este mes vas en rojo', sub: `Gastaste ${fmtPlain(Math.abs(balance))} más de lo que entró`, money: true });
       }
 
-      // Fecha real, no efectiva: tiene que coincidir con lo que se ve en
-      // Planificar > Presupuestos, que usa el mismo criterio. Se decide en
-      // la moneda del propio presupuesto (no depende de la elegida arriba).
+      // En la moneda del propio presupuesto (no depende de la elegida arriba).
       const budgetHits = S().budgets.map((b) => {
         const list = gastoCal.filter((t) => txMatchesBudgetCategory(t, b.categoryId));
         const spentOwn = list.reduce((acc, t) => acc + (amountInCurrency(t, b.currency) || 0), 0);
@@ -2223,522 +2186,265 @@
       }).filter((x) => x.overRatio > 0).sort((a, b) => b.overRatio - a.overRatio);
       if (budgetHits.length) {
         const w = budgetHits[0];
-        out.push({ tone: 'warn', severity: 4, icon: '⚠️',
-          text: `Superaste el presupuesto de ${w.name}: ${fmtDisp(w.spent)} de ${fmtDisp(w.limit)}.` });
+        out.push({ tone: 'neg', severity: 5, icon: 'target', go: 'presupuestos',
+          title: `Pasaste el presupuesto de ${w.name}`, sub: `${fmtPlain(w.spent)} de ${fmtPlain(w.limit)}`, money: true });
       }
 
-      // Un gasto fijo (recurrente o una cuota, como el alquiler) es el
-      // mismo te portes como te portes con el resto de tus gastos — así que
-      // dejarlo adentro de la comparación "¿gastaste más que el mes
-      // pasado?" la infla o desinfla nada más según en qué día del
-      // calendario cayó, sin decir nada de tu ritmo real. Estos dos avisos
-      // comparan sólo lo variable.
+      // Un gasto fijo (recurrente o una cuota) es el mismo te portes como te
+      // portes, así que estos dos avisos comparan solo lo variable.
       const isVar = (t) => !t.recurringId && !t.installment;
       const varCal = gastoCal.filter(isVar);
       const varPrevCal = gastoPrevCal.filter(isVar);
       const varExpA = sumA(varCal), varExpPrevA = sumA(varPrevCal);
-
-      if (varExpPrevA > 0) {
-        if (varExpA > varExpPrevA) {
-          const daysLeftMk = daysLeftInMonth(mk);
-          out.push({ tone: 'warn', severity: 4, icon: '🚨',
-            text: `Sin contar gastos fijos, ya gastaste más que todo el mes pasado (${fmtDisp(sumDisp(varCal))} vs ${fmtDisp(sumDisp(varPrevCal))}), y todavía quedan ${daysLeftMk} día${daysLeftMk === 1 ? '' : 's'}.` });
-        } else {
-          const [ky, kmo] = mk.split('-').map(Number);
-          const daysInMk = new Date(ky, kmo, 0).getDate();
-          const daysElapsed = new Date().getDate();
-          const elapsedFrac = daysElapsed / daysInMk;
-          // Con muy pocos días recorridos cualquier proyección es puro
-          // ruido (un solo gasto grande el día 1 "proyectaría" un mes
-          // carísimo) — se espera a tener al menos ~15% del mes andado.
-          if (elapsedFrac > 0.15) {
-            // "Al RITMO ACTUAL" tiene que reflejar el ritmo de los últimos
-            // días, no el promedio de TODO el mes: un gasto grande y
-            // puntual a principio de mes (que después no se repitió) hacía
-            // que ese promedio quedara alto para siempre, aunque el gasto
-            // ya se hubiera aplanado — contradiciendo lo que se ve en
-            // "Balance por día". Lo ya gastado (variable) se suma tal cual,
-            // sin volver a proyectarlo; sólo los días que faltan se
-            // proyectan al ritmo variable de la última semana.
-            const RECENT_WINDOW = 7;
-            const windowStartDay = Math.max(1, daysElapsed - RECENT_WINDOW + 1);
-            const recentDaysCount = daysElapsed - windowStartDay + 1;
-            const recent = varCal.filter((t) => {
-              const day = Number(t.date.slice(8, 10));
-              return day >= windowStartDay && day <= daysElapsed;
-            });
-            const remainingDays = daysInMk - daysElapsed;
-            const projA = varExpA + (sumA(recent) / recentDaysCount) * remainingDays;
-            const projD = sumDisp(varCal) + (sumDisp(recent) / recentDaysCount) * remainingDays;
-            if (projA > varExpPrevA * 1.15) {
-              out.push({ tone: 'warn', severity: 3, icon: '📈',
-                text: `Al ritmo actual (sin contar gastos fijos) vas a terminar gastando más en gastos variables que el mes pasado (proyectado ${fmtDisp(projD)}).` });
-            }
-          }
-        }
+      if (varExpPrevA > 0 && varExpA > varExpPrevA) {
+        const left = daysLeftInMonth(mk);
+        out.push({ tone: 'neg', severity: 4, icon: 'up', go: 'movimientos',
+          title: `Ya gastaste más que en todo ${prevName}`,
+          sub: `Sin contar fijos, y quedan ${left} día${left === 1 ? '' : 's'}` });
       }
 
+      // La categoría que más subió contra el mismo día del mes anterior.
+      const byCatA = (list) => {
+        const m = new Map();
+        for (const t of list) {
+          const topId = topCategoryOf(t.categoryId);
+          const cur = m.get(topId) || { a: 0, d: 0 };
+          cur.a += amtA(t) || 0;
+          cur.d += txDispAmount(t) || 0;
+          m.set(topId, cur);
+        }
+        return m;
+      };
+      const nowByCat = byCatA(gastoCal);
+      const prevByCat = byCatA(gastoPrevSameDay);
       let worstCat = null;
-      for (const [id, val] of byCatCal.entries()) {
-        const prevVal = byCatPrev.get(id) || { a: 0, d: 0 };
+      for (const [id, val] of nowByCat.entries()) {
+        const prevVal = prevByCat.get(id) || { a: 0, d: 0 };
         const diffA = val.a - prevVal.a;
         if (prevVal.a <= 0 || diffA <= 0) continue;
         const pct = diffA / prevVal.a;
-        // Umbral doble (% Y monto mínimo, en pesos) para no alertar por
-        // una categoría chica que se duplicó de $500 a $1.000.
+        // Umbral doble (% Y monto mínimo, en pesos) para no avisar por una
+        // categoría chica que pasó de $500 a $1.000.
         if (pct >= 0.3 && diffA >= Math.max(3000, incA * 0.02)) {
           if (!worstCat || diffA > worstCat.diffA) worstCat = { id, diffA, diffD: val.d - prevVal.d, pct };
         }
       }
       if (worstCat) {
-        out.push({ tone: 'warn', severity: 2, icon: '👀',
-          text: `Cuidado con ${catName(worstCat.id)}: gastaste ${fmtDisp(Math.max(0, worstCat.diffD))} más que el mes pasado (+${Math.round(worstCat.pct * 100)}%).` });
+        out.push({ tone: 'neg', severity: 3, icon: 'up', go: 'categorias',
+          title: `${catName(worstCat.id)} subió ${Math.round(worstCat.pct * 100)}%`,
+          sub: `${fmtPlain(Math.max(0, worstCat.diffD))} más que al ${todayDay} de ${prevName}`, money: true });
       }
 
-      if (srA != null && srPrevA != null && srA < srPrevA - 10) {
-        out.push({ tone: 'warn', severity: 1, icon: '💸',
-          text: `Tu tasa de ahorro bajó de ${srPrevA}% a ${srA}% respecto al mes pasado.` });
+      // Tasa de ahorro: siempre informa; avisa si bajó mucho.
+      if (savingsRatePct != null) {
+        const dropped = savingsRatePctPrev != null && savingsRatePct < savingsRatePctPrev - 10;
+        const improved = savingsRatePctPrev != null && savingsRatePct > savingsRatePctPrev + 5;
+        out.push({
+          tone: dropped ? 'warn' : improved ? 'good' : 'info', severity: dropped ? 2 : 0.5,
+          icon: dropped ? 'down' : 'dollar', go: 'ahorros',
+          title: savingsRatePct >= 0 ? `Ahorraste el ${savingsRatePct}% de lo que entró` : `Sacaste de ahorros el ${-savingsRatePct}% de lo que entró`,
+          sub: savingsRatePctPrev != null ? `En ${prevName} fue ${savingsRatePctPrev}%` : '',
+        });
       }
 
-      out.sort((a, b) => b.severity - a.severity);
-
-      if (!out.length) {
-        if (expPrevA > 0 && expA < expPrevA * 0.9) {
-          out.push({ tone: 'good', icon: '🎉',
-            text: `Vas bien: gastaste ${Math.round((1 - expA / expPrevA) * 100)}% menos que el mes pasado.` });
-        }
-        if (srA != null && srPrevA != null && srA > srPrevA + 5) {
-          out.push({ tone: 'good', icon: '📈',
-            text: `Tu tasa de ahorro mejoró: ${srPrevA}% → ${srA}%.` });
-        }
-        if (!out.length) {
-          out.push({ tone: 'neutral', icon: '🙂',
-            text: (incPrevA > 0 || expPrevA > 0)
-              ? 'Vas en línea con el mes pasado, sin sobresaltos.'
-              : 'Todavía no hay un mes anterior con qué comparar.' });
-        }
-      }
-      // Además de los 1-2 avisos generales, una línea por cada tarjeta de
-      // crédito con cómo viene su resumen en curso (mismo análisis que el
-      // pop-up "Cómo vengo" de Cuentas → Tarjetas, que se abre al tocarla).
+      // Una línea por tarjeta de crédito con cómo viene su resumen en curso
+      // (el mismo análisis que "Cómo vengo", que se abre al tocarla).
       const short = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
-      const cardLines = [];
       for (const card of S().methods.filter((m) => m.kind === 'credito')) {
         const A = cardAnalysis(card);
-        if (!A || (A.spent + A.committed) <= 0 && !A.ref) continue;
+        if (!A || ((A.spent + A.committed) <= 0 && !A.ref)) continue;
         const v = A.verdict;
-        const refDe = A.refLabel.startsWith('el ') ? `del ${A.refLabel.slice(3)}` : `de ${A.refLabel}`;
-        const refA = A.refLabel.startsWith('el ') ? `al ${A.refLabel.slice(3)}` : `a ${A.refLabel}`;
         const closeS = short(A.cy.close);
-        let line;
         if (!v) {
-          line = { tone: 'neutral', icon: '💳',
-            text: `${card.name}: llevás ${fmtDisp(A.spent + A.committed)} en el resumen que cierra el ${closeS} (proyectado ${fmtDisp(A.projected)}).` };
+          out.push({ tone: 'info', severity: 0.4, icon: 'card', cardId: card.id,
+            title: `${card.name}: resumen en curso`, sub: `Llevás ${fmtPlain(A.spent + A.committed)} · cierra el ${closeS}`, money: true });
         } else if (v.tone === 'crit') {
-          const nextDay = new Date(A.cy.close.getTime() + DAY_MS);
-          line = { tone: 'warn', icon: '🛑',
-            text: `${card.name}: ya superás ${A.refLabel} por ${fmtDisp(-v.room)} en el resumen que cierra el ${closeS}. Conviene dejar de usarla; lo que compres desde el ${short(nextDay)} entra en el siguiente.` };
+          out.push({ tone: 'neg', severity: 4.5, icon: 'card', cardId: card.id,
+            title: `${card.name} ya superó ${A.refLabel}`, sub: `${fmtPlain(-v.room)} de más · cierra el ${closeS}`, money: true });
         } else if (v.tone === 'warn') {
-          line = { tone: 'warn', icon: '💳',
-            text: `${card.name}: al ritmo actual llegás ${refA} el ${short(v.hit)} y el resumen cierra el ${closeS}. Desde ahí, mejor no usarla (máx. ${fmtDisp(v.perDay)} por día).` };
+          out.push({ tone: 'warn', severity: 2.5, icon: 'card', cardId: card.id,
+            title: `Ojo con ${card.name}`, sub: `Al ritmo actual llegás ${A.refLabel.startsWith('el ') ? 'al ' + A.refLabel.slice(3) : 'a ' + A.refLabel} el ${short(v.hit)}` });
         } else {
-          line = { tone: 'good', icon: '💳',
-            text: `${card.name}: vas bien, cerrarías el resumen del ${closeS} en ${fmtDisp(A.projected)}, ${fmtDisp(A.ref - A.projected)} por debajo ${refDe}.` };
+          out.push({ tone: 'good', severity: 1, icon: 'check', cardId: card.id,
+            title: `${card.name} viene bien`, sub: `Cerrarías el ${closeS} en ${fmtPlain(A.projected)}`, money: true });
         }
-        line.cardId = card.id;
-        cardLines.push(line);
       }
-      return out.slice(0, 2).concat(cardLines.slice(0, 2));
+
+      // Si no hay nada que avisar, una línea buena contra el mismo día del
+      // mes anterior.
+      const expPrevSameDayA = sumA(gastoPrevSameDay);
+      if (!out.some((x) => x.tone === 'neg' || x.tone === 'warn') && expPrevSameDayA > 0 && sumA(gastoCal) < expPrevSameDayA * 0.9) {
+        out.push({ tone: 'good', severity: 1.5, icon: 'check', go: 'categorias',
+          title: `Gastaste ${Math.round((1 - sumA(gastoCal) / expPrevSameDayA) * 100)}% menos que en ${prevName}`,
+          sub: `Al día ${todayDay} de cada mes` });
+      }
+      return out.sort((a, b) => b.severity - a.severity).slice(0, 3);
     })();
 
-    // Tendencia: últimos 6 meses hasta el mes elegido, salvo los que no
-    // tengan ingresos (un mes con sólo algún gasto suelto no es un mes
-    // "real" para comparar). Por fecha real de carga, no de vencimiento
-    // (ver comentario al principio de la función).
+    // Tasa de ahorro de los últimos 6 meses (hasta el elegido), salvo los
+    // que no tuvieron ingresos (sin ingresos el % no tiene base).
     const months = [];
     for (let i = 5; i >= 0; i--) months.push(addMonthsKey(mk, -i));
-    const trendRows = months.map((m) => {
-      const list = txs.filter((t) => monthKeyOf(t.date) === m);
-      const [y, mo] = m.split('-').map(Number);
-      return {
-        label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
-        income: sumDisp(list.filter((t) => t.type === 'ingreso')),
-        expense: sumDisp(list.filter((t) => t.type === 'gasto')),
-      };
-    }).filter((r) => r.income > 0);
-
-    // Misma ventana de meses, pero para la tasa de ahorro (ahorro/ingresos):
-    // se omiten los meses sin ningún ingreso (dividir por cero no tiene
-    // sentido — antes mostraba 0% para un mes sin ingresos, como si ahí no
-    // se hubiera ahorrado nada, en vez de directamente no calcularla).
     const savingsRateRows = months.map((m) => {
-      const list = txs.filter((t) => monthKeyOf(t.date) === m);
-      const incM = sumDisp(list.filter((t) => t.type === 'ingreso'));
+      const incM = sumDisp(txs.filter((t) => monthKeyOf(t.date) === m && t.type === 'ingreso'));
       const savM = savingsAtEndOf(m, { excludeOpening: true }) - savingsAtEndOf(addMonthsKey(m, -1), { excludeOpening: true });
       const [y, mo] = m.split('-').map(Number);
       return {
         label: monthShortFmt.format(new Date(y, mo - 1, 1)).replace('.', ''),
-        incM, rate: Math.round((savM / incM) * 100),
+        incM, rate: incM > 0 ? Math.round((savM / incM) * 100) : null, isSel: m === mk,
       };
     }).filter((r) => r.incM > 0);
-    const hasSavingsRateTrend = savingsRateRows.length > 0;
-
-    // Vencimientos de tarjetas: solo las que ya tienen al menos dos
-    // resúmenes cargados (el actual y el anterior) — sin eso no hay un
-    // "próximo vencimiento" resoluble para mostrar todavía.
-    const cards = S().methods.filter((m) => m.kind === 'credito');
-    const cardRows = cards.map((c) => {
-      const cy = cardCycle(c);
-      if (!cy || !cy.prevClose || !cy.prevDue) return null;
-      return {
-        card: c, cy,
-        current: cardPeriodTotal(c.id, cy.prevClose, cy.close),
-        toPay: cardPeriodTotal(c.id, cy.prevPrevClose || new Date(0), cy.prevClose),
-      };
-    }).filter(Boolean).sort((a, b) => a.cy.due - b.cy.due);
+    const rateDiff = savingsRatePct != null && savingsRatePctPrev != null ? savingsRatePct - savingsRatePctPrev : null;
 
     const pctLeft = (exp <= 0 && savingsMonth <= 0) ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round((balance / inc) * 100))) : 0);
     const pctMonthLeft = monthLeftPct(mk);
     const daysLeft = daysLeftInMonth(mk);
-    // Cuánto se puede gastar por día sin pasarse del balance actual — solo
-    // tiene sentido para el mes en curso (en uno pasado "días restantes" es
-    // 0 y en uno futuro es el mes entero, ninguno de los dos es una
-    // pregunta real). Al día de hoy incluido, así el último día del mes no
-    // divide por cero: ese día entero "vale" el balance que queda.
-    const perDayLeft = mk === curMonth() ? balance / Math.max(1, daysLeft) : null;
-
-    // Gastos acumulados día a día del mes (arranca en 0 y sólo sube — a
-    // diferencia del balance neto de antes, que también bajaba con cada
-    // ingreso): usa la fecha calendario real de cada movimiento, no el mes
-    // "efectivo" (que puede correr un gasto de tarjeta al mes de
-    // vencimiento). En el mes en curso corta en el día de hoy (no tiene
-    // sentido proyectar una línea plana a futuro); en un mes que todavía no
-    // llegó no hay nada que mostrar. El ingreso total del mes se muestra
-    // aparte como línea constante, para ver de un vistazo cuánto falta de
-    // gasto acumulado para "comerse" todo lo que entró.
     const [mkY, mkM] = mk.split('-').map(Number);
     const daysInMk = new Date(mkY, mkM, 0).getDate();
-    const lastDayToShow = mk > curMonth() ? 0 : (mk === curMonth() ? new Date().getDate() : daysInMk);
-    const calMonthTxs = txs.filter((t) => monthKeyOf(t.date) === mk);
-    const dailyDelta = new Array(daysInMk + 1).fill(0);
-    for (const t of calMonthTxs) {
-      if (t.type !== 'gasto') continue;
-      const v = txDispAmount(t);
-      if (v == null) continue;
-      dailyDelta[parseDate(t.date).getDate()] += v;
-    }
-    let dailyRunning = 0;
-    const dailyBalance = [];
-    for (let d = 1; d <= daysInMk; d++) {
-      if (d > lastDayToShow) { dailyBalance.push({ day: d, value: null }); continue; }
-      dailyRunning += dailyDelta[d];
-      dailyBalance.push({ day: d, value: dailyRunning });
-    }
-    const incomeLineCal = sumDisp(calMonthTxs.filter((t) => t.type === 'ingreso'));
-    // Ingresos menos lo ya aportado a ahorros ese mes: el techo real de
-    // gasto sin "meterle mano" a lo que ya se guardó — si el gasto
-    // acumulado lo cruza, de ahí en más se estaría ahorrando menos de lo
-    // que ya se ahorró (savingsMonth viene de más arriba, es el aporte
-    // neto del mes, siempre por fecha real de la entrada).
-    const incomeMinusSavingsLineCal = incomeLineCal - savingsMonth;
+    // Cuánto se puede gastar por día sin pasarse del saldo: solo para el
+    // mes en curso, con el día de hoy incluido (el último día no divide por 0).
+    const perDayLeft = isCurMonth ? balance / Math.max(1, daysLeft) : null;
 
-    // Mismo cálculo para el mes anterior, alineado día a día, para cuando
-    // el usuario activa "comparar con mes anterior" (ver si el gasto
-    // acumulado de hoy va más rápido o más lento que el mes pasado).
-    const prevMkDaily = addMonthsKey(mk, -1);
-    const [prevDY, prevDM] = prevMkDaily.split('-').map(Number);
-    const daysInPrevMkDaily = new Date(prevDY, prevDM, 0).getDate();
-    const lastDayToShowPrev = prevMkDaily > curMonth() ? 0 : (prevMkDaily === curMonth() ? new Date().getDate() : daysInPrevMkDaily);
-    const prevCalMonthTxs = txs.filter((t) => monthKeyOf(t.date) === prevMkDaily);
-    const prevDailyDelta = new Array(daysInPrevMkDaily + 1).fill(0);
-    for (const t of prevCalMonthTxs) {
-      if (t.type !== 'gasto') continue;
-      const v = txDispAmount(t);
-      if (v == null) continue;
-      prevDailyDelta[parseDate(t.date).getDate()] += v;
-    }
-    let prevDailyRunning = 0;
-    const dailyBalancePrev = [];
-    for (let d = 1; d <= daysInPrevMkDaily; d++) {
-      if (d > lastDayToShowPrev) { dailyBalancePrev.push({ day: d, value: null }); continue; }
-      prevDailyRunning += prevDailyDelta[d];
-      dailyBalancePrev.push({ day: d, value: prevDailyRunning });
-    }
+    // Variaciones de los tres números de abajo, solo en % (sin "MoM"). Con
+    // el mes en curso, contra el mismo día del mes anterior.
+    const inPrevSameDay = inPrev.filter((t) => upToToday(paymentDateOf(t)));
+    const incPrevCmp = sumDisp(inPrevSameDay.filter((t) => t.type === 'ingreso'));
+    const expPrevCmp = sumDisp(inPrevSameDay.filter((t) => t.type === 'gasto'));
+    const deltaHTML = (cur, prev, upIsGood) => {
+      if (!(prev > 0)) return '<span class="dl">&nbsp;</span>';
+      const diff = cur - prev;
+      const pctLabel = fmtVarPct((diff / prev) * 100);
+      if (pctLabel == null) return '<span class="dl t3">= igual</span>';
+      const up = diff > 0;
+      return `<span class="dl ${(up === upIsGood) ? 'bt' : 'neg'}">${up ? '▲' : '▼'} ${pctLabel}%</span>`;
+    };
+    const savDeltaHTML = (() => {
+      const diff = savingsMonth - savingsMonthPrev;
+      if (Math.abs(diff) < 1) return savingsMonthPrev ? '<span class="dl t3">= igual</span>' : '<span class="dl">&nbsp;</span>';
+      const up = diff > 0;
+      const label = savingsMonthPrev > 0 ? `${fmtVarPct((diff / savingsMonthPrev) * 100) || '0'}%` : 'nuevo';
+      return `<span class="dl ${up ? 'bt' : 'neg'}">${up ? '▲' : '▼'} ${label}</span>`;
+    })();
 
-    // Muestra el nombre del hogar (no "Compartido con {pareja}"): el nombre
-    // de la pareja ya aparece en el balance de al lado ("ana te debe..."),
-    // repetirlo en el título quedaba redundante.
+    // Compartido en una fila neutra (deber plata no es un error).
+    const me = Cloud.user() ? sharedMe() : null;
     const sharedPartnerM = Cloud.user() ? sharedPartner() : null;
-    const sharedWidget = (shared.household && sharedPartnerM) ? (() => {
+    const sharedRow = (shared.household && sharedPartnerM) ? (() => {
       const bal = sharedBalance();
-      const balAbs = Math.abs(bal);
-      const balTxt = balAbs < 0.01 ? 'Están a mano'
-        : (bal > 0 ? `${esc(partnerLabel(sharedPartnerM))} te debe ${fmtDisp(balAbs)}`
-                   : `Le debés a ${esc(partnerLabel(sharedPartnerM))} ${fmtDisp(balAbs)}`);
-      return `<div class="shared-mini" data-goto-shared>
-        <span class="shared-mini-label">${esc(shared.household.name || 'Hogar compartido')}</span>
-        <span class="shared-mini-value ${bal > 0 ? 'pos' : bal < 0 ? 'neg' : ''}">${esc(balTxt)}</span>
-      </div>`;
+      const who = partnerLabel(sharedPartnerM);
+      const title = Math.abs(bal) < 0.01 ? 'Están a mano' : (bal > 0 ? `${who} te debe` : `Le debés a ${who}`);
+      const nMonth = (shared.expenses || []).filter((e) => e.date && monthKeyOf(e.date) === mk).length;
+      return `
+      <button type="button" class="group home-shared" data-goto-shared>
+        <div class="row">
+          <span class="avs" aria-hidden="true">
+            <span class="av" style="background:var(--c-tel)">${esc(initials(partnerLabel(me)))}</span><span class="av" style="background:var(--c-super)">${esc(initials(who))}</span>
+          </span>
+          <div class="row-main"><div class="tt">${esc(title)}</div><div class="st">${esc(shared.household.name || 'Hogar compartido')} · ${nMonth} gasto${nMonth === 1 ? '' : 's'} en común este mes</div></div>
+          ${Math.abs(bal) < 0.01 ? '' : `<span class="num home-shared-amt">${money(Math.abs(bal))}</span>`}
+          ${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}
+        </div>
+      </button>`;
     })() : '';
 
+    // Anillo doble: afuera el % de balance, adentro el % del mes que falta.
+    const ringSvg = (() => {
+      const arc = (r, w, pct, color) => {
+        const c = 2 * Math.PI * r;
+        const p = Math.max(0, Math.min(100, pct)) / 100;
+        return `<circle cx="60" cy="60" r="${r}" stroke-width="${w}" style="stroke:var(--s2)"/>
+          ${p > 0 ? `<circle cx="60" cy="60" r="${r}" stroke-width="${w}" stroke-dasharray="${(c * p).toFixed(1)} ${c.toFixed(1)}" style="stroke:${color}"/>` : ''}`;
+      };
+      return `<svg viewBox="0 0 120 120" width="120" height="120" aria-hidden="true"><g transform="rotate(-90 60 60)" fill="none" stroke-linecap="round">
+        ${arc(54, 9, pctLeft, 'var(--brand)')}${arc(42, 7, pctMonthLeft, 'var(--c-super)')}</g></svg>`;
+    })();
+    const ringLabel = `Balance ${pctLeft}%, quedan ${daysLeft} de ${daysInMk} días${perDayLeft != null ? `, podés gastar ${fmtPlain(perDayLeft)} por día` : ''}`;
+
     el.innerHTML = `
-      <div class="hero">
-        <svg class="hero-bg-waves" viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M0 150 C 80 110, 160 190, 250 150 S 360 110, 400 140 V300 H0 Z"/>
-          <path d="M0 200 C 100 165, 190 235, 280 195 S 370 170, 400 190 V300 H0 Z"/>
-          <path d="M0 250 C 90 225, 200 280, 300 245 S 380 235, 400 245 V300 H0 Z"/>
-        </svg>
-        <div class="hero-main">
-          <div class="hero-main-left">
-            <div class="hero-label">Saldo</div>
-            <div class="hero-value ${balance < 0 ? 'neg' : ''}" data-balance="${balance}" data-balance-key="${esc(mk + ':' + disp())}">${heroMoneyHTML(balance, disp())}</div>
-            <div class="hero-legend">
-              <span><span class="dot dot-accent"></span><b>${pctLeft}%</b> balance</span>
-              <span><span class="dot dot-warn"></span><b>${daysLeft}</b> día${daysLeft === 1 ? '' : 's'} restante${daysLeft === 1 ? '' : 's'}</span>
+      <div class="hero2">
+        <div class="hz-body">
+          <div class="saldo-row">
+            <div class="saldo-main">
+              <span class="ovl">Saldo</span>
+              <div class="big num ${balance < 0 ? 'neg' : 'bt'} hero-value" data-balance="${balance}" data-balance-key="${esc(mk + ':' + disp())}">${heroBigHTML(balance)}</div>
+              <div class="kv"><i style="background:var(--brand)"></i><b>${pctLeft}%</b> balance</div>
+              <div class="kv"><i style="background:var(--c-super)"></i><b>${daysLeft}</b> día${daysLeft === 1 ? '' : 's'} restante${daysLeft === 1 ? '' : 's'}</div>
+            </div>
+            <div class="ring2" role="img" aria-label="${esc(hideAmounts ? `Balance ${pctLeft}%, quedan ${daysLeft} de ${daysInMk} días` : ringLabel)}">
+              ${ringSvg}
+              ${perDayLeft != null ? `<div class="ring-c"><span class="num ${perDayLeft < 0 ? 'neg' : ''}">${money(perDayLeft)}</span><small>por día</small></div>` : ''}
             </div>
           </div>
-          <div class="hero-ring">
-            ${ringSvg2(pctLeft, pctMonthLeft, 104)}
-            ${perDayLeft != null ? (() => {
-              const txt = fmtDisp(perDayLeft);
-              const sizeCls = txt.length > 10 ? 'xs' : txt.length > 8 ? 'sm' : '';
-              return `<div class="hero-ring-center ${perDayLeft < 0 ? 'neg' : ''}">
-              <b class="${sizeCls}">${txt}</b><span>por día</span>
-            </div>`;
-            })() : ''}
-          </div>
-        </div>
-        <div class="hero-stats">
-          <div class="hero-stat hero-stat-inc">
-            <div class="hero-stat-head"><span class="hero-stat-icon">${iconSvg('arrowDown')}</span><span class="k">Ingresos</span></div>
-            <div class="v">${fmtDisp(inc)}</div>${delta(inc, incPrev, true)}
-          </div>
-          <div class="hero-stat hero-stat-exp">
-            <div class="hero-stat-head"><span class="hero-stat-icon">${iconSvg('arrowUp')}</span><span class="k">Gastos</span></div>
-            <div class="v">${fmtDisp(exp)}</div>${delta(exp, expPrev, false)}
-          </div>
-          <div class="hero-stat hero-stat-sav">
-            <div class="hero-stat-head"><span class="hero-stat-icon">${iconSvg('minus')}</span><span class="k">Ahorros</span></div>
-            <div class="v ${savingsMonth < 0 ? 'neg' : ''}">${fmtDisp(savingsMonth)}</div>${savingsDelta}
+          <div class="minis">
+            <div><span class="lbl"><i class="dotic" style="--c:var(--brand)">${spriteIcon('in')}</i>Ingresos</span><span class="num val">${money(inc)}</span>${deltaHTML(inc, isCurMonth ? incPrevCmp : incPrev, true)}</div>
+            <div><span class="lbl"><i class="dotic" style="--c:var(--neg)">${spriteIcon('in').replace('class="ic"', 'class="ic flip"')}</i>Gastos</span><span class="num val">${money(exp)}</span>${deltaHTML(exp, isCurMonth ? expPrevCmp : expPrev, false)}</div>
+            <div><span class="lbl"><i class="dotic" style="--c:var(--c-super)">${spriteIcon('dollar')}</i>Ahorros</span><span class="num val ${savingsMonth < 0 ? 'neg' : ''}">${money(savingsMonth)}</span>${savDeltaHTML}</div>
           </div>
         </div>
       </div>
 
-      ${sharedWidget}
+      ${sharedRow}
 
-      <div class="grid-2 grid-2-pair">
-      <div class="card card-compact card-link" data-goto-categorias>
-        <h2 class="card-title"><span>Gastos por categoría</span></h2>
-        ${catItems.length ? `<div id="chart-cats" class="cats-bars cats-bars-compact"></div>` : '<div class="empty">Sin gastos registrados este mes.</div>'}
-      </div>
+      <section class="k-card">
+        <div class="k-card-h"><h2>Gastos por categoría</h2>${catRows.length ? `<button type="button" class="link" data-goto-categorias>Ver todo${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}</button>` : ''}</div>
+        ${catRows.length ? `
+        <div class="stack" role="img" aria-label="${esc(catRows.map((r) => `${r.name} ${pctOf(r.value)}%`).join(', '))}">
+          ${catRows.map((r) => `<i style="width:${((r.value / catTotal) * 100).toFixed(2)}%;background:${r.color}"></i>`).join('')}
+        </div>
+        <div class="cat-lines">
+          ${catRows.map((r) => `
+          <button type="button" class="cat-line" ${r.id ? `data-goto-cat="${esc(r.id)}"` : 'data-goto-categorias'}>
+            <i style="background:${r.color}"></i><span class="cat-line-name">${esc(r.name)}</span>
+            <span class="t3 cat-line-pct">${pctOf(r.value)}%</span><span class="num">${money(r.value)}</span>
+          </button>`).join('')}
+        </div>
+        ${basisNote}` : '<div class="empty">Sin gastos registrados este mes.</div>'}
+      </section>
 
-      <div class="card card-compact card-link savings-rate-card" data-goto-savings>
-        <h2 class="card-title"><span>Tasa de ahorro</span></h2>
-        <div class="savings-rate-stat">
-          <div class="savings-rate-value ${savingsRatePct == null ? '' : savingsRatePct > 0 ? 'pos' : savingsRatePct < 0 ? 'neg' : ''}">${savingsRatePct == null ? '—' : savingsRatePct + '%'}</div>
-          ${savingsRateDeltaHTML}
-        </div>
-        <div class="savings-rate-chart">
-          ${hasSavingsRateTrend ? savingsRateTrendSvg(savingsRateRows)
-            : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}
-        </div>
-      </div>
-      </div>
+      <section class="k-card" data-goto-savings role="button" tabindex="0">
+        <div class="k-card-h"><h2>Tasa de ahorro</h2>${rateDiff == null ? '' : rateDiff === 0 ? '<span class="dchip flat">= igual</span>' : `<span class="dchip ${rateDiff > 0 ? 'good' : 'bad'}">${rateDiff > 0 ? '▲' : '▼'} ${Math.abs(rateDiff)} pp</span>`}</div>
+        ${savingsRateRows.length ? savingsRateChartSvg(savingsRateRows) : '<div class="empty">Sin ingresos registrados en los últimos 6 meses.</div>'}
+      </section>
 
       ${insights.length ? `
-      <div class="card insight-card">
-        <h2 class="card-title">Cómo vas este mes</h2>
-        <div class="insight-list">
-          ${insights.map((ins) => `
-            <div class="insight-row insight-${ins.tone}${ins.cardId ? ' rowlink' : ''}"${ins.cardId ? ` data-insight-card="${esc(ins.cardId)}" role="button" tabindex="0"` : ''}>
-              <span class="insight-icon">${ins.icon}</span>
-              <span class="insight-text">${esc(ins.text)}</span>
-              ${ins.cardId ? '<span class="insight-go" aria-hidden="true">›</span>' : ''}
-            </div>`).join('')}
-        </div>
-      </div>` : ''}
+      <h2 class="ovl home-ovl">Para tener en cuenta</h2>
+      <div class="group">
+        ${insights.map((ins) => `
+        <button type="button" class="insight" ${ins.cardId ? `data-insight-card="${esc(ins.cardId)}"` : `data-insight-go="${esc(ins.go || '')}"`}>
+          <span class="cic" style="--c:${INSIGHT_COLOR[ins.tone]}">${spriteIcon(ins.icon)}</span>
+          <div class="row-main"><div class="tt">${esc(ins.title)}</div>${ins.sub ? `<div class="st${ins.money ? ' money' : ''}">${esc(ins.sub)}</div>` : ''}</div>
+          ${spriteIcon('cr').replace('class="ic"', 'class="ic chev"')}
+        </button>`).join('')}
+      </div>` : ''}`;
 
-      <div class="card">
-        <h2 class="card-title">
-          <span>Ingresos vs. gastos</span>
-          <button class="link-btn" data-trendtable>${ui.trendTable ? 'Ver gráfico' : 'Ver tabla'}</button>
-        </h2>
-        <div class="chart-legend">
-          <span><span class="key" style="background:${Charts.COLORS.income}"></span>Ingresos</span>
-          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos</span>
-        </div>
-        <div id="chart-trend"></div>
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">
-          <span>Balance por día</span>
-          <button type="button" class="icon-btn" id="btn-expand-daily" title="Ampliar" aria-label="Ampliar gráfico">${iconSvg('expand')}</button>
-        </h2>
-        <div class="chart-legend">
-          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
-          <span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>
-          <span><span class="key key-dotted"></span>Ingresos del mes</span>
-          <span><span class="key key-dotted key-dotted-warn"></span>Ingresos − ahorro</span>
-        </div>
-        <div id="chart-daily-balance"></div>
-      </div>
-
-      <div class="card">
-        <h2 class="card-title">Próximos vencimientos</h2>
-        ${cardRows.length ? `
-        <div class="due-card-list">
-          ${cardRows.slice().sort((a, b) => a.cy.prevDue - b.cy.prevDue).map((r) => {
-            const today0 = new Date(); today0.setHours(0, 0, 0, 0);
-            const days = Math.round((r.cy.prevDue - today0) / DAY_MS);
-            const daysLabel = days < 0 ? `Venció hace ${-days} día${-days === 1 ? '' : 's'}`
-              : days === 0 ? 'Vence hoy' : `Vence en ${days} día${days === 1 ? '' : 's'}`;
-            return `<div class="due-card-row" data-goto-card="${esc(r.card.id)}">
-              <div class="row-icon row-icon-due">${iconSvg('card')}</div>
-              <div class="due-card-main">
-                <div class="due-card-title">${esc(r.card.name)}</div>
-                <div class="due-card-sub">${esc(daysLabel)} · ${esc(fmtDay(r.cy.prevDue))}</div>
-              </div>
-              <div class="due-card-amount">
-                <div class="v">${fmtDisp(r.toPay)}</div>
-                <span class="due-card-pill">Ver</span>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>`
-        : `<div class="empty">${cards.length
-            ? 'Cargá al menos dos resúmenes (el actual y el anterior) desde "Resúmenes" en cada tarjeta para ver acá cierres, vencimientos y cuánto vas a pagar.'
-            : 'Agregá tus tarjetas de crédito en “Tarjetas y medios” para ver cierres, vencimientos y cuánto vas a pagar.'}</div>`}
-      </div>`;
-
-    // Gráficos
-    if (catItems.length) {
-      Charts.hBars($('#chart-cats', el), catItems, {
-        fmt: fmtDisp, color: Charts.COLORS.category,
-      });
-    }
-    $$('[data-insight-card]', el).forEach((row) => {
-      const open = () => cardAnalysisDialog(row.dataset.insightCard);
-      row.addEventListener('click', open);
-      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-    });
-    const trendEl = $('#chart-trend', el);
-    if (!trendRows.length) {
-      trendEl.innerHTML = '<div class="empty">Sin movimientos en los últimos 6 meses.</div>';
-    } else if (ui.trendTable) {
-      trendEl.innerHTML = `
-        <div class="table-scroll"><table class="data">
-          <thead><tr><th>Mes</th><th class="num">Ingresos</th><th class="num">Gastos</th><th class="num">Balance</th></tr></thead>
-          <tbody>${trendRows.map((r) => `
-            <tr><td>${esc(r.label)}</td>
-            <td class="num amount-in">${fmtDisp(r.income)}</td>
-            <td class="num">${fmtDisp(r.expense)}</td>
-            <td class="num">${fmtDisp(r.income - r.expense)}</td></tr>`).join('')}
-          </tbody>
-        </table></div>`;
-    } else {
-      Charts.lines(trendEl, trendRows.map((r) => r.label), [
-        { label: 'Ingresos', color: Charts.COLORS.income, values: trendRows.map((r) => r.income) },
-        { label: 'Gastos', color: Charts.COLORS.expense, values: trendRows.map((r) => r.expense) },
-      ], {
-        smooth: true, markerRadius: 5, leftPad: 52, topPad: 14,
-        fmtAxis: (v) => Charts.compact(v),
-        ariaLabel: 'Ingresos y gastos por mes',
-      });
-    }
-    Charts.dailyBalance($('#chart-daily-balance', el), dailyBalance, {
-      prevPoints: dailyBalancePrev,
-      incomeLine: incomeLineCal,
-      incomeMinusSavingsLine: incomeMinusSavingsLineCal,
-      todayLine: mk === curMonth(),
-      ariaLabel: 'Gastos acumulados por día del mes',
-    });
-
-    $('[data-trendtable]', el).addEventListener('click', () => {
-      ui.trendTable = !ui.trendTable;
-      render();
-    });
-    // "Ampliar": mismo gráfico en un diálogo, pero con un día por franja fija
-    // (en vez de repartir el ancho disponible entre los ~30 días del mes) y
-    // etiqueta en cada día — así se puede tocar/scrollear para leer un día
-    // puntual con precisión, en vez de estimarlo a ojo en la versión chica.
-    $('#btn-expand-daily', el).addEventListener('click', () => {
-      // Comparación "hoy vs. el mismo día del mes pasado": punto actual del
-      // mes que se está mirando contra el gasto acumulado al mismo número
-      // de día en el mes anterior (si ese mes fue más corto, se usa su
-      // último día disponible) — independiente del toggle "Comparar con
-      // mes anterior", que sólo controla la línea punteada del gráfico.
-      const todayEntry = [...dailyBalance].reverse().find((p) => p.value != null);
-      const prevKnown = dailyBalancePrev.filter((p) => p.value != null);
-      const prevEntry = todayEntry
-        ? (prevKnown.find((p) => p.day === todayEntry.day) || prevKnown[prevKnown.length - 1])
-        : null;
-      let cmpHTML = '';
-      // prevCalMonthTxs.length: sin movimientos cargados el mes anterior no
-      // hay nada real con qué comparar (todos los días quedarían en 0, lo
-      // que se leería como "gastaste $X de más" siendo mentira).
-      if (todayEntry && prevEntry && prevCalMonthTxs.length) {
-        const diff = todayEntry.value - prevEntry.value;
-        const worse = diff > 0; // gastó más que en el mismo punto del mes pasado
-        const pct = prevEntry.value > 0 ? Math.round(Math.abs(diff) / prevEntry.value * 100) : null;
-        cmpHTML = `
-        <div class="daycmp">
-          <div class="daycmp-row">
-            <div class="daycmp-item">
-              <div class="ring-stat-label">Hoy · día ${todayEntry.day}</div>
-              <div class="ring-stat-value">${fmtDisp(todayEntry.value)}</div>
-            </div>
-            <div class="daycmp-item daycmp-item-muted">
-              <div class="ring-stat-label">Día ${prevEntry.day} de ${esc(monthShortLabel(prevMkDaily))}</div>
-              <div class="ring-stat-value">${fmtDisp(prevEntry.value)}</div>
-            </div>
-          </div>
-          <div class="daycmp-diff ${worse ? 'daycmp-diff-bad' : 'daycmp-diff-good'}">
-            <span class="daycmp-diff-arrow">${worse ? '▲' : '▼'}</span>
-            <span class="daycmp-diff-main">${fmtDisp(Math.abs(diff))}${pct != null ? ` (${pct}%)` : ''}</span>
-            <span class="daycmp-diff-label">${worse ? 'más' : 'menos'} que el ${prevEntry.day} de ${esc(monthShortLabel(prevMkDaily))}</span>
-          </div>
-        </div>`;
-      }
-      const dlg = openDialog('Balance por día', `
-        ${cmpHTML}
-        <div class="chart-legend">
-          <span><span class="key" style="background:${Charts.COLORS.expense}"></span>Gastos · ${esc(monthShortLabel(mk))}</span>
-          <span><span class="key key-dashed"></span>Gastos · ${esc(monthShortLabel(prevMkDaily))}</span>
-          <span><span class="key key-dotted"></span>Ingresos del mes</span>
-          <span><span class="key key-dotted key-dotted-warn"></span>Ingresos − ahorro</span>
-        </div>
-        <div id="chart-daily-balance-big" class="chart-daily-big-host"></div>
-      `, { viewOnly: true, submitLabel: 'Cerrar' });
-      Charts.dailyBalance($('#chart-daily-balance-big', dlg), dailyBalance, {
-        big: true,
-        prevPoints: dailyBalancePrev,
-        incomeLine: incomeLineCal,
-        incomeMinusSavingsLine: incomeMinusSavingsLineCal,
-        todayLine: mk === curMonth(),
-        ariaLabel: 'Gastos acumulados por día del mes',
-      });
-    });
-    $$('[data-goto-card]', el).forEach((row) => row.addEventListener('click', () => {
-      ui.view = 'tarjetas';
-      render();
+    $$('[data-insight-card]', el).forEach((row) => row.addEventListener('click', () => cardAnalysisDialog(row.dataset.insightCard)));
+    $$('[data-insight-go]', el).forEach((row) => row.addEventListener('click', () => {
+      const go = row.dataset.insightGo;
+      if (go && VIEWS[go]) { ui.view = go; render(); }
     }));
     const gotoSavings = $('[data-goto-savings]', el);
-    if (gotoSavings) gotoSavings.addEventListener('click', () => {
-      ui.view = 'ahorros';
-      render();
-    });
+    if (gotoSavings) {
+      const open = () => { ui.view = 'ahorros'; render(); };
+      gotoSavings.addEventListener('click', open);
+      gotoSavings.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    }
     const gotoShared = $('[data-goto-shared]', el);
     if (gotoShared) gotoShared.addEventListener('click', () => {
       ui.view = 'compartido';
       loadShared();
       render();
     });
-    const gotoCats = $('[data-goto-categorias]', el);
-    if (gotoCats) gotoCats.addEventListener('click', () => {
+    $$('[data-goto-categorias]', el).forEach((b) => b.addEventListener('click', () => {
       ui.view = 'categorias';
+      ui.catKind = 'gasto';
       render();
-    });
+    }));
+    $$('[data-goto-cat]', el).forEach((b) => b.addEventListener('click', () => {
+      ui.view = 'categorias';
+      ui.catKind = 'gasto';
+      ui.catOpen = { ...ui.catOpen, ['gasto:' + b.dataset.gotoCat]: true };
+      render();
+    }));
   }
 
   /* ================= Vista: Movimientos ================= */
@@ -7202,6 +6908,7 @@
       eye.setAttribute('aria-label', hideAmounts ? 'Mostrar montos' : 'Ocultar montos');
       eye.title = hideAmounts ? 'Mostrar montos' : 'Ocultar montos';
     }
+    document.body.classList.toggle('hide-amounts', hideAmounts);
     const thumb = $('.seg-thumb');
     if (thumb) thumb.classList.toggle('pos-usd', disp() === 'USD');
     renderRateChip();
