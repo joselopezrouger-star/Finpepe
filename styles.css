@@ -518,13 +518,6 @@ select:focus, input:focus, .btn:focus-visible, .icon-btn:focus-visible {
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-check { flex-direction: row; align-items: center; gap: 8px; }
 .hint { font-size: 11.5px; color: var(--muted); }
-/* Separa la grilla de cuentas de la de ahorros en el selector de medio de
-   pago de un gasto (ver methodOptionsHTML) — sin esto las tarjetas de
-   ambos grupos se veían como una sola lista sin distinción. */
-.tx-pick-section-label {
-  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
-  color: var(--ink-2); margin: 12px 0 8px;
-}
 
 .dialog {
   border: 1px solid var(--border);
@@ -597,95 +590,6 @@ dialog[open].dialog {
   flex: none;
 }
 
-/* ---------- Carga de movimientos (calculadora) ---------- */
-.dialog-tx {
-  width: min(420px, calc(100vw - 24px));
-  max-height: calc(100vh - 24px);
-  max-height: calc(100dvh - 24px);
-  height: min(720px, calc(100vh - 24px));
-  height: min(720px, calc(100dvh - 24px));
-  display: flex;
-  flex-direction: column;
-}
-/* El alta nueva (de a etapas) no necesita la altura fija del formulario
-   completo: cada paso muestra poco contenido. height:auto no alcanza acá
-   porque la red de seguridad "dialog[open].dialog { position:fixed; inset:0
-   }" (ver más abajo, tiene más especificidad por el atributo [open]) fuerza
-   a estirarse a los cuatro bordes del viewport sin importar height. Acá se
-   la puntualmente con un selector más específico, y top:50%+transform en
-   vez de márgenes automáticos (con top/bottom auto simultáneos el margin:
-   auto no la centraba, quedaba pegada arriba) para que cada paso quede
-   del alto de su contenido, centrado en la pantalla. */
-dialog[open].dialog-tx.dialog-tx-wiz {
-  top: 50%;
-  bottom: auto;
-  height: auto;
-  transform: translateY(-50%);
-}
-.tx-wiz-body { flex: 0 1 auto; max-height: 55vh; }
-.tx-head {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  display: grid;
-  grid-template-columns: 32px 1fr 32px;
-  align-items: center;
-}
-.tx-head-title { text-align: center; font-weight: 650; font-size: 15px; }
-.tx-tabs {
-  display: flex;
-  gap: 8px;
-  padding: 10px 14px 0;
-}
-.tx-tab {
-  flex: 1;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--ink-2);
-  border-radius: var(--radius-s);
-  padding: 8px 0;
-  font: 13px var(--font);
-  font-weight: 600;
-  cursor: pointer;
-}
-.tx-tab.active.tx-tab-expense { border-color: var(--crit); color: var(--crit); background: var(--danger-bg); }
-.tx-tab.active.tx-tab-income { border-color: var(--good); color: var(--good); background: var(--accent-wash); }
-.tx-tab.active.tx-tab-transfer { border-color: var(--ink-2); color: var(--ink); background: var(--surface-2); }
-
-/* ---------- Alta de movimiento: de a una etapa (tipo, fecha, monto,
-   categoría, cuenta...) en vez de un formulario largo todo junto ---------- */
-.tx-wiz-progress { display: flex; justify-content: center; gap: 6px; padding: 12px 0 0; }
-.tx-wiz-dot { width: 6px; height: 6px; border-radius: 3px; background: var(--border-strong); }
-.tx-wiz-dot.done { background: var(--muted); }
-.tx-wiz-dot.active { width: 16px; background: var(--accent); }
-.tx-wiz-summary { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 0; }
-.tx-wiz-chip {
-  font-size: 11.5px; font-weight: 600; color: var(--ink-2);
-  background: var(--surface-2); border-radius: 999px; padding: 3px 10px;
-}
-/* Una animación breve al entrar a cada paso (se re-dispara sola: paint()
-   reemplaza todo el innerHTML, así que el elemento es nuevo en cada
-   repintado) — da sensación de "avance" en vez de un cambio seco. */
-@keyframes txWizStepIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.tx-wiz-body { display: flex; flex-direction: column; animation: txWizStepIn 0.2s ease; }
-.tx-wiz-type-options { display: grid; gap: 10px; padding: 10px 2px; }
-.tx-wiz-type-opt {
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  border-radius: var(--radius);
-  font: 600 15px var(--font);
-  color: var(--ink);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-.tx-wiz-type-opt .row-icon { pointer-events: none; }
-.tx-wiz-type-opt.sel.type-income { border-color: var(--good); color: var(--good); background: var(--accent-wash); }
-.tx-wiz-type-opt.sel.type-expense { border-color: var(--crit); color: var(--crit); background: var(--danger-bg); }
-.tx-wiz-type-opt.sel.type-transfer { border-color: var(--ink-2); color: var(--ink); background: var(--surface-2); }
-
-.tx-body { flex: 1; overflow-y: auto; padding: 4px 14px 10px; }
-
 .tx-row {
   display: flex;
   align-items: center;
@@ -713,72 +617,7 @@ dialog[open].dialog-tx.dialog-tx-wiz {
 }
 .tx-detail-row:last-child { border-bottom: none; }
 
-/* La fecha usa un <input type="date"> real y visible (aunque transparente)
-   que cubre toda la fila, en vez de uno oculto que dispare showPicker()
-   por JS: en iOS Safari eso no abre el selector nativo de forma confiable.
-   Así el toque va directo al control nativo, como cualquier <input>. */
-.tx-row-date { position: relative; }
-.tx-row-date::after { content: '›'; color: var(--muted); font-size: 16px; margin-left: 2px; }
-.tx-row-value-date { pointer-events: none; }
-.tx-date-native {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  opacity: 0;
-  border: 0; padding: 0; margin: 0;
-  cursor: pointer;
-}
-
-.tx-amount-block {
-  padding: 14px 2px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.tx-cur-toggle { display: inline-flex; gap: 6px; margin-bottom: 8px; }
-.cur-pill {
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--ink-2);
-  border-radius: 999px;
-  padding: 3px 12px;
-  font: 12px var(--font);
-  font-weight: 600;
-  cursor: pointer;
-}
-.cur-pill.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.tx-amount-display {
-  font: 700 32px/1.2 var(--font-heading);
-  letter-spacing: -0.01em;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding-bottom: 10px;
-  border-bottom: 2px solid var(--accent);
-}
-.tx-amount-display.is-income { color: var(--good); }
-.tx-amount-display.is-expense { color: var(--ink); }
-.tx-amount-back {
-  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--ink-2);
-  font: 600 13px var(--font); border-radius: 999px;
-  cursor: pointer; padding: 8px 14px; flex: none; white-space: nowrap;
-}
-
-.tx-check-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 2px;
-  border-bottom: 1px solid var(--border);
-  font-size: 13.5px;
-  cursor: pointer;
-}
-.tx-check-row input { width: 17px; height: 17px; accent-color: var(--accent); }
-
-.tx-row-note { padding: 12px 2px; border-bottom: 1px solid var(--border); }
-.tx-row-note label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; font-weight: 550; }
-.tx-row-note input { width: 100%; }
-
-/* Cuotas: mini-tarjetas 1/3/6/12/otra en vez de un número pelado. */
-.inst-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Cuotas y proporción de compartido: opciones en grilla (panel de carga). */
 .inst-opt {
   flex: 1;
   min-width: 52px;
@@ -791,91 +630,9 @@ dialog[open].dialog-tx.dialog-tx-wiz {
   cursor: pointer;
 }
 .inst-opt.sel { border-color: var(--accent); background: var(--accent-wash); color: var(--accent-down); }
-.inst-custom-input { margin-top: 8px; }
 
-/* El toggle de "total vs 1 cuota" tiene frases, no dígitos: letra más chica
-   y sin negrita para que entre cómodo en dos mitades. */
-.inst-mode-picker .inst-opt { font: 600 12.5px/1.25 var(--font); padding: 9px 6px; }
 .inst-preview { margin-top: 8px; line-height: 1.4; }
 .inst-preview b { color: var(--ink); font-weight: 700; }
-
-.tx-keypad {
-  flex: none;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1px;
-  background: var(--border);
-  border-top: 1px solid var(--border);
-}
-.tx-keypad button {
-  border: 0;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 19px;
-  font-weight: 600;
-  padding: 15px 0;
-  cursor: pointer;
-}
-.tx-keypad button:active { background: var(--surface-2); }
-.tx-keypad button.tx-key-op {
-  background: var(--accent-wash);
-  color: var(--accent-down);
-  font-size: 21px;
-}
-.tx-keypad button.tx-key-ac {
-  background: var(--danger-bg);
-  color: var(--danger-ink);
-  font-size: 15px;
-}
-.tx-keypad button.tx-key-eq {
-  grid-column: span 2;
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-/* Lista de categoría/cuenta desplegada ahí mismo, sin cambiar de hoja. */
-.tx-pick-inline {
-  max-height: 46vh;
-  overflow-y: auto;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  margin: 0 -2px;
-  padding: 2px 2px;
-}
-/* Grilla de categorías/subcategorías (tarjetas en vez de lista). Tocar
-   una con hijos "entra" a una sub-grilla con las subcategorías. */
-.cat-tile-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  padding: 4px 2px;
-}
-.cat-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  min-height: 58px;
-  padding: 8px 6px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  text-align: center;
-  cursor: pointer;
-}
-.cat-tile:hover { border-color: var(--border-strong); }
-.cat-tile.sel { border-color: var(--accent); background: var(--accent-wash); }
-.cat-tile-name { font-size: 12px; font-weight: 600; line-height: 1.25; }
-.cat-tile.sel .cat-tile-name { color: var(--accent-down); }
-.cat-tile-chev { font-size: 11px; color: var(--muted); }
-.cat-tile-crumb {
-  padding: 8px 8px 10px;
-  font-size: 12.5px;
-  font-weight: 650;
-  color: var(--accent-down);
-  cursor: pointer;
-}
 
 /* ---------- Login (pantalla grande) ---------- */
 .dialog-auth { width: min(400px, calc(100vw - 24px)); }
@@ -2137,4 +1894,166 @@ html[data-slide="prev"] ::view-transition-new(content) { animation-name: vt-in-l
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   button { transition: none; }
+}
+
+/* ---------- Panel inferior (sheet) ----------
+   El <dialog> de la app como panel que sube desde abajo (ver openSheet()
+   en app.js). Atrás, la pantalla se achica apenas. */
+dialog.sheet {
+  position: fixed; inset: auto 0 0 0;
+  width: 100%; max-width: 560px; margin: 0 auto;
+  max-height: calc(100dvh - env(safe-area-inset-top) - 12px);
+  border: 0; padding: 0;
+  background: var(--s1); color: var(--t1);
+  border-radius: 26px 26px 0 0;
+  box-shadow: var(--sheet-shadow);
+  display: flex; flex-direction: column; overflow: hidden;
+  transform: translateY(100%);
+  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1);
+}
+dialog.sheet:not([open]) { display: none; }
+dialog.sheet.open { transform: none; }
+dialog.sheet.dragging { transition: none; }
+dialog.sheet::backdrop { background: var(--scrim); }
+[data-theme="light"] dialog.sheet { background: var(--bg); }
+body .view, body .topbar { transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1), border-radius 0.42s; transform-origin: 50% 0; }
+body.sheet-behind .view { transform: scale(0.94); }
+body.sheet-behind .topbar { transform: scale(0.94); border-radius: 14px; }
+
+.sh-top { flex: none; touch-action: none; }
+.grab { width: 38px; height: 5px; border-radius: 9px; background: var(--s3); margin: 8px auto 2px; }
+.sh-h { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; padding: 4px 10px 8px; }
+.sh-h h2 { margin: 0; text-align: center; font: 600 17px/1.2 var(--f-text); }
+.icb-danger { color: var(--neg); background: var(--neg-soft); }
+.sh-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 16px 12px; display: flex; flex-direction: column; gap: 10px;
+  scrollbar-width: none;
+}
+.sh-body::-webkit-scrollbar { display: none; }
+
+/* Gasto | Ingreso | Transferencia */
+.tseg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--s2); border-radius: 12px; padding: 3px; flex: none; }
+.tseg button {
+  border: 0; background: transparent; height: 34px; border-radius: 9px;
+  font: 600 14px/1 var(--f-text); color: var(--t2); cursor: pointer;
+  transition: background 0.18s, color 0.18s, scale 0.12s;
+}
+.tseg button.on { background: var(--s1); color: var(--t1); box-shadow: 0 1px 4px var(--scrim); }
+[data-theme="light"] .tseg button.on { background: var(--s1); }
+[data-theme="light"] .sheet .tseg { background: var(--s3); }
+.tseg-small button { height: 32px; font-size: 13px; }
+
+/* Monto con cursor */
+.amount { display: grid; justify-items: center; gap: 6px; flex: none; }
+.amount .val {
+  font: 600 44px/1 var(--f-num); letter-spacing: -0.02em;
+  display: flex; align-items: baseline; gap: 6px; max-width: 100%; overflow: hidden; white-space: nowrap;
+}
+.amount.is-sm .val { font-size: 36px; }
+.amount.is-xs .val { font-size: 28px; }
+.amount .val small { font-size: 0.6em; color: var(--t3); font-weight: 500; }
+.amount .caret { width: 2px; height: 0.85em; background: var(--brand); align-self: center; border-radius: 2px; animation: caret-blink 1s steps(1) infinite; }
+@keyframes caret-blink { 50% { opacity: 0; } }
+.amount-sub { display: flex; gap: 8px; align-items: center; min-height: 28px; flex-wrap: wrap; justify-content: center; }
+.cur {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+  border: 0; border-radius: 999px; background: var(--s2); color: var(--t2);
+  font: 600 12px/1 var(--f-text); cursor: pointer;
+}
+.cur b { color: var(--t1); }
+.cur .ic { width: 14px; height: 14px; }
+.amount-eq { font-size: 13px; color: var(--t3); }
+
+/* Chips con los valores por defecto */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; flex: none; }
+.chip {
+  position: relative; flex: none; max-width: 100%;
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
+  border-radius: 999px; border: 1px solid var(--line); background: var(--s1);
+  font: 500 13.5px/1 var(--f-text); color: var(--t1); cursor: pointer;
+}
+.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.chip .ic { width: 16px; height: 16px; color: var(--t2); }
+.chip.on { background: var(--t1); color: var(--bg); border-color: transparent; }
+.chip.on .ic { color: inherit; }
+[data-theme="light"] .sheet .chip:not(.on) { background: var(--s1); }
+/* La fecha es un <input type="date"> real, invisible y encima del chip:
+   en el iPhone el toque abre directo la ruedita del sistema. */
+.chip-date input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; border: 0; padding: 0; margin: 0; cursor: pointer; font-size: 16px;
+}
+
+/* Grilla de categorías */
+.sh-lower { display: flex; flex-direction: column; gap: 8px; }
+.cat-head { display: flex; justify-content: space-between; align-items: center; min-height: 28px; padding: 0 2px; }
+.cat-head .link-btn { font-size: 13px; font-weight: 600; }
+.ovl { font: 600 11px/1.2 var(--f-text); letter-spacing: 0.06em; text-transform: uppercase; color: var(--t2); }
+.catgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 4px; }
+.catb {
+  display: grid; justify-items: center; align-content: start; gap: 5px; min-width: 0;
+  border: 0; background: transparent; padding: 4px 0;
+  font: 500 12px/1.15 var(--f-text); color: var(--t2); cursor: pointer;
+}
+.catb-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
+.catb .cic {
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.catb .cic svg { width: 20px; height: 20px; }
+.catb.on { color: var(--t1); }
+.catb.on .cic { box-shadow: 0 0 0 2px var(--s1), 0 0 0 4px var(--c); transform: scale(1.04); }
+[data-theme="light"] .catb.on .cic { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--c); }
+.catgrid.swap .catb { animation: catin 0.22s ease-out both; }
+.catgrid.swap .catb:nth-child(2) { animation-delay: 0.03s; }
+.catgrid.swap .catb:nth-child(3) { animation-delay: 0.06s; }
+.catgrid.swap .catb:nth-child(n+4) { animation-delay: 0.09s; }
+@keyframes catin { from { opacity: 0; transform: scale(0.85); } }
+
+/* Listas de los chips (cuenta, cuotas, compartido, nota) */
+.pick-list { display: grid; gap: 2px; }
+.pick-row {
+  display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 4px 6px;
+  border: 0; border-radius: 12px; background: transparent; color: var(--t1);
+  font: 500 15px/1.2 var(--f-text); text-align: left; cursor: pointer;
+}
+.pick-row > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-row .cic { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+.pick-row > .ic { color: var(--brand-text); }
+.pick-row.on { background: var(--s2); }
+.pick-sep { margin: 10px 4px 2px; }
+.inst-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+.inst-grid .inst-opt { min-width: 0; padding: 0; height: 36px; font-size: 14px; }
+.inst-grid .inst-opt:first-child { grid-column: span 2; }
+.share-grid { grid-template-columns: repeat(3, 1fr); }
+.share-grid .inst-opt:first-child { grid-column: auto; }
+.share-custom { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--t2); }
+.share-custom input { width: 84px; text-align: center; }
+.share-off { color: var(--neg); }
+.sh-lower > input[type="text"] { width: 100%; height: 44px; }
+
+/* Teclado propio: el del sistema nunca aparece para el monto. */
+.keys { display: grid; grid-template-columns: repeat(3, 1fr) repeat(2, 0.8fr); gap: 6px; flex: none; padding: 6px 12px 0; }
+.key {
+  height: 42px; border-radius: 12px; border: 0; background: var(--s2);
+  font: 500 22px/1 var(--f-num); color: var(--t1); cursor: pointer;
+  display: grid; place-items: center; transition: background 0.08s, scale 0.08s;
+}
+.key:active { background: var(--s3); }
+.key.op { background: transparent; color: var(--brand-text); font-size: 24px; }
+.key.key-wide { grid-column: span 2; }
+.key .ic { width: 24px; height: 24px; }
+[data-theme="light"] .key { background: var(--s1); box-shadow: 0 1px 0 var(--line); }
+[data-theme="light"] .key.op { background: transparent; box-shadow: none; }
+.savebar { flex: none; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); display: grid; gap: 8px; }
+.btn-save { height: 50px; border-radius: 14px; font: 600 16px/1 var(--f-text); }
+.sh-error { font-size: 13px; color: var(--neg); text-align: center; }
+
+/* Movimiento recién guardado: fondo verde suave que se desvanece. */
+.is-new { animation: nuevo 1.5s ease-out; }
+@keyframes nuevo { from { background: var(--brand-soft); } }
+@media (prefers-reduced-motion: reduce) {
+  dialog.sheet, body .view, body .topbar { transition: none; }
+  .catgrid.swap .catb, .is-new { animation: none; }
 }

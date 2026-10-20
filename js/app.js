@@ -388,6 +388,7 @@
     expand: '<path d="M7 3H3v4M13 3h4v4M3 13v4h4M17 13v4h-4"/>',
     arrowDown: '<path d="M10 4v12M5 11l5 5 5-5"/>',
     arrowUp: '<path d="M10 16V4M5 9l5-5 5 5"/>',
+    trash: '<path d="M4 6h12"/><path d="M8 6V4h4v2"/><path d="M5.5 6l.8 10.2a1 1 0 0 0 1 .8h5.4a1 1 0 0 0 1-.8L14.5 6"/>',
     minus: '<path d="M5 10h10"/>',
     chevLeft: '<path d="M12 4.5 6.5 10l5.5 5.5"/>',
     chevRight: '<path d="M8 4.5 13.5 10 8 15.5"/>',
@@ -1183,13 +1184,50 @@
 
   /* ================= Formulario de movimiento ================= */
 
-  /* Carga de movimientos: una sola pantalla con calculadora para el importe
-     y listas que se despliegan ahí mismo para categoría/cuenta (sin navegar
-     a otra hoja: se abren y cierran en el lugar). */
+  /* Carga y edición de movimientos en un panel que sube desde abajo, todo
+     en una sola pantalla: tipo, monto con calculadora (teclado propio, el
+     del sistema nunca aparece), chips con valores por defecto (fecha,
+     cuenta, cuotas, compartido, nota) y la grilla de categorías, que al
+     tocar una con subcategorías pasa a mostrar sus subcategorías en los
+     mismos círculos. Lo que cambia es la interfaz: el guardado (moneda,
+     cotización del momento, cuotas, compartido, pagar con un ahorro) es
+     el mismo de siempre, en onSave(). */
+  const TX_TYPE_LABEL = { gasto: 'Gasto', ingreso: 'Ingreso', transferencia: 'Transferencia' };
+  const INST_MAX = 24;
+  // Cuenta de la última vez (la del último movimiento cargado de ese tipo),
+  // para que el chip de Cuenta ya venga con la que se usa siempre.
+  function lastUsedMethodId(type) {
+    const txs = S().transactions;
+    for (let i = txs.length - 1; i >= 0; i--) {
+      const t = txs[i];
+      if (type && t.type !== type) continue;
+      if (methodById(t.methodId) || (type === 'gasto' && isSavingMethod(t.methodId))) return t.methodId;
+    }
+    if (type) return lastUsedMethodId(null);
+    return S().methods[0] ? S().methods[0].id : '';
+  }
+  // Cuántas veces se usó cada categoría (contando por grupo y por hoja).
+  function categoryUsage(type) {
+    const counts = new Map();
+    for (const t of S().transactions) {
+      if (t.type !== type || !t.categoryId) continue;
+      counts.set(t.categoryId, (counts.get(t.categoryId) || 0) + 1);
+      const top = topCategoryOf(t.categoryId);
+      if (top !== t.categoryId) counts.set(top, (counts.get(top) || 0) + 1);
+    }
+    return counts;
+  }
+  const relDayLabel = (dateStr) => {
+    const short = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short' }).format(parseDate(dateStr)).replace('.', '');
+    if (dateStr === todayStr()) return `Hoy, ${short}`;
+    if (dateStr === dateToStr(addDays(parseDate(todayStr()), -1))) return `Ayer, ${short}`;
+    return short.charAt(0).toUpperCase() + short.slice(1);
+  };
+
   function txForm(tx) {
     const editing = !!tx;
     // El hogar compartido se carga en segundo plano al abrir la app: si el
-    // formulario se abría antes de que terminara, la opción "compartido" no
+    // panel se abría antes de que terminara, la opción "compartido" no
     // aparecía hasta cerrar y volver a abrir. Ahora se vuelve a mirar en
     // cada repintado y, si todavía está cargando, se repinta al terminar.
     let partner = sharedPartner();
@@ -1201,40 +1239,41 @@
       return !editing && draft.type === 'gasto' && !!partner && !!(shared.household);
     };
 
+    const startType = editing ? tx.type : 'gasto';
     const draft = {
-      type: editing ? tx.type : 'gasto',
+      type: startType,
       date: editing ? tx.date : todayStr(),
       currency: editing ? tx.currency : 'ARS',
       categoryId: editing ? tx.categoryId : '',
-      methodId: editing ? tx.methodId : (S().methods[0] ? S().methods[0].id : ''),
+      methodId: editing ? tx.methodId : lastUsedMethodId(startType),
       toMethodId: editing ? (tx.toMethodId || '') : '',
       shareIt: false,
       sharePct: 50,
-      acc: editing ? tx.amount : null,
+      // Al editar, el monto guardado queda como "resultado" de la
+      // calculadora: ⌫ lo corrige de a un dígito y un número nuevo lo pisa.
+      acc: null,
       op: null,
-      cur: '',
+      cur: editing ? (Math.round(tx.amount * 100) / 100).toString() : '',
       // true justo después de presionar "=": el próximo dígito tipeado tiene
       // que arrancar un número nuevo (como una calculadora física), en vez
       // de agregarse al final del resultado que ya se mostró.
-      justEq: false,
-      expand: null, // null | 'category' | 'method' | 'methodTo' — qué lista está desplegada
-      catGroupExpand: null, // id del grupo de categoría "abierto" en la grilla, o null (nivel superior)
+      justEq: editing,
+      // Qué se ve debajo de los chips: null = grilla de categorías; si no,
+      // la lista de un chip ('method' | 'methodTo' | 'inst' | 'share' | 'note').
+      panel: null,
+      catGroupExpand: null, // grupo cuyas subcategorías se están mostrando en la grilla
+      showAllCats: false,
       note: editing ? (tx.note || '') : '',
       inst: 1,
-      // 'total': el monto tipeado arriba es el precio total de la compra (se
+      // 'total': el monto tipeado es el precio total de la compra (se
       // reparte entre las n cuotas). 'per': el monto tipeado ya es el valor
       // de UNA cuota (se multiplica por n para saber el total).
       instMode: 'total',
-      // Al cargar un movimiento nuevo se pide de a una cosa por vez (tipo,
-      // fecha, monto, categoría, cuenta...) en vez de mostrar todo el
-      // formulario junto; wstep es el índice dentro de wizardSteps(). Editar
-      // uno existente sigue siendo un formulario único (ahí sí conviene ver
-      // todo para poder corregir cualquier campo sin pasos de por medio).
-      wstep: 0,
+      error: '',
     };
 
     const dlg = $('#dialog');
-    dlg.className = editing ? 'dialog dialog-tx' : 'dialog dialog-tx dialog-tx-wiz';
+    dlg.className = 'sheet sheet-tx';
 
     function applyOp(a, op, b) {
       a = a || 0;
@@ -1263,24 +1302,24 @@
       if (curVal != null) return curVal;
       return draft.acc != null ? draft.acc : 0;
     }
+    const OP_SHOWN = { '+': '+', '-': '−', '×': '×', '÷': '÷' };
     function displayExpr() {
       const parts = [];
       if (draft.acc != null) parts.push(formatTyped(numFmt(draft.acc)));
-      if (draft.op) parts.push(draft.op);
+      if (draft.op) parts.push(OP_SHOWN[draft.op]);
       if (draft.cur !== '') parts.push(formatTyped(draft.cur));
       return parts.length ? parts.join(' ') : '0';
     }
     function pressDigit(d) {
       haptic();
-      // Si se venía de tocar "=", este dígito arranca un número nuevo (como
-      // en una calculadora física) — sin esto, se pegaba al final del
-      // resultado anterior (ej. "50" + "3" => "503" en vez de "3"), dando
-      // montos gigantes por error.
+      // Si se venía de "=" (o de abrir un movimiento para editarlo), este
+      // dígito arranca un número nuevo, como en una calculadora física.
       if (draft.justEq) { draft.acc = null; draft.cur = ''; draft.justEq = false; }
       if (d === '.' && draft.cur.includes('.')) return;
       if (draft.cur.length > 12) return;
-      draft.cur = (draft.cur === '0' && d !== '.') ? d : draft.cur + d;
-      paint();
+      if (d === '.' && draft.cur === '') { draft.cur = '0.'; paintAmount(); return; }
+      draft.cur = (draft.cur + d).replace(/^0+(?=\d)/, ''); // sin ceros a la izquierda
+      paintAmount();
     }
     function pressOp(op) {
       haptic();
@@ -1288,9 +1327,10 @@
       const curVal = draft.cur === '' ? null : parseFloat(draft.cur);
       if (draft.op && curVal != null) draft.acc = applyOp(draft.acc, draft.op, curVal);
       else if (curVal != null) draft.acc = curVal;
+      if (draft.acc == null) return; // un operador sin número antes no hace nada
       draft.op = op;
       draft.cur = '';
-      paint();
+      paintAmount();
     }
     function pressEquals() {
       haptic();
@@ -1299,12 +1339,9 @@
       else if (curVal != null) draft.acc = curVal;
       draft.op = null;
       draft.cur = draft.acc != null ? numFmt(draft.acc) : '';
-      // Se vuelca todo a "cur" (lo que se muestra); si "acc" quedaba con el
-      // mismo valor, displayExpr() lo mostraba DE NUEVO al lado (ej. "50.000
-      // 50.000"), como si el resultado se hubiera duplicado.
       draft.acc = null;
       draft.justEq = true;
-      paint();
+      paintAmount();
     }
     function pressBack() {
       haptic();
@@ -1312,39 +1349,27 @@
       if (draft.cur) draft.cur = draft.cur.slice(0, -1);
       else if (draft.op) draft.op = null;
       else if (draft.acc != null) { draft.cur = numFmt(draft.acc); draft.acc = null; }
-      paint();
+      paintAmount();
     }
-    // "AC": a diferencia de "⌫" (que borra de a un paso), reinicia toda la
-    // cuenta en curso — para cuando te confundiste sumando varios montos y
-    // preferís arrancar de cero en vez de borrar carácter por carácter.
+    // ⌫ mantenido: reinicia toda la cuenta.
     function pressClear() {
       haptic();
       draft.acc = null;
       draft.op = null;
       draft.cur = '';
       draft.justEq = false;
-      paint();
+      paintAmount();
     }
 
     function currentInstMethod() { return methodById(draft.methodId); }
-    // Antes solo se podían cargar cuotas con tarjeta de crédito — pero
-    // también se compra en cuotas con débito, transferencia o efectivo
-    // (financiación de la tienda, acuerdo informal, etc.), así que alcanza
-    // con que haya algún medio de pago elegido. Pagar con un ahorro queda
-    // afuera: ahí se retira el total de una sola vez (ver onSave()), no
-    // tiene sentido "financiarlo" en cuotas contra el propio ahorro.
+    // Se puede comprar en cuotas con cualquier medio de pago (tarjeta,
+    // financiación de la tienda, acuerdo informal…). Pagar con un ahorro
+    // queda afuera: ahí se retira el total de una sola vez (ver onSave()).
     function showInstallments() {
       return !editing && draft.type === 'gasto' && !!currentInstMethod() && !isSavingMethod(draft.methodId);
     }
-
-    // Elegir cuotas como mini-tarjetas (1/3/6/12/otra) en vez de un campo
-    // numérico pelado: las opciones más comunes quedan a un toque, y "Otra"
-    // despliega el número para casos puntuales.
-    const INST_PRESETS = [1, 3, 6, 12];
-
-    // Con cuotas, el monto tipeado en la calculadora es ambiguo (¿el precio
-    // total de la compra, o lo que sale cada cuota?) — instMode lo saca de
-    // dudas, y esto calcula ambos valores para mostrarlos antes de guardar.
+    // Con cuotas, el monto tipeado es ambiguo (¿el total o lo que sale cada
+    // cuota?): instMode lo define y esto calcula los dos valores.
     function instAmounts(n) {
       const entered = Math.round(finalAmount() * 100) / 100;
       if (!(entered > 0) || !(n > 1)) return null;
@@ -1353,467 +1378,367 @@
       }
       return { per: Math.round((entered / n) * 100) / 100, total: entered };
     }
+    const instN = () => Math.max(1, parseInt(draft.inst || '1', 10) || 1);
 
-    function installmentsPickerHTML() {
-      const cur = Number(draft.inst);
-      const isCustom = !INST_PRESETS.includes(cur);
-      const amounts = instAmounts(cur);
+    /* ---------- Partes del panel ---------- */
+    // Equivalente en la otra moneda a la cotización de hoy (y, mientras se
+    // está haciendo una cuenta, el resultado parcial).
+    function amountSubHTML() {
+      const v = Math.round(finalAmount() * 100) / 100;
+      const parts = [];
+      if (draft.op && draft.cur !== '') parts.push(`= ${fmtMoney(v, draft.currency)}`);
+      const other = draft.currency === 'ARS' ? usdSnapshotFor(v, 'ARS') : arsSnapshotFor(v, 'USD');
+      if (v > 0 && other != null) parts.push(`≈ ${fmtMoney(other, draft.currency === 'ARS' ? 'USD' : 'ARS')}`);
+      return parts.map(esc).join(' · ');
+    }
+    function amountHTML() {
+      const shown = displayExpr();
+      const size = shown.length > 14 ? ' is-xs' : shown.length > 10 ? ' is-sm' : '';
       return `
-        <div class="tx-row-note">
-          <label>Cuotas</label>
-          <div class="inst-picker">
-            ${INST_PRESETS.map((n) => `<button type="button" class="inst-opt ${!isCustom && cur === n ? 'sel' : ''}" data-inst-preset="${n}">${n}</button>`).join('')}
-            <button type="button" class="inst-opt ${isCustom ? 'sel' : ''}" data-inst-custom>Otra</button>
+        <div class="amount${size}" data-amount>
+          <div class="val num" aria-live="polite"><small>${draft.currency === 'USD' ? 'US$' : '$'}</small><span>${esc(shown)}</span><span class="caret" aria-hidden="true"></span></div>
+          <div class="amount-sub">
+            <button type="button" class="cur" data-curtoggle aria-label="Moneda: ${draft.currency}. Cambiar a ${draft.currency === 'ARS' ? 'USD' : 'ARS'}">
+              <b>${draft.currency}</b>${spriteIcon('swap')}<span>${draft.currency === 'ARS' ? 'USD' : 'ARS'}</span>
+            </button>
+            <span class="amount-eq num" data-amount-sub>${amountSubHTML()}</span>
           </div>
-          ${isCustom ? `<input type="number" id="tx-inst" min="1" max="36" step="1" value="${esc(draft.inst)}" placeholder="Cantidad de cuotas" class="inst-custom-input">` : ''}
-        </div>
-        ${cur > 1 ? `
-        <div class="tx-row-note">
-          <label>El monto de arriba es…</label>
-          <div class="inst-picker inst-mode-picker">
-            <button type="button" class="inst-opt ${draft.instMode !== 'per' ? 'sel' : ''}" data-inst-mode="total">el total de la compra</button>
-            <button type="button" class="inst-opt ${draft.instMode === 'per' ? 'sel' : ''}" data-inst-mode="per">el valor de 1 cuota</button>
-          </div>
-          <div class="hint inst-preview">
-            ${amounts
-              ? `${cur} cuotas de <b>${esc(fmtMoney(amounts.per, draft.currency))}</b> c/u — total <b>${esc(fmtMoney(amounts.total, draft.currency))}</b>`
-              : 'Ingresá un monto arriba para ver cómo queda cada cuota.'}
-          </div>
-        </div>` : ''}`;
+        </div>`;
+    }
+    const chip = (attrs, icon, label, on) =>
+      `<button type="button" class="chip${on ? ' on' : ''}" ${attrs}>${spriteIcon(icon)}<span>${esc(label)}</span></button>`;
+    function chipsHTML() {
+      const out = [];
+      out.push(`<label class="chip chip-date">${spriteIcon('cal')}<span>${esc(relDayLabel(draft.date))}</span>
+        <input type="date" id="tx-date-input" value="${esc(draft.date)}" aria-label="Fecha"></label>`);
+      if (draft.type === 'transferencia') {
+        out.push(chip('data-panel="method"', 'card', draft.methodId ? `Desde ${methodName(draft.methodId)}` : 'Desde…', draft.panel === 'method'));
+        out.push(chip('data-panel="methodTo"', 'wallet', draft.toMethodId ? `Hacia ${methodName(draft.toMethodId)}` : 'Hacia…', draft.panel === 'methodTo'));
+      } else {
+        out.push(chip('data-panel="method"', isSavingMethod(draft.methodId) ? 'target' : 'card', draft.methodId ? methodName(draft.methodId) : 'Cuenta', draft.panel === 'method'));
+      }
+      if (showInstallments()) {
+        const n = instN();
+        const a = instAmounts(n);
+        const label = n === 1 ? '1 pago' : a ? `${n} cuotas de ${fmtMoney(a.per, draft.currency)}` : `${n} cuotas`;
+        out.push(chip('data-panel="inst"', 'repeat', label, n > 1 || draft.panel === 'inst'));
+      }
+      if (canShare()) {
+        const pct = Math.round(Number(draft.sharePct) || 0);
+        const label = draft.shareIt ? `Compartido con ${partnerLabel(partner)} · ${pct}/${100 - pct}` : 'Compartido';
+        out.push(chip('data-share', 'users', label, draft.shareIt));
+      }
+      out.push(chip('data-panel="note"', 'note', draft.note ? draft.note : 'Nota', !!draft.note || draft.panel === 'note'));
+      return `<div class="chips chips-wrap">${out.join('')}</div>`;
     }
 
-    // Grilla de tarjetas (categoría/subcategoría), con las que tienen hijos
-    // llevando a una "sub-grilla" en vez de mostrar todo mezclado en una lista.
-    function catTileGridHTML(items, checkChildren, selId) {
-      selId = selId === undefined ? draft.categoryId : selId;
-      return `<div class="cat-tile-grid">${items.map((item) => {
-        const hasKids = checkChildren && catChildren(item.id).length > 0;
-        if (hasKids) {
-          return `<div class="cat-tile" data-catgroup="${esc(item.id)}">
-            <span class="cat-tile-name">${esc(item.name)}</span>
-            <span class="cat-tile-chev">⌄</span>
-          </div>`;
-        }
-        const sel = item.id === selId;
-        return `<div class="cat-tile ${sel ? 'sel' : ''}" data-pickid="${esc(item.id)}">
-          <span class="cat-tile-name">${esc(item.name)}</span>
-        </div>`;
-      }).join('')}</div>`;
-    }
-    function categoryOptionsHTML() {
-      if (!useSubcats()) {
-        const items = S().categories.filter((c) => c.type === draft.type);
-        return items.length ? catTileGridHTML(items)
-          : '<div class="empty">No hay categorías. Agregá una desde Ajustes.</div>';
-      }
-      const groups = catGroups(draft.type);
-      if (!groups.length) return '<div class="empty">No hay categorías. Agregá una desde Ajustes.</div>';
-      if (draft.catGroupExpand) {
-        const g = groups.find((x) => x.id === draft.catGroupExpand);
-        const children = g ? catChildren(g.id) : [];
-        if (g && children.length) {
-          return `<div class="cat-tile-crumb" data-catback>‹ ${esc(g.name)}</div>${catTileGridHTML(children)}`;
+    // Grilla de categorías: las 8 más usadas (o todas), en círculos con su
+    // color. Un grupo con subcategorías pasa a mostrar sus subcategorías en
+    // los mismos círculos, con la más usada ya elegida.
+    const catb = (attrs, color, icon, name, on) =>
+      `<button type="button" class="catb${on ? ' on' : ''}" style="--c:${color}" ${attrs}><span class="cic">${icon}</span><span class="catb-name">${esc(name)}</span></button>`;
+    function catSectionHTML() {
+      const selTop = draft.categoryId ? topCategoryOf(draft.categoryId) : null;
+      if (useSubcats() && draft.catGroupExpand) {
+        const g = catById(draft.catGroupExpand);
+        const kids = g ? catChildren(g.id) : [];
+        if (g && kids.length) {
+          return `
+            <div class="cat-head"><span class="ovl">${esc(g.name)} · elegí subcategoría</span></div>
+            <div class="catgrid swap" data-catgrid>
+              ${catb('data-catback aria-label="Volver a las categorías"', 'var(--t2)', spriteIcon('cl'), 'Volver', false)}
+              ${kids.map((c) => catb(`data-pickid="${esc(c.id)}"`, catColor(c.id), iconSvg(categoryIconName(c.id)), c.name, c.id === draft.categoryId)).join('')}
+            </div>`;
         }
         draft.catGroupExpand = null;
       }
-      return catTileGridHTML(groups, true);
+      const usage = categoryUsage(draft.type);
+      const all = useSubcats() ? catGroups(draft.type) : S().categories.filter((c) => c.type === draft.type);
+      if (!all.length) return '<div class="empty">No hay categorías. Agregá una desde Ajustes.</div>';
+      // Orden estable: por uso y, a igual uso, el orden en que están en Ajustes.
+      const ranked = all.map((c, i) => ({ c, i })).sort((a, b) => (usage.get(b.c.id) || 0) - (usage.get(a.c.id) || 0) || a.i - b.i).map((x) => x.c);
+      let shown = draft.showAllCats ? ranked : ranked.slice(0, 8);
+      const selShownId = useSubcats() ? selTop : draft.categoryId;
+      if (!draft.showAllCats && selShownId && !shown.some((c) => c.id === selShownId)) {
+        const sel = catById(selShownId);
+        if (sel) shown = [...shown.slice(0, 7), sel];
+      }
+      return `
+        <div class="cat-head">
+          <span class="ovl">Categoría</span>
+          ${all.length > 8 ? `<button type="button" class="link-btn" data-allcats>${draft.showAllCats ? 'Menos' : 'Todas'}</button>` : ''}
+        </div>
+        <div class="catgrid" data-catgrid>
+          ${shown.map((c) => {
+            const hasKids = useSubcats() && catChildren(c.id).length > 0;
+            const on = useSubcats() ? c.id === selTop : c.id === draft.categoryId;
+            return catb(hasKids ? `data-catgroup="${esc(c.id)}"` : `data-pickid="${esc(c.id)}"`, catColor(c.id), iconSvg(categoryIconName(c.id)), c.name, on);
+          }).join('')}
+        </div>`;
     }
-    function methodOptionsHTML(selId, excludeId) {
-      let items = S().methods;
-      if (excludeId) items = items.filter((m) => m.id !== excludeId);
-      const methodsHTML = items.length ? catTileGridHTML(items, false, selId)
-        : '<div class="empty">No hay medios. Agregá uno desde Tarjetas y medios.</div>';
-      // Pagar un gasto directo con un ahorro (retiro automático, ver
-      // onSave()) solo tiene sentido para gastos — un ingreso o el origen/
-      // destino de una transferencia entre tus propias cuentas no "sale" de
-      // un fondo de ahorro. draft.type === 'gasto' ya alcanza para
-      // distinguir este caso de 'from'/'to' (esos solo existen para
-      // transferencia, ver wizardSteps()).
+
+    // Lista de cuentas (y, para gastos, "Pagar con un ahorro").
+    function methodPanelHTML(kind) {
+      const selId = kind === 'methodTo' ? draft.toMethodId : draft.methodId;
+      const excludeId = draft.type === 'transferencia' ? (kind === 'methodTo' ? draft.methodId : draft.toMethodId) : null;
+      const row = (id, name, icon) => `
+        <button type="button" class="pick-row${id === selId ? ' on' : ''}" data-pickmethod="${esc(id)}">
+          <span class="cic" style="--c:var(--t2)">${iconSvg(icon)}</span><span>${esc(name)}</span>
+          ${id === selId ? spriteIcon('check') : ''}
+        </button>`;
+      const methods = S().methods.filter((m) => m.id !== excludeId);
       const savings = draft.type === 'gasto' ? S().savings : [];
-      if (!savings.length) return methodsHTML;
-      return `${methodsHTML}
-        <div class="tx-pick-section-label">Pagar con un ahorro</div>
-        ${catTileGridHTML(savings, false, selId)}`;
-    }
-
-    function formHTML() {
-      const titles = { gasto: 'Gasto', ingreso: 'Ingreso', transferencia: 'Transferencia' };
+      const title = draft.type === 'transferencia' ? (kind === 'methodTo' ? 'Hacia' : 'Desde') : 'Cuenta';
       return `
-      <div class="dialog-head tx-head">
-        <button type="button" class="row-del" data-close aria-label="Cerrar">✕</button>
-        <span class="tx-head-title">${titles[draft.type]}</span>
-        <span></span>
-      </div>
-      <div class="tx-tabs">
-        <button type="button" class="tx-tab ${draft.type === 'ingreso' ? 'active tx-tab-income' : ''}" data-ttype="ingreso">Ingreso</button>
-        <button type="button" class="tx-tab ${draft.type === 'gasto' ? 'active tx-tab-expense' : ''}" data-ttype="gasto">Gasto</button>
-        <button type="button" class="tx-tab ${draft.type === 'transferencia' ? 'active tx-tab-transfer' : ''}" data-ttype="transferencia">Transferencia</button>
-      </div>
-      <div class="tx-body">
-        <label class="tx-row tx-row-date">
-          <span class="tx-row-label">Fecha</span>
-          <span class="tx-row-value tx-row-value-date">${esc(fmtDateFull(draft.date))}</span>
-          <input type="date" id="tx-date-input" class="tx-date-native" value="${esc(draft.date)}">
-        </label>
-
-        <div class="tx-amount-block">
-          <div class="tx-cur-toggle">
-            <button type="button" class="cur-pill ${draft.currency === 'ARS' ? 'active' : ''}" data-cur="ARS">ARS</button>
-            <button type="button" class="cur-pill ${draft.currency === 'USD' ? 'active' : ''}" data-cur="USD">USD</button>
-          </div>
-          <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : draft.type === 'gasto' ? 'is-expense' : ''}">
-            <span>${esc(displayExpr())}</span>
-            <button type="button" class="tx-amount-back" data-back>⌫ Borrar</button>
-          </div>
-        </div>
-
-        ${draft.type === 'transferencia' ? `
-        <div class="tx-row" data-toggle="method">
-          <span class="tx-row-label">Desde</span>
-          <span class="tx-row-value">${draft.methodId ? esc(methodName(draft.methodId)) : 'Elegir'}</span>
-          <span class="tx-row-chev ${draft.expand === 'method' ? 'open' : ''}">›</span>
-        </div>
-        ${draft.expand === 'method' ? `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML(draft.methodId, draft.toMethodId)}</div>` : ''}
-
-        <div class="tx-row" data-toggle="methodTo">
-          <span class="tx-row-label">Hacia</span>
-          <span class="tx-row-value">${draft.toMethodId ? esc(methodName(draft.toMethodId)) : 'Elegir'}</span>
-          <span class="tx-row-chev ${draft.expand === 'methodTo' ? 'open' : ''}">›</span>
-        </div>
-        ${draft.expand === 'methodTo' ? `<div class="tx-pick-inline" data-kind="methodTo">${methodOptionsHTML(draft.toMethodId, draft.methodId)}</div>` : ''}
-        ` : `
-        <div class="tx-row" data-toggle="category">
-          <span class="tx-row-label">Categoría</span>
-          <span class="tx-row-value">${draft.categoryId ? esc(catName(draft.categoryId)) : 'Elegir'}</span>
-          <span class="tx-row-chev ${draft.expand === 'category' ? 'open' : ''}">›</span>
-        </div>
-        ${draft.expand === 'category' ? `<div class="tx-pick-inline" data-kind="category">${categoryOptionsHTML()}</div>` : ''}
-
-        <div class="tx-row" data-toggle="method">
-          <span class="tx-row-label">Cuenta</span>
-          <span class="tx-row-value">${draft.methodId ? esc(methodName(draft.methodId)) : 'Elegir'}</span>
-          <span class="tx-row-chev ${draft.expand === 'method' ? 'open' : ''}">›</span>
-        </div>
-        ${draft.expand === 'method' ? `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML(draft.methodId)}</div>` : ''}
-        `}
-
-        ${showInstallments() ? installmentsPickerHTML() : ''}
-
-        ${canShare() ? `
-        <label class="tx-check-row">
-          <input type="checkbox" id="tx-share" ${draft.shareIt ? 'checked' : ''}>
-          <span>Es un gasto compartido con ${esc(partnerLabel(partner))}</span>
-        </label>
-        ${draft.shareIt ? `
-        <div class="tx-row-note">
-          <label>Vos te quedás con este % del gasto (el resto le corresponde a ${esc(partnerLabel(partner))})</label>
-          <input type="number" id="tx-share-pct" min="0" max="100" step="1" value="${draft.sharePct}">
-        </div>` : ''}` : ''}
-
-        <div class="tx-row-note">
-          <label>Nota <span class="hint">(opcional)</span></label>
-          <input type="text" id="tx-note" maxlength="80" value="${esc(draft.note)}">
-        </div>
-      </div>
-      ${!draft.expand ? keypadHTML() : ''}
-      <div class="dialog-foot">
-        ${editing ? '<button type="button" class="btn btn-danger" data-del style="margin-right:auto">Eliminar</button>' : ''}
-        <button type="button" class="btn btn-primary" data-save>Guardar</button>
-      </div>`;
+        <div class="cat-head"><span class="ovl">${title}</span><button type="button" class="link-btn" data-panelclose>Listo</button></div>
+        <div class="pick-list">
+          ${methods.length ? methods.map((m) => row(m.id, m.name, methodIconName(m.id))).join('') : '<div class="empty">No hay medios. Agregá uno desde Cuentas.</div>'}
+          ${savings.length ? `<div class="ovl pick-sep">Pagar con un ahorro</div>${savings.map((s) => row(s.id, s.name, 'wallet')).join('')}` : ''}
+        </div>`;
     }
-
-    function keypadHTML() {
+    function instPanelHTML() {
+      const n = instN();
+      const a = instAmounts(n);
       return `
-      <div class="tx-keypad">
-        <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" class="tx-key-op" data-op="÷">÷</button>
-        <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" class="tx-key-op" data-op="×">×</button>
-        <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" class="tx-key-op" data-op="-">−</button>
-        <button type="button" data-k="0">0</button><button type="button" data-k="00">00</button><button type="button" data-k="000">000</button><button type="button" class="tx-key-op" data-op="+">+</button>
-        <button type="button" data-k=".">,</button><button type="button" class="tx-key-ac" data-ac>AC</button><button type="button" class="tx-key-eq" data-eq>=</button>
-      </div>`;
+        <div class="cat-head"><span class="ovl">Cuotas</span><button type="button" class="link-btn" data-panelclose>Listo</button></div>
+        <div class="inst-grid">
+          ${Array.from({ length: INST_MAX }, (_, i) => i + 1).map((k) => `<button type="button" class="inst-opt${k === n ? ' sel' : ''}" data-inst="${k}">${k === 1 ? '1 pago' : k}</button>`).join('')}
+        </div>
+        ${n > 1 ? `
+        <div class="tseg tseg-small" role="group" aria-label="El monto es">
+          <button type="button" class="${draft.instMode !== 'per' ? 'on' : ''}" data-inst-mode="total">Es el total</button>
+          <button type="button" class="${draft.instMode === 'per' ? 'on' : ''}" data-inst-mode="per">Es cada cuota</button>
+        </div>
+        <div class="hint inst-preview">${a
+          ? `${n} cuotas de <b>${esc(fmtMoney(a.per, draft.currency))}</b> · total <b>${esc(fmtMoney(a.total, draft.currency))}</b>`
+          : 'Cargá un monto para ver cuánto queda cada cuota.'}</div>` : ''}`;
+    }
+    const SHARE_PRESETS = [50, 60, 70, 40, 30, 100];
+    function sharePanelHTML() {
+      const pct = Math.round(Number(draft.sharePct) || 0);
+      const who = partnerLabel(partner);
+      return `
+        <div class="cat-head"><span class="ovl">Compartido con ${esc(who)}</span><button type="button" class="link-btn" data-panelclose>Listo</button></div>
+        <div class="hint">Cuánto te toca a vos y cuánto a ${esc(who)}.</div>
+        <div class="inst-grid share-grid">
+          ${SHARE_PRESETS.map((p) => `<button type="button" class="inst-opt${draft.shareIt && p === pct ? ' sel' : ''}" data-sharepct="${p}">${p}/${100 - p}</button>`).join('')}
+        </div>
+        <label class="share-custom">
+          <span>Tu parte</span>
+          <input type="number" id="tx-share-pct" min="0" max="100" step="1" inputmode="numeric" value="${pct}">
+          <span>%</span>
+        </label>
+        <button type="button" class="btn btn-full share-off" data-shareoff>No compartir</button>`;
+    }
+    function notePanelHTML() {
+      return `
+        <div class="cat-head"><span class="ovl">Nota</span><button type="button" class="link-btn" data-panelclose>Listo</button></div>
+        <input type="text" id="tx-note" maxlength="80" value="${esc(draft.note)}" placeholder="Ej.: cumple de Ana" enterkeyhint="done">`;
+    }
+    function lowerHTML() {
+      if (draft.panel === 'method' || draft.panel === 'methodTo') return methodPanelHTML(draft.panel);
+      if (draft.panel === 'inst' && showInstallments()) return instPanelHTML();
+      if (draft.panel === 'share' && canShare()) return sharePanelHTML();
+      if (draft.panel === 'note') return notePanelHTML();
+      draft.panel = null;
+      if (draft.type === 'transferencia') return '';
+      return catSectionHTML();
     }
 
-    function wireKeypad() {
-      $$('.tx-keypad [data-k]', dlg).forEach((b) => b.addEventListener('click', () => pressDigit(b.dataset.k)));
-      $$('.tx-keypad [data-op]', dlg).forEach((b) => b.addEventListener('click', () => pressOp(b.dataset.op)));
-      const eqBtn = $('[data-eq]', dlg);
-      if (eqBtn) eqBtn.addEventListener('click', pressEquals);
-      const acBtn = $('[data-ac]', dlg);
-      if (acBtn) acBtn.addEventListener('click', pressClear);
+    function keysHTML() {
+      const k = (v, label, cls = '', extra = '') => `<button type="button" class="key${cls}" ${extra} data-k="${v}">${label}</button>`;
+      const op = (v, label, aria) => `<button type="button" class="key op" data-op="${v}" aria-label="${aria}">${label}</button>`;
+      return `
+        <div class="keys" data-keys>
+          ${k('7', '7')}${k('8', '8')}${k('9', '9')}<button type="button" class="key op key-wide" data-back aria-label="Borrar (mantené para borrar todo)">${spriteIcon('back')}</button>
+          ${k('4', '4')}${k('5', '5')}${k('6', '6')}${op('÷', '÷', 'Dividir')}${op('×', '×', 'Multiplicar')}
+          ${k('1', '1')}${k('2', '2')}${k('3', '3')}${op('-', '−', 'Restar')}${op('+', '+', 'Sumar')}
+          ${k('000', '000')}${k('0', '0')}${k('.', ',', '', 'aria-label="Coma"')}<button type="button" class="key op key-wide" data-eq aria-label="Igual">=</button>
+        </div>`;
+    }
+
+    function saveLabel() {
+      if (editing) return 'Guardar cambios';
+      if (draft.type === 'transferencia') return 'Guardar transferencia';
+      const base = `Guardar ${TX_TYPE_LABEL[draft.type].toLowerCase()}`;
+      return draft.categoryId ? `${base} · ${catName(draft.categoryId)}` : base;
+    }
+
+    function sheetHTML() {
+      return `
+        <div class="sh-top" data-drag>
+          <div class="grab" aria-hidden="true"></div>
+          <div class="sh-h">
+            <button type="button" class="icb" data-close aria-label="Cerrar">${spriteIcon('x')}</button>
+            <h2>${editing ? 'Editar movimiento' : 'Nuevo movimiento'}</h2>
+            ${editing ? `<button type="button" class="icb icb-danger" data-del aria-label="Eliminar movimiento">${iconSvg('trash')}</button>` : '<span></span>'}
+          </div>
+        </div>
+        <div class="sh-body" data-shbody>
+          <div class="tseg" role="group" aria-label="Tipo de movimiento">
+            ${['gasto', 'ingreso', 'transferencia'].map((t) => `<button type="button" class="${draft.type === t ? 'on' : ''}" data-ttype="${t}" aria-pressed="${draft.type === t}">${TX_TYPE_LABEL[t]}</button>`).join('')}
+          </div>
+          ${amountHTML()}
+          ${chipsHTML()}
+          <div class="sh-lower">${lowerHTML()}</div>
+        </div>
+        ${draft.panel === 'note' ? '' : keysHTML()}
+        <div class="savebar">
+          ${draft.error ? `<div class="sh-error" role="alert">${esc(draft.error)}</div>` : ''}
+          <button type="button" class="btn btn-primary btn-full btn-save" data-save>${esc(saveLabel())}</button>
+        </div>`;
+    }
+
+    // El monto se repinta solo (sin rehacer todo el panel) en cada tecla:
+    // así no se pierde el scroll ni parpadea la grilla.
+    function paintAmount() {
+      draft.error = '';
+      const a = $('[data-amount]', dlg);
+      if (a) a.outerHTML = amountHTML();
+      const chips = $('.chips', dlg);
+      if (chips && showInstallments() && instN() > 1) chips.outerHTML = chipsHTML();
+      if (draft.panel === 'inst') { const lower = $('.sh-lower', dlg); if (lower) lower.innerHTML = lowerHTML(); }
+      const err = $('.sh-error', dlg);
+      if (err) err.remove();
     }
 
     function paint() {
-      dlg.innerHTML = editing ? formHTML() : wizardHTML();
-      if (editing) wire(); else wizardWire();
-    }
-
-    /* ---------- Alta de movimiento nuevo: de a una etapa por vez ---------- */
-    const STEP_TITLE = {
-      type: 'Tipo de movimiento', date: 'Fecha', amount: 'Monto',
-      category: 'Categoría', method: 'Cuenta', from: 'Desde', to: 'Hacia', extra: 'Detalles',
-    };
-    function wizardSteps() {
-      return draft.type === 'transferencia'
-        ? ['type', 'date', 'amount', 'from', 'to', 'extra']
-        : ['type', 'date', 'amount', 'category', 'method', 'extra'];
-    }
-    function wizardSummaryHTML() {
-      const steps = wizardSteps();
-      const chips = [{ gasto: 'Gasto', ingreso: 'Ingreso', transferencia: 'Transferencia' }[draft.type]];
-      const past = (k) => steps.indexOf(k) < draft.wstep;
-      if (past('date')) chips.push(fmtDateFull(draft.date));
-      if (past('amount') && finalAmount() > 0) chips.push(fmtMoney(finalAmount(), draft.currency));
-      if (draft.type === 'transferencia') {
-        if (past('from') && draft.methodId) chips.push(methodName(draft.methodId));
-        if (past('to') && draft.toMethodId) chips.push(methodName(draft.toMethodId));
-      } else {
-        if (past('category') && draft.categoryId) chips.push(catName(draft.categoryId));
-        if (past('method') && draft.methodId) chips.push(methodName(draft.methodId));
-      }
-      return chips.map((c) => `<span class="tx-wiz-chip">${esc(c)}</span>`).join('');
-    }
-    function wizardStepBodyHTML(key) {
-      if (key === 'type') {
-        const opts = [
-          { t: 'ingreso', label: 'Ingreso', cls: 'type-income', icon: 'trend', rowIcon: 'row-icon-income' },
-          { t: 'gasto', label: 'Gasto', cls: 'type-expense', icon: 'cash', rowIcon: 'row-icon-expense' },
-          { t: 'transferencia', label: 'Transferencia', cls: 'type-transfer', icon: 'swap', rowIcon: 'row-icon-transfer' },
-        ];
-        return `<div class="tx-wiz-type-options">${opts.map((o) => `
-          <button type="button" class="tx-wiz-type-opt ${o.cls} ${draft.type === o.t ? 'sel' : ''}" data-wtype="${o.t}">
-            <span class="row-icon ${o.rowIcon}">${iconSvg(o.icon)}</span>
-            <span>${esc(o.label)}</span>
-          </button>`).join('')}</div>`;
-      }
-      if (key === 'date') {
-        return `
-          <label class="tx-row tx-row-date">
-            <span class="tx-row-label">Fecha</span>
-            <span class="tx-row-value tx-row-value-date">${esc(fmtDateFull(draft.date))}</span>
-            <input type="date" id="tx-date-input" class="tx-date-native" value="${esc(draft.date)}">
-          </label>
-          ${draft.date !== todayStr() ? '<button type="button" class="link-btn" data-wtoday>Usar hoy</button>' : ''}`;
-      }
-      if (key === 'amount') {
-        return `
-          <div class="tx-amount-block">
-            <div class="tx-cur-toggle">
-              <button type="button" class="cur-pill ${draft.currency === 'ARS' ? 'active' : ''}" data-cur="ARS">ARS</button>
-              <button type="button" class="cur-pill ${draft.currency === 'USD' ? 'active' : ''}" data-cur="USD">USD</button>
-            </div>
-            <div class="tx-amount-display ${draft.type === 'ingreso' ? 'is-income' : draft.type === 'gasto' ? 'is-expense' : ''}">
-              <span>${esc(displayExpr())}</span>
-              <button type="button" class="tx-amount-back" data-back>⌫ Borrar</button>
-            </div>
-          </div>`;
-      }
-      if (key === 'category') {
-        return `<div class="tx-pick-inline" data-kind="category">${categoryOptionsHTML()}</div>`;
-      }
-      if (key === 'method') {
-        return `<div class="tx-pick-inline" data-kind="method">${methodOptionsHTML(draft.methodId)}</div>`;
-      }
-      if (key === 'from') {
-        return `<div class="tx-pick-inline" data-kind="from">${methodOptionsHTML(draft.methodId, draft.toMethodId)}</div>`;
-      }
-      if (key === 'to') {
-        return `<div class="tx-pick-inline" data-kind="to">${methodOptionsHTML(draft.toMethodId, draft.methodId)}</div>`;
-      }
-      // 'extra': cuotas (si aplica) + compartido (si aplica) + nota, antes de guardar.
-      return `
-        ${showInstallments() ? installmentsPickerHTML() : ''}
-        ${canShare() ? `
-        <label class="tx-check-row">
-          <input type="checkbox" id="tx-share" ${draft.shareIt ? 'checked' : ''}>
-          <span>Es un gasto compartido con ${esc(partnerLabel(partner))}</span>
-        </label>
-        ${draft.shareIt ? `
-        <div class="tx-row-note">
-          <label>Vos te quedás con este % del gasto (el resto le corresponde a ${esc(partnerLabel(partner))})</label>
-          <input type="number" id="tx-share-pct" min="0" max="100" step="1" value="${draft.sharePct}">
-        </div>` : ''}` : ''}
-        <div class="tx-row-note">
-          <label>Nota <span class="hint">(opcional)</span></label>
-          <input type="text" id="tx-note" maxlength="80" value="${esc(draft.note)}">
-        </div>`;
-    }
-    function wizardFootHTML(key) {
-      if (key === 'date') {
-        return '<div class="dialog-foot"><button type="button" class="btn btn-primary btn-full" data-wnext>Siguiente →</button></div>';
-      }
-      if (key === 'amount') {
-        return `<div class="dialog-foot"><button type="button" class="btn btn-primary btn-full" data-wnext ${finalAmount() > 0 ? '' : 'disabled'}>Siguiente →</button></div>`;
-      }
-      if (key === 'extra') {
-        return '<div class="dialog-foot"><button type="button" class="btn btn-primary" data-save>Guardar</button></div>';
-      }
-      return ''; // type/category/method/from/to: avanzan solos al tocar una opción
-    }
-    function wizardHTML() {
-      const steps = wizardSteps();
-      draft.wstep = Math.min(draft.wstep, steps.length - 1);
-      const key = steps[draft.wstep];
-      return `
-      <div class="dialog-head tx-head">
-        ${draft.wstep > 0 ? '<button type="button" class="row-del" data-wiz-back aria-label="Atrás">‹</button>' : '<span></span>'}
-        <span class="tx-head-title">${esc(STEP_TITLE[key])}</span>
-        <button type="button" class="row-del" data-wiz-close aria-label="Cancelar">✕</button>
-      </div>
-      <div class="tx-wiz-progress">${steps.map((_, i) => `<span class="tx-wiz-dot ${i === draft.wstep ? 'active' : i < draft.wstep ? 'done' : ''}"></span>`).join('')}</div>
-      ${draft.wstep > 0 ? `<div class="tx-wiz-summary">${wizardSummaryHTML()}</div>` : ''}
-      <div class="tx-body tx-wiz-body">${wizardStepBodyHTML(key)}</div>
-      ${key === 'amount' ? keypadHTML() : ''}
-      ${wizardFootHTML(key)}`;
-    }
-    function wireCatGroupNav() {
-      $$('[data-catgroup]', dlg).forEach((elx) => elx.addEventListener('click', (e) => {
-        e.stopPropagation();
-        draft.catGroupExpand = elx.dataset.catgroup;
-        paint();
-      }));
-      $$('[data-catback]', dlg).forEach((elx) => elx.addEventListener('click', (e) => {
-        e.stopPropagation();
-        draft.catGroupExpand = null;
-        paint();
-      }));
-    }
-    function wizardWire() {
-      const backBtn = $('[data-wiz-back]', dlg);
-      if (backBtn) backBtn.addEventListener('click', () => { draft.wstep -= 1; paint(); });
-      $('[data-wiz-close]', dlg).addEventListener('click', () => dlg.close());
-      const key = wizardSteps()[draft.wstep];
-      if (key === 'type') {
-        $$('[data-wtype]', dlg).forEach((b) => b.addEventListener('click', () => {
-          draft.type = b.dataset.wtype;
-          if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
-          // Pagar con un ahorro solo es válido para un gasto (ver
-          // methodOptionsHTML) — si ya se había elegido uno y se cambia a
-          // ingreso/transferencia, ese medio deja de ser válido.
-          if (draft.methodId && isSavingMethod(draft.methodId) && draft.type !== 'gasto') draft.methodId = '';
-          draft.catGroupExpand = null;
-          draft.wstep = 1;
-          paint();
-        }));
-      } else if (key === 'date') {
-        $('#tx-date-input', dlg).addEventListener('change', (e) => { draft.date = e.target.value; paint(); });
-        const todayBtn = $('[data-wtoday]', dlg);
-        if (todayBtn) todayBtn.addEventListener('click', () => { draft.date = todayStr(); paint(); });
-        $('[data-wnext]', dlg).addEventListener('click', () => { draft.wstep += 1; paint(); });
-      } else if (key === 'amount') {
-        $$('.cur-pill', dlg).forEach((b) => b.addEventListener('click', () => { draft.currency = b.dataset.cur; paint(); }));
-        wireKeypad();
-        $('[data-back]', dlg).addEventListener('click', pressBack);
-        const nextBtn = $('[data-wnext]', dlg);
-        if (nextBtn) nextBtn.addEventListener('click', () => {
-          if (!(finalAmount() > 0)) return;
-          draft.acc = finalAmount();
-          draft.op = null;
-          draft.cur = '';
-          draft.wstep += 1;
-          paint();
-        });
-      } else if (key === 'category') {
-        wireCatGroupNav();
-        $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
-          draft.categoryId = row.dataset.pickid;
-          draft.catGroupExpand = null;
-          draft.wstep += 1;
-          paint();
-        }));
-      } else if (key === 'method' || key === 'from' || key === 'to') {
-        $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
-          if (key === 'to') draft.toMethodId = row.dataset.pickid;
-          else draft.methodId = row.dataset.pickid;
-          draft.wstep += 1;
-          paint();
-        }));
-      } else if (key === 'extra') {
-        const shareBox = $('#tx-share', dlg);
-        if (shareBox) shareBox.addEventListener('change', (e) => { draft.shareIt = e.target.checked; paint(); });
-        wireDraftInputs();
-        $('[data-save]', dlg).addEventListener('click', onSave);
+      const body = $('[data-shbody]', dlg);
+      const scroll = body ? body.scrollTop : 0;
+      dlg.innerHTML = sheetHTML();
+      const nb = $('[data-shbody]', dlg);
+      if (nb) nb.scrollTop = scroll;
+      if (draft.panel === 'note') {
+        const n = $('#tx-note', dlg);
+        if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
       }
     }
 
-    function wire() {
-      $$('[data-close]', dlg).forEach((b) => b.addEventListener('click', () => dlg.close()));
-      $$('.tx-tab', dlg).forEach((b) => b.addEventListener('click', () => {
-        draft.type = b.dataset.ttype;
-        if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
-        if (draft.methodId && isSavingMethod(draft.methodId) && draft.type !== 'gasto') draft.methodId = '';
-        draft.expand = null;
-        draft.catGroupExpand = null;
-        paint();
-      }));
-      $('#tx-date-input', dlg).addEventListener('change', (e) => { draft.date = e.target.value; paint(); });
-      $$('.cur-pill', dlg).forEach((b) => b.addEventListener('click', () => { draft.currency = b.dataset.cur; paint(); }));
-      $$('[data-toggle]', dlg).forEach((row) => row.addEventListener('click', () => {
-        const k = row.dataset.toggle;
-        draft.expand = draft.expand === k ? null : k;
-        if (k === 'category') draft.catGroupExpand = null;
-        paint();
-      }));
-      wireCatGroupNav();
-      $$('.tx-pick-inline [data-pickid]', dlg).forEach((row) => row.addEventListener('click', () => {
-        const kind = row.closest('.tx-pick-inline').dataset.kind;
-        if (kind === 'category') draft.categoryId = row.dataset.pickid;
-        else if (kind === 'methodTo') draft.toMethodId = row.dataset.pickid;
-        else draft.methodId = row.dataset.pickid;
-        draft.expand = null;
-        draft.catGroupExpand = null;
-        paint();
-      }));
-      const shareBox = $('#tx-share', dlg);
-      if (shareBox) shareBox.addEventListener('change', (e) => { draft.shareIt = e.target.checked; paint(); });
-      wireKeypad();
-      $('[data-back]', dlg).addEventListener('click', pressBack);
-      wireDraftInputs();
-      $('[data-save]', dlg).addEventListener('click', onSave);
-      const delBtn = $('[data-del]', dlg);
-      if (delBtn) delBtn.addEventListener('click', () => { dlg.close(); deleteTx(tx); });
+    function setType(t) {
+      draft.type = t;
+      if (draft.categoryId && !selectableCats(draft.type).some((c) => c.id === draft.categoryId)) draft.categoryId = '';
+      // Pagar con un ahorro solo es válido para un gasto.
+      if (draft.methodId && isSavingMethod(draft.methodId) && draft.type !== 'gasto') draft.methodId = '';
+      if (!draft.methodId) draft.methodId = lastUsedMethodId(t === 'transferencia' ? null : t);
+      draft.catGroupExpand = null;
+      draft.panel = null;
+      draft.error = '';
+      paint();
+    }
+    function pickCategoryGroup(groupId) {
+      const kids = catChildren(groupId);
+      const usage = categoryUsage(draft.type);
+      // La subcategoría más usada queda elegida; si ya había una de este
+      // grupo, se respeta.
+      const already = kids.find((c) => c.id === draft.categoryId);
+      const best = already || [...kids].sort((a, b) => (usage.get(b.id) || 0) - (usage.get(a.id) || 0))[0];
+      draft.categoryId = best ? best.id : draft.categoryId;
+      draft.catGroupExpand = groupId;
+      draft.error = '';
+      paint();
     }
 
-    // Nota/cuotas/% compartido se guardan en draft en cada tecla (no solo al
-    // guardar): tocar el checkbox de "compartido" repinta el diálogo, y sin
-    // esto se perdía lo ya tipeado en esos campos.
-    function wireDraftInputs() {
-      const noteEl = $('#tx-note', dlg);
-      if (noteEl) noteEl.addEventListener('input', (e) => { draft.note = e.target.value; });
-      $$('[data-inst-preset]', dlg).forEach((b) => b.addEventListener('click', () => {
-        draft.inst = b.dataset.instPreset;
+    // Todos los toques del panel pasan por acá (el HTML se rehace entero en
+    // cada paint(), así que se escucha una sola vez en el <dialog>).
+    function onClick(e) {
+      const t = e.target;
+      const q = (sel) => t.closest(sel);
+      let b;
+      if (q('[data-close]')) { closeSheet(dlg); return; }
+      if ((b = q('.chip-date'))) {
+        // En la compu el selector de fecha no se abre tocando el campo
+        // invisible; en el iPhone sí, con la ruedita del sistema.
+        const inp = $('input', b);
+        if (inp && inp.showPicker && e.target !== inp) { try { inp.showPicker(); } catch (err) { /* sin showPicker */ } }
+        return;
+      }
+      if (q('[data-del]')) { closeSheet(dlg).then(() => deleteTx(tx)); return; }
+      if ((b = q('[data-ttype]'))) { if (b.dataset.ttype !== draft.type) setType(b.dataset.ttype); return; }
+      if ((b = q('[data-keys] [data-k]'))) { pressDigit(b.dataset.k); return; }
+      if ((b = q('[data-keys] [data-op]'))) { pressOp(b.dataset.op); return; }
+      if (q('[data-keys] [data-eq]')) { pressEquals(); return; }
+      if (q('[data-keys] [data-back]')) { if (!backHeld) pressBack(); backHeld = false; return; }
+      if (q('[data-curtoggle]')) { draft.currency = draft.currency === 'ARS' ? 'USD' : 'ARS'; paint(); return; }
+      if ((b = q('[data-panel]'))) {
+        const p = b.dataset.panel;
+        draft.panel = draft.panel === p ? null : p;
         paint();
-      }));
-      const instCustomBtn = $('[data-inst-custom]', dlg);
-      if (instCustomBtn) instCustomBtn.addEventListener('click', () => { draft.inst = ''; paint(); });
-      const instEl = $('#tx-inst', dlg);
-      if (instEl) instEl.addEventListener('input', (e) => { draft.inst = e.target.value; });
-      $$('[data-inst-mode]', dlg).forEach((b) => b.addEventListener('click', () => {
-        draft.instMode = b.dataset.instMode;
+        return;
+      }
+      if (q('[data-share]')) {
+        if (shareHeld) { shareHeld = false; return; }
+        if (!draft.shareIt) { draft.shareIt = true; draft.panel = null; } else draft.panel = draft.panel === 'share' ? null : 'share';
         paint();
-      }));
-      const pctEl = $('#tx-share-pct', dlg);
-      if (pctEl) pctEl.addEventListener('input', (e) => { draft.sharePct = e.target.value; });
+        return;
+      }
+      if (q('[data-panelclose]')) { draft.panel = null; paint(); return; }
+      if ((b = q('[data-pickmethod]'))) {
+        if (draft.panel === 'methodTo') draft.toMethodId = b.dataset.pickmethod;
+        else draft.methodId = b.dataset.pickmethod;
+        if (!showInstallments()) draft.inst = 1;
+        draft.panel = null;
+        draft.error = '';
+        paint();
+        return;
+      }
+      if ((b = q('[data-inst]'))) { draft.inst = Number(b.dataset.inst); paint(); return; }
+      if ((b = q('[data-inst-mode]'))) { draft.instMode = b.dataset.instMode; paint(); return; }
+      if ((b = q('[data-sharepct]'))) { draft.shareIt = true; draft.sharePct = Number(b.dataset.sharepct); paint(); return; }
+      if (q('[data-shareoff]')) { draft.shareIt = false; draft.panel = null; paint(); return; }
+      if (q('[data-allcats]')) { draft.showAllCats = !draft.showAllCats; paint(); return; }
+      if (q('[data-catback]')) { draft.catGroupExpand = null; paint(); return; }
+      if ((b = q('[data-catgroup]'))) { pickCategoryGroup(b.dataset.catgroup); return; }
+      if ((b = q('[data-pickid]'))) { draft.categoryId = b.dataset.pickid; draft.error = ''; paint(); return; }
+      if (q('[data-save]')) { onSave(); }
     }
+    function onInput(e) {
+      const t = e.target;
+      if (t.id === 'tx-note') draft.note = t.value;
+      else if (t.id === 'tx-share-pct') {
+        const v = Math.min(100, Math.max(0, parseFloat(t.value)));
+        if (isFinite(v)) { draft.sharePct = v; draft.shareIt = true; }
+      }
+    }
+    function onChange(e) {
+      const t = e.target;
+      if (t.id === 'tx-date-input' && t.value) { draft.date = t.value; paint(); }
+      else if (t.id === 'tx-share-pct' || t.id === 'tx-note') paint();
+    }
+    function onKeydown(e) {
+      if (e.target.id === 'tx-note' && e.key === 'Enter') { e.preventDefault(); draft.panel = null; paint(); }
+    }
+    // ⌫ y "Compartido" mantenidos: borrar todo / elegir la proporción.
+    let backHeld = false, shareHeld = false, holdTimer = null;
+    function onPointerDown(e) {
+      const back = e.target.closest('[data-keys] [data-back]');
+      const share = e.target.closest('[data-share]');
+      if (!back && !share) return;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => {
+        if (back) { backHeld = true; pressClear(); }
+        else { shareHeld = true; draft.shareIt = true; draft.panel = 'share'; haptic(); paint(); }
+      }, 500);
+    }
+    const cancelHold = () => clearTimeout(holdTimer);
 
     async function onSave() {
       if (draft._saving) return;
+      const fail = (msg) => { draft.error = msg; paint(); };
       const entered = Math.round(finalAmount() * 100) / 100;
-      if (!(entered > 0)) { alert('Ingresá un monto mayor a 0.'); return; }
-      if (!draft.methodId) { alert(draft.type === 'transferencia' ? 'Elegí la cuenta de origen.' : 'Elegí una cuenta.'); return; }
+      if (!(entered > 0)) return fail('Cargá un monto mayor a 0.');
+      if (!draft.methodId) return fail(draft.type === 'transferencia' ? 'Elegí la cuenta de origen.' : 'Elegí una cuenta.');
       if (draft.type === 'transferencia') {
-        if (!draft.toMethodId) { alert('Elegí la cuenta de destino.'); return; }
-        if (draft.toMethodId === draft.methodId) { alert('Elegí dos cuentas distintas para transferir.'); return; }
+        if (!draft.toMethodId) return fail('Elegí la cuenta de destino.');
+        if (draft.toMethodId === draft.methodId) return fail('Elegí dos cuentas distintas para transferir.');
       } else if (!draft.categoryId) {
-        alert('Elegí una categoría.'); return;
+        return fail('Elegí una categoría.');
       }
-      // Con cuotas en modo "el monto de arriba es 1 cuota", lo tipeado no es
-      // el total sino el valor de cada cuota — hay que multiplicarlo por n
-      // para saber cuánto sale la compra entera (usado en la nota, el gasto
-      // compartido y demás lugares donde importa el total, no una cuota).
-      const n = !editing && showInstallments() ? Math.max(1, parseInt(draft.inst || '1', 10) || 1) : 1;
+      // Con cuotas en modo "es cada cuota", lo tipeado no es el total sino el
+      // valor de cada cuota: se multiplica por n para saber el total.
+      const n = !editing && showInstallments() ? instN() : 1;
       const amount = (n > 1 && draft.instMode === 'per') ? Math.round(entered * n * 100) / 100 : entered;
       // Buscar la cotización histórica es una llamada de red: evita que un
-      // doble click dispare el guardado dos veces mientras espera.
+      // doble toque dispare el guardado dos veces mientras espera.
       draft._saving = true;
       const saveBtn = $('[data-save]', dlg);
       if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando…'; }
@@ -1860,6 +1785,7 @@
         // fecha/moneda, el retiro vinculado en ese ahorro se rehace desde
         // cero con los datos finales (ver syncSavingWithdrawalForTx()).
         syncSavingWithdrawalForTx(tx);
+        createdTxs = [tx];
       } else {
         createdTxs = [];
         if (n === 1) {
@@ -1909,12 +1835,17 @@
           alert('El movimiento se guardó, pero no se pudo avisar a la cuenta compartida: ' + e.message);
         }
       }
-      dlg.close();
+      // El movimiento recién guardado se resalta un momento en la lista.
+      ui.newTxIds = { ids: new Set(createdTxs.map((t) => t.id)), at: Date.now() };
+      await closeSheet(dlg);
       render();
     }
 
     paint();
-    openModal(dlg);
+    openSheet(dlg, {
+      listeners: { click: onClick, input: onInput, change: onChange, keydown: onKeydown,
+        pointerdown: onPointerDown, pointerup: cancelHold, pointercancel: cancelHold, pointerleave: cancelHold },
+    });
     // Si el hogar compartido todavía no terminó de cargar, se repinta al
     // terminar para que aparezca la opción "compartido".
     if (!editing && Cloud.user() && (!shared.loaded || shared.loading)) {
@@ -1922,6 +1853,105 @@
         if (dlg.open && !partner && sharedPartner()) { partner = sharedPartner(); paint(); }
       }).catch(() => {});
     }
+  }
+
+  /* ---------- Panel inferior (sheet) ----------
+     Usa el mismo <dialog> de la app (queda en la capa superior, con su
+     fondo y el foco atrapado adentro). Sube desde abajo; atrás, la pantalla
+     se achica apenas. Se cierra con la X, con Escape o deslizándolo hacia
+     abajo (más de 120px, o un gesto rápido). Los listeners que se le pasan
+     se sacan solos al cerrarse, así el próximo uso del <dialog> arranca
+     limpio. */
+  function openSheet(dlg, { listeners = {} } = {}) {
+    for (const [ev, fn] of Object.entries(listeners)) dlg.addEventListener(ev, fn);
+    const onCancel = (e) => { e.preventDefault(); closeSheet(dlg); };
+    dlg.addEventListener('cancel', onCancel);
+    const drag = sheetDrag(dlg);
+    // El evento "close" llega un instante después de cerrar: si este panel
+    // se abrió justo al cerrar otro diálogo (ej. detalle → Editar), ese
+    // "close" viejo llega con el panel ya abierto y se ignora.
+    const onClose = () => {
+      if (dlg.open) return;
+      dlg.removeEventListener('close', onClose);
+      for (const [ev, fn] of Object.entries(listeners)) dlg.removeEventListener(ev, fn);
+      dlg.removeEventListener('cancel', onCancel);
+      drag.off();
+      dlg.classList.remove('open');
+      dlg.style.transform = '';
+      document.body.classList.remove('sheet-behind');
+    };
+    dlg.addEventListener('close', onClose);
+    openModal(dlg);
+    document.body.classList.add('sheet-behind');
+    requestAnimationFrame(() => requestAnimationFrame(() => dlg.classList.add('open')));
+  }
+  const prefersReducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function closeSheet(dlg) {
+    return new Promise((resolve) => {
+      if (!dlg.open) { resolve(); return; }
+      document.body.classList.remove('sheet-behind');
+      if (prefersReducedMotion() || !dlg.classList.contains('open')) { dlg.close(); resolve(); return; }
+      dlg.style.transform = '';
+      dlg.classList.remove('open');
+      let done = false;
+      const finish = () => { if (done) return; done = true; if (dlg.open) dlg.close(); resolve(); };
+      dlg.addEventListener('transitionend', finish, { once: true });
+      setTimeout(finish, 450);
+    });
+  }
+  // Arrastrar el panel hacia abajo para cerrarlo: desde la agarradera o el
+  // encabezado, o desde el contenido si ya está scrolleado arriba de todo.
+  function sheetDrag(dlg) {
+    let s = null;
+    const down = (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const fromTop = e.target.closest('[data-drag]');
+      const body = e.target.closest('[data-shbody]');
+      if (!fromTop && !(body && body.scrollTop <= 0)) return;
+      if (e.target.closest('input, [data-keys]')) return;
+      s = { y: e.clientY, x: e.clientX, t: performance.now(), dy: 0, active: false };
+    };
+    const move = (e) => {
+      if (!s) return;
+      const dy = e.clientY - s.y, dx = e.clientX - s.x;
+      if (!s.active) {
+        if (Math.abs(dy) < 8) return;
+        if (dy < 0 || Math.abs(dx) > Math.abs(dy)) { s = null; return; }
+        s.active = true;
+        dlg.classList.add('dragging');
+      }
+      s.dy = Math.max(0, dy);
+      dlg.style.transform = `translateY(${s.dy}px)`;
+    };
+    let justDragged = false;
+    const up = () => {
+      if (!s) return;
+      const st = s; s = null;
+      if (!st.active) return;
+      dlg.classList.remove('dragging');
+      justDragged = true;
+      setTimeout(() => { justDragged = false; }, 0);
+      const v = st.dy / Math.max(1, performance.now() - st.t);
+      if (st.dy > 120 || v > 0.6) closeSheet(dlg);
+      else dlg.style.transform = '';
+    };
+    // Si el gesto fue un arrastre, el toque no tiene que "apretar" el botón
+    // que quedó abajo del dedo al soltar.
+    const swallow = (e) => { if (justDragged) { e.stopPropagation(); e.preventDefault(); } };
+    dlg.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    dlg.addEventListener('click', swallow, true);
+    return {
+      off() {
+        dlg.removeEventListener('pointerdown', down);
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        dlg.removeEventListener('click', swallow, true);
+      },
+    };
   }
 
   /* Gasto compartido vinculado a un movimiento propio: el id guardado al
@@ -2461,7 +2491,7 @@
         <div class="hero-main">
           <div class="hero-main-left">
             <div class="hero-label">Saldo</div>
-            <div class="hero-value ${balance < 0 ? 'neg' : ''}">${heroMoneyHTML(balance, disp())}</div>
+            <div class="hero-value ${balance < 0 ? 'neg' : ''}" data-balance="${balance}" data-balance-key="${esc(mk + ':' + disp())}">${heroMoneyHTML(balance, disp())}</div>
             <div class="hero-legend">
               <span><span class="dot dot-accent"></span><b>${pctLeft}%</b> balance</span>
               <span><span class="dot dot-warn"></span><b>${daysLeft}</b> día${daysLeft === 1 ? '' : 's'} restante${daysLeft === 1 ? '' : 's'}</span>
@@ -3927,7 +3957,7 @@
     const usdLine = (t.currency === 'ARS' && t.usdSnapshot != null)
       ? `<div class="usd">≈ ${esc(fmtMoney(t.usdSnapshot, 'USD'))}</div>` : '';
     if (t.type === 'transferencia') {
-      return `<div class="tx-card-row" data-tx="${esc(t.id)}">
+      return `<div class="tx-card-row${ui.newTxIds && ui.newTxIds.ids.has(t.id) ? ' is-new' : ''}" data-tx="${esc(t.id)}">
         <div class="row-icon row-icon-transfer">${iconSvg('swap')}</div>
         <div class="tx-card-main">
           <div class="tx-card-title">${esc(t.note || 'Transferencia')}</div>
@@ -3950,7 +3980,7 @@
     const subParts = [];
     if (t.note) subParts.push(catName(t.categoryId));
     subParts.push(methodName(t.methodId));
-    return `<div class="tx-card-row" data-tx="${esc(t.id)}">
+    return `<div class="tx-card-row${ui.newTxIds && ui.newTxIds.ids.has(t.id) ? ' is-new' : ''}" data-tx="${esc(t.id)}">
       <div class="row-icon cic" style="--c:${catColor(t.categoryId)}">${iconSvg(categoryIconName(t.categoryId))}</div>
       <div class="tx-card-main">
         <div class="tx-card-title">${esc(title)}</div>
@@ -7041,6 +7071,31 @@
   let lastRenderedView = null;
   const lastSubIdx = {};
 
+  /* El saldo de Inicio anima su cambio (de lo que mostraba antes a lo
+     nuevo) cuando cambia sin cambiar de mes ni de moneda, por ejemplo al
+     guardar un movimiento. */
+  let lastHeroBalance = null;
+  function animateHeroBalance(el) {
+    const box = $('.hero-value[data-balance]', el);
+    if (!box) return;
+    const to = Number(box.dataset.balance);
+    const key = box.dataset.balanceKey;
+    const prev = lastHeroBalance;
+    lastHeroBalance = { key, value: to };
+    const out = $('.hero-amount-int', box);
+    if (!prev || prev.key !== key || prev.value === to || !out || hideAmounts || prefersReducedMotion()) return;
+    const from = prev.value;
+    const t0 = performance.now(), dur = 600;
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / dur);
+      const v = from + (to - from) * (1 - Math.pow(1 - k, 3));
+      if (!out.isConnected) return;
+      out.textContent = nfHero.format(Math.abs(k === 1 ? to : v));
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
   /* ---------- Mes elegido (barra superior) ----------
      Inicio y Movimientos (con Categorías y Calendario) dependen del mes:
      la barra superior muestra el mes con flechas ‹ › y, en esas hojas, se
@@ -7198,6 +7253,10 @@
       render();
     }));
     VIEWS[ui.view]($('.view-content', el));
+    // El resaltado de lo recién guardado se ve una sola vez (en la primera
+    // lista que lo muestre, dentro de los 15 segundos de guardarlo).
+    if (ui.newTxIds && ($('.is-new', el) || Date.now() - ui.newTxIds.at > 15000)) ui.newTxIds = null;
+    animateHeroBalance(el);
     if (changingView) window.scrollTo(0, 0);
     else if (window.scrollY !== prevScrollY) window.scrollTo(0, prevScrollY);
   }
@@ -7289,7 +7348,7 @@
     });
     // Restaura el scroll de la página al cerrar el diálogo, sin importar
     // cómo se cerró (botón, Escape, o dlg.close() desde código): ver openModal().
-    $('#dialog').addEventListener('close', () => { document.body.style.overflow = ''; });
+    $('#dialog').addEventListener('close', (e) => { if (!e.target.open) document.body.style.overflow = ''; });
 
     // Cada guardado local se sube a la nube (si hay sesión activa).
     Store.onSave((state) => Cloud.schedulePush(state));
