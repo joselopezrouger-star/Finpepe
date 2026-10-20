@@ -2463,7 +2463,6 @@ body[data-grp="mas"] .topbar-inner, body[data-grp="cuentas"] .topbar-inner { min
 .crow.sub .cmet-var.bad b { color: var(--neg); }
 .crow.sub .cmet-var.good b { color: var(--brand-text); }
 .crow .l2:has(> .barline:only-child) { margin-top: 8px; }
-.cat-cmp-note { margin-bottom: -4px; }
 .cmet { align-items: center; }
 .cmet-sub { font: 500 12px/1.2 var(--f-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cmet-var.bad .cmet-sub { color: var(--neg); }

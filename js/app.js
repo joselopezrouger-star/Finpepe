@@ -3534,7 +3534,7 @@
         </div>
       </section>
 
-      ${listRows.length || zeroGroups.length ? `${listRows.length ? `<p class="k-note k-note-out cat-cmp-note">Variación contra ${esc(monthName(prevMk))} completo.</p>` : ''}
+      ${listRows.length || zeroGroups.length ? `
       <div class="group cat-group">${rowsHTML}${zeroHTML}</div>` : ''}
 
       ${methodRows.length ? `
