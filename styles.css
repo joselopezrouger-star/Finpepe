@@ -5,77 +5,41 @@
    theme tokens). Los colores de series y estado vienen de acá mismo
    (ver js/charts.js, que los lee en vivo). */
 
+/* Los colores, fuentes y radios salen de tokens.css (cargado antes que
+   esta hoja; oscuro por defecto y claro con <html data-theme="light">).
+   Acá solo se traducen los nombres que ya usaba esta hoja a esos tokens,
+   así el resto de las reglas no necesita saber qué tema hay. Nada de hex
+   sueltos: si hace falta un color nuevo, va primero en tokens.css. */
 :root {
-  /* Contraparte clara: misma identidad (teal + coral), ajustada para
-     legibilidad sobre blanco. */
-  --bg: #f4f6f8;
-  --surface: #ffffff;
-  --hero-body: #f5faf7;
-  --pill-ink: #ffffff;
-  --surface-2: #eef1f4;
-  --border: #e2e6ec;
-  --border-strong: #cbd2dc;
-  --ink: #0b1220;
-  --ink-2: #55617a;
-  --muted: #7c879c;
-  --grid: #e7eaef;
-  --axis: #cbd2dc;
-  --accent: #08d59d;           /* teal vivo (fondos de botón/acento) */
-  --accent-strong: #04996f;
-  --accent-down: #048066;      /* teal más oscuro, legible como texto/enlace sobre blanco */
-  --accent-wash: #e3f8f1;
-  --honey: #08d59d;            /* degradé del hero / marca */
-  --honey-deep: #04996f;
-  --on-accent: #032a1f;        /* texto oscuro sobre el teal */
-  --income: #04996f;
-  --income-series: #04996f;
-  --expense-series: #d6362f;
-  --category-series: #048066;
-  --good: #04996f;
-  --warn: #a15c00;
-  --crit: #d6362f;
-  --danger-bg: #fdf0ef;
-  --danger-border: #f4c9c6;
-  --danger-ink: #8c241f;
+  --surface: var(--s1);
+  --hero-body: var(--s1);
+  --pill-ink: var(--on-brand);
+  --surface-2: var(--s2);
+  --border: var(--line);
+  --border-strong: var(--s3);
+  --ink: var(--t1);
+  --ink-2: var(--t2);
+  --muted: var(--t3);
+  --grid: var(--line);
+  --axis: var(--s3);
+  --accent: var(--brand);                /* rellenos: botones, barras */
+  --accent-strong: var(--brand-press);
+  --accent-down: var(--brand-text);      /* texto y links en verde */
+  --accent-wash: var(--brand-soft);
+  --on-accent: var(--on-brand);
+  --income: var(--pos);
+  --income-series: var(--brand);
+  --expense-series: var(--t1);
+  --category-series: var(--c-otros);
+  --good: var(--pos);
+  --crit: var(--neg);
+  --danger-bg: var(--neg-soft);
+  --danger-border: color-mix(in srgb, var(--neg) 35%, transparent);
+  --danger-ink: var(--neg);
   --radius: 12px;
   --radius-s: 9px;
-  --font: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-heading: 'Barlow', var(--font);
-}
-
-/* Tema oscuro (el look elegido, y el que arranca por defecto): navy casi
-   negro + teal vivo, tal cual la referencia. Mismos nombres de variable,
-   valores distintos: el resto de la hoja no sabe qué tema hay. */
-:root[data-theme="dark"] {
-  --bg: #0a0f1e;
-  --surface: #13192b;
-  --hero-body: #13192b;
-  --pill-ink: #032a1f;
-  --surface-2: #1a2235;
-  --border: #202a40;
-  --border-strong: #2c3a58;
-  --ink: #f8fafc;
-  --ink-2: #94a3b8;
-  --muted: #94a3b8;
-  --grid: #202a40;
-  --axis: #202a40;
-  --accent: #08d59d;
-  --accent-strong: #06b586;
-  --accent-down: #08d59d;      /* el teal ya rinde ~9:1 como texto sobre estas superficies oscuras */
-  --accent-wash: #142a24;
-  --honey: #08d59d;
-  --honey-deep: #04996f;
-  --on-accent: #032a1f;
-  --income: #08d59d;
-  --income-series: #08d59d;
-  --expense-series: #ff5e5b;
-  --category-series: #08d59d;
-  --good: #08d59d;
-  --warn: #f5d142;
-  --crit: #ff5e5b;
-  --danger-bg: #2a1416;
-  --danger-border: #4a2228;
-  --danger-ink: #ff5e5b;
+  --font: var(--f-text);
+  --font-heading: var(--f-num);
 }
 
 * { box-sizing: border-box; }
@@ -97,6 +61,10 @@ body {
   background: var(--bg);
   color: var(--ink);
   font: 14px/1.45 var(--font);
+  /* Cifras tabulares en toda la app (además de .num, en tokens.css): todos
+     los dígitos miden lo mismo, así los montos no "bailan" al cambiar de
+     mes o de moneda. */
+  font-variant-numeric: tabular-nums;
 }
 
 a { color: var(--accent-down); }
@@ -225,7 +193,7 @@ button {
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid var(--border);
   border-radius: 999px;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  box-shadow: var(--sheet-shadow);
 }
 .bottom-nav button {
   flex: 1;
@@ -242,8 +210,8 @@ button {
   cursor: pointer;
 }
 .bottom-nav button .bn-icon { font-size: 19px; line-height: 1; }
-.bottom-nav button .bn-label { font-size: 10px; font-weight: 650; letter-spacing: 0.01em; }
-.bottom-nav button.active { color: var(--accent); background: var(--accent-wash); }
+.bottom-nav button .bn-label { font-size: 11px; font-weight: 650; letter-spacing: 0.01em; }
+.bottom-nav button.active { color: var(--accent-down); background: var(--accent-wash); }
 
 /* ---------- Sub-pestañas (dentro de cada sección) ----------
    Mismo look que el selector de moneda (.seg): un riel con fondo suave y
@@ -384,7 +352,7 @@ button {
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 700;
 }
-.tile-badge-income { background: var(--accent-wash); color: var(--accent); }
+.tile-badge-income { background: var(--accent-wash); color: var(--accent-down); }
 .tile-badge-expense { background: var(--danger-bg); color: var(--crit); }
 .tile-badge-neutral { background: var(--surface-2); color: var(--ink-2); }
 .tile-value { font: 600 24px/1.2 var(--font-heading); letter-spacing: -0.01em; }
@@ -400,15 +368,15 @@ button {
    entrar en media pantalla. */
 .grid-2.grid-2-pair { grid-template-columns: 1fr 1fr; gap: 10px; }
 .card-compact { padding: 10px 11px; display: flex; flex-direction: column; min-width: 0; }
-.card-compact .card-title { font-size: 9.5px; letter-spacing: 0.03em; margin-bottom: 6px; align-items: flex-start; min-height: 0; }
+.card-compact .card-title { font-size: 11px; letter-spacing: 0.03em; margin-bottom: 6px; align-items: flex-start; min-height: 0; }
 .cats-bars-compact .hbar-row { padding: 2px 0; gap: 1px; }
-.cats-bars-compact .hbar-label { font-size: 10.5px; gap: 3px; }
+.cats-bars-compact .hbar-label { font-size: 11px; gap: 3px; }
 .cats-bars-compact .hbar-dot { width: 6px; height: 6px; }
-.cats-bars-compact .hbar-amount { font-size: 10.5px; }
+.cats-bars-compact .hbar-amount { font-size: 11px; }
 .cats-bars-compact .hbar-trackrow { gap: 4px; }
 .cats-bars-compact .hbar-track { height: 8px; }
 .cats-bars-compact .hbar-bar { height: 8px; }
-.cats-bars-compact .hbar-pct { font-size: 9px; min-width: 18px; }
+.cats-bars-compact .hbar-pct { font-size: 11px; min-width: 18px; }
 
 /* ---------- Tasa de ahorro (Resumen): valor + variación arriba, curva abajo ---------- */
 .card-link { cursor: pointer; }
@@ -418,7 +386,7 @@ button {
 .savings-rate-value.neg { color: var(--crit); }
 .savings-rate-pill {
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 20px;
   background: var(--surface-2); color: var(--ink-2); white-space: nowrap;
 }
 .savings-rate-pill.pos { background: var(--accent-wash); color: var(--accent-down); }
@@ -432,7 +400,7 @@ button {
    la curva se achique mucho en una tarjeta angosta. */
 .savings-rate-bubble {
   position: absolute; transform: translate(-50%, calc(-100% - 7px));
-  white-space: nowrap; font: 700 10.5px var(--font-heading); color: var(--ink-2);
+  white-space: nowrap; font: 700 11px var(--font-heading); color: var(--ink-2);
   pointer-events: none;
 }
 .savings-rate-bubble.current {
@@ -441,7 +409,7 @@ button {
 }
 .savings-rate-xlabel {
   position: absolute; transform: translate(-50%, 0);
-  font-size: 10px; color: var(--muted); white-space: nowrap; pointer-events: none;
+  font-size: 11px; color: var(--muted); white-space: nowrap; pointer-events: none;
 }
 
 /* ---------- "Cómo vas este mes" (comentario automático en Resumen) ---------- */
@@ -558,7 +526,7 @@ select:focus, input:focus, .btn:focus-visible, .icon-btn:focus-visible {
   max-height: calc(100dvh - 48px);
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 12px 40px rgba(11, 11, 11, 0.14);
+  box-shadow: var(--sheet-shadow);
   margin: auto;
   /* Sin esto, cuando el contenido no entraba (ej. el detalle de un
      resumen con muchos movimientos) el <dialog> entero scrolleaba como un
@@ -588,7 +556,7 @@ dialog[open].dialog {
 .dialog:not([open]) {
   display: none !important;
 }
-.dialog::backdrop { background: rgba(11, 11, 11, 0.32); }
+.dialog::backdrop { background: var(--scrim); }
 .dialog form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .dialog-head {
   padding: 14px 18px;
@@ -725,7 +693,7 @@ dialog[open].dialog-tx.dialog-tx-wiz {
 .tx-detail-amount { text-align: center; padding: 4px 0 14px; }
 .tx-detail-amount .v { font: 700 26px var(--font-heading); font-variant-numeric: tabular-nums; }
 .tx-detail-amount .v.pos { color: var(--income); }
-.tx-detail-amount .v.neg { color: var(--crit); }
+.tx-detail-amount .v.neg { color: var(--ink); } /* gastos: color de texto con "−" (el rojo es para alertas) */
 .tx-detail-amount .usd { font-size: 13px; color: var(--muted); margin-top: 2px; }
 .tx-detail-row {
   display: flex; align-items: center; gap: 8px;
@@ -811,7 +779,7 @@ dialog[open].dialog-tx.dialog-tx-wiz {
   color: var(--ink);
   cursor: pointer;
 }
-.inst-opt.sel { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); }
+.inst-opt.sel { border-color: var(--accent); background: var(--accent-wash); color: var(--accent-down); }
 .inst-custom-input { margin-top: 8px; }
 
 /* El toggle de "total vs 1 cuota" tiene frases, no dígitos: letra más chica
@@ -840,7 +808,7 @@ dialog[open].dialog-tx.dialog-tx-wiz {
 .tx-keypad button:active { background: var(--surface-2); }
 .tx-keypad button.tx-key-op {
   background: var(--accent-wash);
-  color: var(--accent);
+  color: var(--accent-down);
   font-size: 21px;
 }
 .tx-keypad button.tx-key-ac {
@@ -888,13 +856,13 @@ dialog[open].dialog-tx.dialog-tx-wiz {
 .cat-tile:hover { border-color: var(--border-strong); }
 .cat-tile.sel { border-color: var(--accent); background: var(--accent-wash); }
 .cat-tile-name { font-size: 12px; font-weight: 600; line-height: 1.25; }
-.cat-tile.sel .cat-tile-name { color: var(--accent); }
-.cat-tile-chev { font-size: 10px; color: var(--muted); }
+.cat-tile.sel .cat-tile-name { color: var(--accent-down); }
+.cat-tile-chev { font-size: 11px; color: var(--muted); }
 .cat-tile-crumb {
   padding: 8px 8px 10px;
   font-size: 12.5px;
   font-weight: 650;
-  color: var(--accent);
+  color: var(--accent-down);
   cursor: pointer;
 }
 
@@ -979,8 +947,8 @@ table.data tr:last-child td { border-bottom: 0; }
 table.data tbody tr.rowlink { cursor: pointer; }
 table.data tbody tr.rowlink:hover { background: var(--surface-2); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.amount-in { color: var(--income); font: 600 13px var(--font-heading); }
-.amount-out { font: 600 13px var(--font-heading); }
+.amount-in { color: var(--income); font: 600 13px var(--font-heading); font-variant-numeric: tabular-nums; }
+.amount-out { font: 600 13px var(--font-heading); font-variant-numeric: tabular-nums; }
 .cell-sub { color: var(--muted); font-size: 12px; }
 tr.cat-sub-row td:first-child { padding-left: 26px; }
 
@@ -1016,7 +984,7 @@ table.data.cat-breakdown-table th:first-child, table.data.cat-breakdown-table td
   padding-left: 0;
 }
 table.data.cat-breakdown-table th {
-  font-size: 9.5px; letter-spacing: 0.01em; white-space: normal; line-height: 1.25;
+  font-size: 11px; letter-spacing: 0.01em; white-space: normal; line-height: 1.25;
   text-transform: none; font-weight: 700; color: var(--muted); font-family: var(--font);
 }
 table.data.cat-breakdown-table td:first-child {
@@ -1051,13 +1019,13 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .cat-mom-cell { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
 .cat-mom-pct {
   display: inline-block; white-space: nowrap; line-height: 1.3;
-  font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; padding: 1px 5px; border-radius: 999px;
 }
 .cat-mom-pct.up { background: var(--danger-bg); color: var(--danger-ink); }
 .cat-mom-pct.down { background: var(--accent-wash); color: var(--accent-down); }
 .cat-mom-pct.new { background: var(--surface-2); color: var(--ink-2); }
 .cat-mom-pct.flat { color: var(--muted); font-weight: 500; padding: 1px 0; }
-.cat-mom-amt { font-size: 9px; color: var(--muted); white-space: nowrap; }
+.cat-mom-amt { font-size: 11px; color: var(--muted); white-space: nowrap; }
 
 /* Diálogo de detalle de categoría: mes elegido + mes anterior, uno debajo
    del otro, para poder comparar qué compone un total que aparece en rojo
@@ -1084,8 +1052,8 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .gantt-wrap { overflow-x: auto; }
 .gantt { display: grid; }
 .gantt-cell { padding: 4px 6px; }
-.gantt-monthlabel { text-align: center; font-size: 10.5px; color: var(--muted); padding-bottom: 8px; }
-.gantt-monthlabel.is-today { color: var(--accent); }
+.gantt-monthlabel { text-align: center; font-size: 11px; color: var(--muted); padding-bottom: 8px; }
+.gantt-monthlabel.is-today { color: var(--accent-down); }
 .gantt-label {
   font-size: 12px; color: var(--ink); align-self: center;
   overflow-wrap: break-word; line-height: 1.25;
@@ -1115,7 +1083,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .inst-row-amounts { text-align: right; flex: none; }
 .inst-row-amount { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .inst-row-total { font-size: 11.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
-.inst-row-amount-label { color: var(--muted); font-size: 10.5px; }
+.inst-row-amount-label { color: var(--muted); font-size: 11px; }
 
 /* Presupuestos por categoría: lista de filas en vez de tabla, para que
    entren categoría + gastado/presupuesto + barra de avance sin forzar
@@ -1175,8 +1143,8 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .resume-row-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .resume-row-dates { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .resume-badge {
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
-  color: var(--accent); background: var(--accent-wash);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--accent-down); background: var(--accent-wash);
   padding: 2px 7px; border-radius: 20px; flex: none;
 }
 
@@ -1242,7 +1210,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .chart-scroll-x { flex: 1; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .trend-svg-big { display: block; }
 .tick-label { font: 11px var(--font); fill: var(--muted); }
-.point-label { font: 700 10px var(--font-heading); }
+.point-label { font: 700 11px var(--font-heading); }
 
 .hbar-row {
   display: flex;
@@ -1305,7 +1273,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 }
 .meter > span { display: block; height: 100%; border-radius: 4px 0 0 4px; }
 .meter-ok > span { background: var(--accent); }
-.meter-warn > span { background: #eda100; }
+.meter-warn > span { background: var(--warn); }
 .meter-crit > span { background: var(--crit); }
 
 /* ---------- Listas de tarjetas / ahorros ---------- */
@@ -1365,7 +1333,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
 }
-.row-icon-income { background: var(--accent-wash); color: var(--accent); }
+.row-icon-income { background: var(--accent-wash); color: var(--accent-down); }
 .row-icon-expense { background: var(--surface-2); color: var(--ink-2); }
 .row-icon-transfer { background: var(--surface-2); color: var(--ink-2); }
 .row-icon-due { background: var(--danger-bg); color: var(--crit); }
@@ -1393,12 +1361,11 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .tx-card-amount { text-align: right; flex: none; white-space: nowrap; }
 .tx-card-amount .v { font: 700 14px var(--font-heading); font-variant-numeric: tabular-nums; }
 .tx-card-amount .v.pos { color: var(--income); }
-.tx-card-amount .v.neg { color: var(--crit); }
-/* Gastos grandes (relativo al máximo de la lista que se está viendo): más
-   rojos cuanto más grandes, para identificarlos de un vistazo. */
-.tx-card-amount .v.amount-big { color: var(--crit); }
-.tx-card-amount .v.amount-huge { color: var(--crit); font-weight: 800; }
-.tx-card-amount .usd { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+.tx-card-amount .v.neg { color: var(--ink); }
+/* Gastos: en el color del texto con "−" (el rojo queda para alertas). Los
+   más grandes de la lista se marcan solo con el peso de la letra. */
+.tx-card-amount .v.amount-huge { font-weight: 800; }
+.tx-card-amount .usd { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .tx-card-del {
   border: 0; background: none; color: var(--muted);
   font-size: 14px; cursor: pointer; padding: 4px 6px; border-radius: 4px; flex: none;
@@ -1422,8 +1389,8 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .due-card-amount .v { font: 700 15px var(--font-heading); font-variant-numeric: tabular-nums; }
 .due-card-pill {
   display: inline-block; margin-top: 4px;
-  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--accent-down); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   background: var(--accent-wash); padding: 2px 8px; border-radius: 999px;
   cursor: pointer;
 }
@@ -1474,7 +1441,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
    que la línea ocupe todo el ancho en vez de quedar apretada a la izquierda. */
 .cycle-track-2 { grid-template-columns: auto 1fr auto; }
 .cd-date { font: 700 12.5px var(--font-heading); color: var(--ink); white-space: nowrap; }
-.cd-tag { font-size: 10.5px; font-weight: 650; color: var(--muted); white-space: nowrap; text-transform: uppercase; letter-spacing: 0.03em; }
+.cd-tag { font-size: 11px; font-weight: 650; color: var(--muted); white-space: nowrap; text-transform: uppercase; letter-spacing: 0.03em; }
 .cycle-dot {
   width: 9px; height: 9px;
   border-radius: 50%;
@@ -1575,13 +1542,13 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: var(--honey-deep);
-  color: #fff;
+  background: var(--brand);
+  color: var(--on-brand);
   padding: 10px 16px;
   margin-bottom: 4px;
 }
-.hero-month-bar .icon-btn { width: 26px; height: 26px; border: 0; background: color-mix(in srgb, white 14%, transparent); color: #fff; }
-.hero-month-bar .icon-btn:hover { background: color-mix(in srgb, white 24%, transparent); }
+.hero-month-bar .icon-btn { width: 26px; height: 26px; border: 0; background: color-mix(in srgb, var(--on-brand) 11%, transparent); color: var(--on-brand); }
+.hero-month-bar .icon-btn:hover { background: color-mix(in srgb, var(--on-brand) 19%, transparent); }
 .hero-month-bar-label { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; white-space: nowrap; }
 /* Encabezado del Resumen: mes a la izquierda, flechas redondas a la
    derecha, degradé verde y borde inferior en forma de ola (dos capas, la
@@ -1590,8 +1557,8 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   position: relative;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 16px 18px 32px;
-  background: linear-gradient(135deg, var(--honey-deep), color-mix(in srgb, var(--honey-deep) 70%, #0b3d2c));
-  color: #fff;
+  background: linear-gradient(135deg, var(--brand), var(--brand-press));
+  color: var(--on-brand);
 }
 .hero-head-label { display: flex; align-items: center; gap: 10px; font: 700 17px var(--font-heading); white-space: nowrap; min-width: 0; overflow: hidden; }
 .hero-head-label span { overflow: hidden; text-overflow: ellipsis; }
@@ -1606,12 +1573,12 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .hero-head-btn {
   width: 34px; height: 34px; border-radius: 50%; border: 0; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  font-size: 20px; line-height: 1; color: #fff;
-  background: color-mix(in srgb, white 16%, transparent);
+  font-size: 20px; line-height: 1; color: var(--on-brand);
+  background: color-mix(in srgb, var(--on-brand) 13%, transparent);
 }
 .hero-head-btn svg { width: 18px; height: 18px; stroke-width: 2.4; display: block; }
-.hero-head-btn:hover { background: color-mix(in srgb, white 26%, transparent); }
-.hero-head-btn:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.hero-head-btn:hover { background: color-mix(in srgb, var(--on-brand) 21%, transparent); }
+.hero-head-btn:focus-visible { outline: 2px solid var(--on-brand); outline-offset: 1px; }
 /* Olas de fondo en el cuerpo de la tarjeta: mismo dibujo que las del
    encabezado pero casi transparentes, detrás de todo el contenido. */
 .hero-bg-waves { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 78%; pointer-events: none; z-index: 0; }
@@ -1631,7 +1598,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
    falta. La leyenda de abajo del monto hace de referencia de colores. */
 .hero-main { display: flex; align-items: flex-start; justify-content: center; gap: 32px; padding: 0 14px 0; }
 .hero-main-left { flex: 0 1 auto; min-width: 0; }
-.hero-main .hero-label { text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.06em; margin: 8px 0 -4px; }
+.hero-main .hero-label { text-transform: uppercase; font-size: 11px; letter-spacing: 0.06em; margin: 8px 0 -4px; }
 .hero-main .hero-value { font-size: 48px; line-height: 1.1; margin: 2px 0 8px; }
 @media (max-width: 560px) { .hero-main .hero-value { font-size: clamp(28px, 9.8vw, 42px); } }
 .hero-legend { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-2); }
@@ -1651,8 +1618,8 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 }
 .hero-ring-center b { font: 700 13px var(--font-heading); color: var(--ink); white-space: nowrap; }
 .hero-ring-center b.sm { font-size: 11.5px; }
-.hero-ring-center b.xs { font-size: 9.5px; }
-.hero-ring-center span { font-size: 9.5px; color: var(--muted); margin-top: 1px; }
+.hero-ring-center b.xs { font-size: 11px; }
+.hero-ring-center span { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .hero-ring-center.neg b { color: var(--crit); }
 /* Ingresos / Gastos / Ahorros: tres tarjetitas con ícono de color. */
 .hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 12px 4px; }
@@ -1664,7 +1631,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   color: var(--surface);
 }
 .hero-stat-icon svg { width: 13px; height: 13px; stroke-width: 2.4; }
-.hero-stat-inc .hero-stat-icon { background: var(--income); }
+.hero-stat-inc .hero-stat-icon { background: var(--accent); }
 .hero-stat-exp .hero-stat-icon { background: var(--crit); }
 .hero-stat-sav .hero-stat-icon { background: var(--warn); }
 .hero-stat .k { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1690,7 +1657,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .daycmp-diff-good { background: var(--accent-wash); }
 .daycmp-diff-bad { background: var(--danger-bg); }
 .daycmp-diff-arrow { font-size: 13px; }
-.daycmp-diff-good .daycmp-diff-arrow, .daycmp-diff-good .daycmp-diff-main { color: var(--accent); }
+.daycmp-diff-good .daycmp-diff-arrow, .daycmp-diff-good .daycmp-diff-main { color: var(--accent-down); }
 .daycmp-diff-bad .daycmp-diff-arrow, .daycmp-diff-bad .daycmp-diff-main { color: var(--crit); }
 .daycmp-diff-main { font: 700 16px var(--font-heading); }
 .daycmp-diff-label { font-size: 12px; color: var(--ink-2); }
@@ -1709,7 +1676,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   font: 700 34px/1.2 var(--font-heading);
   letter-spacing: -0.02em;
   margin: 2px 0 4px;
-  color: var(--accent);
+  color: var(--accent-down);
 }
 .hero-value.neg { color: var(--crit); }
 .hero-amount-sym { font-size: 0.55em; font-weight: 600; margin-right: 5px; }
@@ -1769,7 +1736,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .cal-cell.has:hover { background: var(--surface-2); }
 .cal-cell.today { font-weight: 700; }
 .cal-cell.today > .cal-num {
-  background: var(--honey);
+  background: var(--brand);
   color: var(--on-accent);
   border-radius: 50%;
   width: 26px; height: 26px;
@@ -1832,7 +1799,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
   font-size: 13px; font-weight: 700;
   background: var(--surface-2); color: var(--ink);
 }
-.shared-avatar.me { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--honey-deep); }
+.shared-avatar.me { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--brand-text); }
 .shared-avatar.partner { background: color-mix(in srgb, var(--warn) 28%, var(--surface)); color: var(--warn); }
 
 .agenda-trailing { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
@@ -1840,13 +1807,13 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .shared-mini-avatar {
   width: 18px; height: 18px; border-radius: 50%;
   display: grid; place-items: center;
-  font-size: 9px; font-weight: 700;
+  font-size: 11px; font-weight: 700;
   background: var(--surface-2); border: 1px solid var(--surface);
   color: var(--muted);
   margin-left: -6px;
 }
 .shared-mini-avatar:first-child { margin-left: 0; }
-.shared-mini-avatar.me { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); color: var(--honey-deep); }
+.shared-mini-avatar.me { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); color: var(--brand-text); }
 .shared-mini-avatar.partner { background: color-mix(in srgb, var(--warn) 40%, var(--surface)); color: var(--warn); }
 
 /* Ahora vive arriba del todo del detalle de balance, en la misma tarjeta
@@ -1894,7 +1861,7 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .inst-share-table { min-width: 0; }
 .inst-share-table table.data th { padding: 6px 6px; letter-spacing: 0.02em; }
 .inst-share-table table.data td { padding: 7px 6px; }
-.inst-share-more { justify-self: end; font-size: 11.5px; font-weight: 600; color: var(--accent); }
+.inst-share-more { justify-self: end; font-size: 11.5px; font-weight: 600; color: var(--accent-down); }
 .inst-share-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
 .inst-share-head b { font: 700 18px var(--font-heading); color: var(--ink); white-space: nowrap; }
 .inst-share-row { display: grid; grid-template-columns: 96px 1fr 40px; align-items: center; gap: 10px; }
@@ -1920,20 +1887,20 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 
 /* Categorías → gastos por medio de pago */
 .method-bars .hbar-row { cursor: pointer; }
-.method-bars .hbar-row:hover .hbar-label { color: var(--accent); }
+.method-bars .hbar-row:hover .hbar-label { color: var(--accent-down); }
 .method-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 12.5px; color: var(--ink-2); }
 .method-total b { font: 700 15px var(--font-heading); color: var(--ink); }
 .rec-times { font-size: 11px; color: var(--muted); white-space: nowrap; text-align: right; margin-top: 1px; }
 
 /* Cuotas: Gantt tocable y detalle de una compra */
 .gantt-link { cursor: pointer; }
-.gantt-label.gantt-link:hover { color: var(--accent); }
+.gantt-label.gantt-link:hover { color: var(--accent-down); }
 .inst-cuotas-table { margin-top: 12px; }
 .inst-cuotas-table table.data th, .inst-cuotas-table table.data td { padding: 6px 6px; }
 .inst-cuotas-table tr.is-next td { background: var(--accent-wash); font-weight: 600; }
 .inst-st { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .inst-st.paid { color: var(--income); }
-.inst-st.now { color: var(--accent); }
+.inst-st.now { color: var(--accent-down); }
 
 /* Movimientos: lista compacta — un bloque por día con filas separadas por
    una línea fina, en vez de una tarjeta con borde (y ✕) por movimiento. */
@@ -1953,13 +1920,13 @@ table.data.cat-breakdown-table tr.cat-total-row .amount-out { font-size: 12px; }
 .tx-list-compact .row-icon { width: 26px; height: 26px; }
 .tx-list-compact .row-icon svg { width: 14px; height: 14px; }
 .tx-list-compact .tx-card-title { font-size: 12.5px; line-height: 1.25; }
-.tx-list-compact .tx-card-sub { font-size: 10.5px; line-height: 1.25; margin-top: 0; }
+.tx-list-compact .tx-card-sub { font-size: 11px; line-height: 1.25; margin-top: 0; }
 .tx-list-compact .tx-card-amount .v { font-size: 13px; line-height: 1.25; }
-.tx-list-compact .tx-card-amount .usd { font-size: 10px; line-height: 1.2; margin-top: 0; }
+.tx-list-compact .tx-card-amount .usd { font-size: 11px; line-height: 1.2; margin-top: 0; }
 .tx-day-blocks { display: grid; gap: 8px; }
 .tx-day-head {
   padding: 5px 10px 4px;
-  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--muted);
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
@@ -1990,7 +1957,7 @@ table.data.cat-breakdown-table tr.cat-sub-row .cs {
   transition: max-height 0.28s ease, opacity 0.2s ease, padding 0.28s ease;
 }
 table.data.cat-breakdown-table tr.cat-sub-row.open .cs { max-height: 64px; opacity: 1; padding: 7px 0; }
-table.data.cat-breakdown-table tr.cat-sub-all td { color: var(--accent); font-weight: 600; }
+table.data.cat-breakdown-table tr.cat-sub-all td { color: var(--accent-down); font-weight: 600; }
 table.data.cat-breakdown-table tr.cat-break-group td:first-child { position: relative; }
 .cat-chev {
   position: absolute; left: 1px; top: 50%;
@@ -2016,7 +1983,7 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .ca-days { font-size: 11.5px; color: var(--muted); font-weight: 500; white-space: nowrap; }
 .ca-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .ca-kpis > div { display: grid; gap: 2px; min-width: 0; }
-.ca-k { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; font-weight: 650; }
+.ca-k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; font-weight: 650; }
 .ca-v { font: 700 15px var(--font-heading); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ca-v .cat-mom-pct { font-size: 12px; }
 .ca-meter { position: relative; display: flex; height: 12px; border-radius: 999px; background: var(--border); overflow: visible; }
@@ -2056,21 +2023,21 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 /* ---------- Ahorros ---------- */
 /* Bloque principal con el mismo degradé verde del encabezado de Inicio. */
 .card.sav-hero {
-  background: linear-gradient(135deg, var(--honey-deep), color-mix(in srgb, var(--honey-deep) 70%, #0b3d2c));
-  border: 0; color: #fff;
+  background: linear-gradient(135deg, var(--brand), var(--brand-press));
+  border: 0; color: var(--on-brand);
   display: grid; gap: 4px; padding: 16px 18px 14px;
 }
 .sav-hero-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.85; }
 .sav-hero-total { font: 800 32px/1.1 var(--font-heading); letter-spacing: -0.01em; }
 .sav-hero-conv { font-size: 13px; opacity: 0.85; }
 .sav-hero-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.sav-hero-stats > div { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, white 14%, transparent); min-width: 0; }
-.sav-hero-stats span { font-size: 10.5px; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 650; }
+.sav-hero-stats > div { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--on-brand) 11%, transparent); min-width: 0; }
+.sav-hero-stats span { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 650; }
 .sav-hero-stats b { font: 700 15px var(--font-heading); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sav-mix { display: flex; height: 10px; margin-top: 12px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, white 20%, transparent); gap: 2px; }
+.sav-mix { display: flex; height: 10px; margin-top: 12px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--on-brand) 16%, transparent); gap: 2px; }
 .sav-mix > span { display: block; height: 100%; }
 .sav-mix-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 11.5px; opacity: 0.95; }
-.sav-mix-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; box-shadow: 0 0 0 1.5px color-mix(in srgb, white 70%, transparent); }
+.sav-mix-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--on-brand) 56%, transparent); }
 
 /* Lista de cuentas: una fila por cuenta, con su color, saldo y meta. */
 .sav-list { display: grid; gap: 8px; }
@@ -2084,7 +2051,7 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .sav-row-mid { margin-top: -4px; }
 .sav-row-name { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 14px; font-weight: 700; color: var(--ink); }
 .sav-row-name > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sav-cur { flex: none; font-size: 10px; font-weight: 700; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px; }
+.sav-cur { flex: none; font-size: 11px; font-weight: 700; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px; }
 .sav-row-sub { font-size: 11.5px; color: var(--muted); }
 .sav-row-bal { font: 800 17px var(--font-heading); color: var(--ink); white-space: nowrap; }
 .sav-row-quick { display: flex; gap: 4px; }
@@ -2094,7 +2061,7 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
   font: 700 16px/1 var(--font); cursor: pointer; display: grid; place-items: center; padding: 0;
 }
 .sav-q:hover { border-color: var(--border-strong); color: var(--ink); }
-.sav-q-add { background: var(--accent-wash); color: var(--accent); border-color: transparent; }
+.sav-q-add { background: var(--accent-wash); color: var(--accent-down); border-color: transparent; }
 .sav-goal { display: grid; gap: 4px; }
 .sav-goal-bar { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; }
 .sav-goal-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--sav-color, var(--accent)); }
@@ -2114,14 +2081,14 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .sav-det-conv { font-size: 12.5px; color: var(--muted); }
 .sav-det-head .sav-goal { margin-top: 8px; }
 .sav-det-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.sav-hist .badge { font-size: 10px; vertical-align: 1px; }
+.sav-hist .badge { font-size: 11px; vertical-align: 1px; }
 .sav-lock { font-size: 12px; padding: 0 6px; opacity: 0.7; }
 .sav-det-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 /* ---------- Compartido ---------- */
 .card.sh-hero {
-  background: linear-gradient(135deg, var(--honey-deep), color-mix(in srgb, var(--honey-deep) 70%, #0b3d2c));
-  border: 0; color: #fff; display: grid; gap: 4px; padding: 14px 18px 16px;
+  background: linear-gradient(135deg, var(--brand), var(--brand-press));
+  border: 0; color: var(--on-brand); display: grid; gap: 4px; padding: 14px 18px 16px;
 }
 .sh-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sh-hero-label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.9; min-width: 0; }
@@ -2129,28 +2096,28 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .sh-hero-tools { display: flex; gap: 6px; }
 .sh-icon-btn {
   width: 30px; height: 30px; border-radius: 50%; border: 0; cursor: pointer;
-  background: color-mix(in srgb, white 16%, transparent); color: #fff; font: 600 15px/1 var(--font);
+  background: color-mix(in srgb, var(--on-brand) 13%, transparent); color: var(--on-brand); font: 600 15px/1 var(--font);
   display: grid; place-items: center; padding: 0;
 }
-.sh-icon-btn:hover { background: color-mix(in srgb, white 26%, transparent); }
+.sh-icon-btn:hover { background: color-mix(in srgb, var(--on-brand) 21%, transparent); }
 .sh-hero-head { margin-top: 6px; font: 700 17px var(--font-heading); }
 .sh-hero-amount { font: 800 32px/1.1 var(--font-heading); letter-spacing: -0.01em; }
 .sh-people { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.sh-person { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, white 14%, transparent); min-width: 0; }
+.sh-person { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--on-brand) 11%, transparent); min-width: 0; }
 .sh-person > div { display: grid; min-width: 0; }
 .sh-person span:not(.shared-avatar) { font-size: 11px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sh-person b { font: 700 14.5px var(--font-heading); white-space: nowrap; }
 .sh-person .shared-avatar { width: 28px; height: 28px; font-size: 12px; flex: none; }
-.sh-split { display: flex; height: 8px; margin-top: 10px; border-radius: 999px; overflow: hidden; gap: 2px; background: color-mix(in srgb, white 20%, transparent); }
+.sh-split { display: flex; height: 8px; margin-top: 10px; border-radius: 999px; overflow: hidden; gap: 2px; background: color-mix(in srgb, var(--on-brand) 16%, transparent); }
 .sh-split > span { display: block; height: 100%; }
-.sh-split .me { background: color-mix(in srgb, var(--accent) 65%, white); }
+.sh-split .me { background: color-mix(in srgb, var(--brand) 55%, var(--on-brand)); }
 .sh-split .partner { background: var(--warn); }
 .sh-split-txt { display: flex; justify-content: space-between; font-size: 12px; opacity: 0.95; }
 .sh-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.sh-btn-primary { background: #fff; color: var(--honey-deep); border-color: #fff; font-weight: 700; }
-.sh-btn-primary:hover { background: color-mix(in srgb, white 90%, var(--honey-deep)); }
-.sh-btn-ghost { background: color-mix(in srgb, white 14%, transparent); color: #fff; border-color: color-mix(in srgb, white 40%, transparent); }
-.sh-btn-ghost:hover { background: color-mix(in srgb, white 24%, transparent); }
+.sh-btn-primary { background: var(--s1); color: var(--brand-text); border-color: var(--on-brand); font-weight: 700; }
+.sh-btn-primary:hover { background: color-mix(in srgb, var(--s1) 90%, var(--brand)); }
+.sh-btn-ghost { background: color-mix(in srgb, var(--on-brand) 11%, transparent); color: var(--on-brand); border-color: color-mix(in srgb, var(--on-brand) 32%, transparent); }
+.sh-btn-ghost:hover { background: color-mix(in srgb, var(--on-brand) 19%, transparent); }
 .tx-list-compact .shared-avatar { width: 26px; height: 26px; font-size: 11.5px; flex: none; }
 #invite-box:empty { display: none; }
 .card.sh-feed-btn {
@@ -2158,7 +2125,7 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
   font: 700 14px var(--font-heading); color: var(--ink); cursor: pointer; text-align: left;
 }
 .sh-feed-btn > span:first-child { display: flex; align-items: center; gap: 10px; }
-.sh-feed-btn svg { color: var(--accent); }
+.sh-feed-btn svg { color: var(--accent-down); }
 .sh-feed-count { color: var(--muted); font-weight: 600; }
 .card.sh-feed-btn:hover { border-color: var(--border-strong); }
 /* Ojo para ocultar montos, a la izquierda del selector de moneda. */
@@ -2167,7 +2134,7 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .topbar-eye { width: 32px; height: 32px; border-radius: 50%; flex: none; }
 /* Ajustes → Notificaciones */
 .notif-status { font-weight: 700; margin-bottom: 6px; color: var(--ink-2); }
-.notif-status.on { color: var(--accent); }
+.notif-status.on { color: var(--accent-down); }
 .notif-list { margin: 4px 0 10px; padding-left: 18px; font-size: 12.5px; color: var(--ink-2); display: grid; gap: 4px; }
 .notif-msg { margin-top: 8px; }
 .notif-opts { display: grid; gap: 6px; margin: 6px 0 12px; }
@@ -2178,3 +2145,16 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .notif-opt small { font-size: 11.5px; color: var(--muted); }
 .notif-summary { display: grid; gap: 2px; margin-bottom: 10px; font-weight: 600; color: var(--ink-2); }
 .notif-summary .hint { font-weight: 400; }
+
+/* ---------- Color de categoría (editar categoría) ---------- */
+.cat-colors { display: flex; flex-wrap: wrap; gap: 8px; }
+.cat-color {
+  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 0 12px 0 8px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--surface-2);
+  font-size: 13px; color: var(--ink-2); cursor: pointer;
+}
+.cat-color input { position: absolute; opacity: 0; pointer-events: none; }
+.cat-color-dot { width: 20px; height: 20px; border-radius: 50%; background: var(--c); flex: none; }
+.cat-color:has(input:checked) { border-color: var(--c); color: var(--ink); background: color-mix(in srgb, var(--c) 14%, var(--surface)); }
+.cat-color:has(input:focus-visible) { outline: 2px solid var(--c); outline-offset: 2px; }

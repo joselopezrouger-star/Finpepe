@@ -11,20 +11,17 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="FinPep">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow:wght@500;600;700;800&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261009e">
+<link rel="preload" href="assets/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/barlow-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="tokens.css?v=20261020a">
+<link rel="stylesheet" href="styles.css?v=20261020a">
 <script>
   // Aplica el tema guardado antes de pintar la página, para evitar el
   // parpadeo de pasar de un tema a otro un instante después de cargar.
-  // Por defecto arranca en oscuro (el look elegido); "light" lo pisa.
+  // Por defecto arranca en oscuro (tokens.css); "light" lo pisa.
   try {
-    var t = localStorage.getItem('finpepe:theme');
-    if (t !== 'light') document.documentElement.setAttribute('data-theme', 'dark');
-  } catch (e) {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  }
+    if (localStorage.getItem('finpepe:theme') === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  } catch (e) { /* sin storage: queda en oscuro */ }
 </script>
 </head>
 <body>
@@ -66,10 +63,10 @@
      código en GitHub Pages no siempre se nota enseguida en el celular.
      Subí este número (fecha + letra) cada vez que cambie algún .js o .css. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/store.js?v=20261009e"></script>
-<script src="js/fx.js?v=20261009e"></script>
-<script src="js/cloud.js?v=20261009e"></script>
-<script src="js/charts.js?v=20261009e"></script>
-<script src="js/app.js?v=20261009e"></script>
+<script src="js/store.js?v=20261020a"></script>
+<script src="js/fx.js?v=20261020a"></script>
+<script src="js/cloud.js?v=20261020a"></script>
+<script src="js/charts.js?v=20261020a"></script>
+<script src="js/app.js?v=20261020a"></script>
 </body>
 </html>

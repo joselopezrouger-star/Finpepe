@@ -14,9 +14,9 @@ const Charts = (() => {
     return v || fallback;
   }
   const COLORS = {
-    get income() { return cssVar('--income-series', '#0a8f3c'); },
-    get expense() { return cssVar('--expense-series', '#d03b3b'); },
-    get category() { return cssVar('--category-series', '#b5760a'); },
+    get income() { return cssVar('--income-series', 'currentColor'); },
+    get expense() { return cssVar('--expense-series', 'currentColor'); },
+    get category() { return cssVar('--category-series', 'currentColor'); },
   };
 
   /* ---------- Escalas ---------- */
@@ -257,7 +257,7 @@ const Charts = (() => {
     if (opts.ref > 0) {
       const yr = y(opts.ref);
       add(svg, 'line', { x1: m.l, x2: W - m.r, y1: yr, y2: yr, stroke: 'var(--accent)', 'stroke-width': 1.5, 'stroke-dasharray': '6 4' });
-      if (opts.refLabel) add(svg, 'text', { x: W - m.r, y: yr - 5, 'text-anchor': 'end', class: 'tick-label', fill: 'var(--accent)', style: 'font-size:12px;font-weight:600' }, opts.refLabel);
+      if (opts.refLabel) add(svg, 'text', { x: W - m.r, y: yr - 5, 'text-anchor': 'end', class: 'tick-label', fill: 'var(--brand-text)', style: 'font-size:12px;font-weight:600' }, opts.refLabel);
     }
     el.appendChild(svg);
   }
@@ -405,12 +405,10 @@ const Charts = (() => {
     el.appendChild(svg);
   }
 
-  // Oscurece un color hex (para la pared del gráfico de torta cilindro).
-  function darken(hex, factor) {
-    const h = hex.replace('#', '');
-    const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
-    const d = (c) => Math.max(0, Math.min(255, Math.round(c * factor)));
-    return `rgb(${d(r)},${d(g)},${d(b)})`;
+  // Oscurece un color (hex o var(--…)) para la pared del gráfico de torta
+  // cilindro: se mezcla con negro en vez de calcular el hex a mano.
+  function darken(color, factor) {
+    return `color-mix(in srgb, ${color} ${Math.round(factor * 100)}%, black)`;
   }
 
   /* ---------- Torta con look de cilindro/tambor (pseudo-3D) ----------

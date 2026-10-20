@@ -12,13 +12,9 @@
   // Comillado CSV (RFC 4180): usado tanto al exportar como al armar la
   // plantilla de importación.
   const csvQuote = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  // Un color hex a rgba() con alfa bajo, para teñir de fondo sin tapar el
-  // texto (usado para pintar cada fila de categoría con su propio color).
-  const hexToRgba = (hex, a) => {
-    const h = hex.replace('#', '');
-    const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
-    return `rgba(${r},${g},${b},${a})`;
-  };
+  // Un color (hex o var(--…)) con alfa bajo, para teñir de fondo sin tapar
+  // el texto (usado para pintar cada fila de categoría con su propio color).
+  const tint = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
   // Vibración cortita al tocar el teclado numérico (feedback táctil). No
   // todos los navegadores exponen navigator.vibrate (iOS Safari no), así
   // que es un no-op silencioso ahí.
@@ -381,8 +377,8 @@
   // en "Tarjetas y medios" (fondo tenue + borde), tomados de la misma
   // paleta que las categorías.
   const KIND_COLOR = {
-    efectivo: '#f5d142', debito: '#5b8def', caja_ahorro: '#08d59d', credito: '#c77dff', billetera: '#4dd0e1',
-    ahorro: '#ff8a5c',
+    efectivo: 'var(--c-super)', debito: 'var(--c-casa)', caja_ahorro: 'var(--brand)', credito: 'var(--c-auto)', billetera: 'var(--c-tel)',
+    ahorro: 'var(--c-comida)',
   };
 
   /* ================= Iconos (SVG propios, sin depender de una librería externa) ================= */
@@ -555,7 +551,24 @@
   // Paleta fija para diferenciar categorías en "Gastos por categoría" (barras
   // + anillo de participación): distinta de los colores semánticos
   // (ingreso/gasto/acento), que ya están reservados para otras cosas.
-  const CAT_PALETTE = ['#08d59d', '#f5d142', '#ff8a5c', '#5b8def', '#c77dff', '#ff5e5b', '#4dd0e1', '#94a3b8'];
+  // Colores de categoría: fijos y guardados en cada grupo (c.color, una
+  // clave de los tokens --c-* de tokens.css; ver Store.assignCategoryColors).
+  // Las subcategorías usan el de su grupo. Así una categoría tiene el mismo
+  // color en todas las pantallas, sin depender de su lugar en el ranking.
+  const CAT_COLOR_LABELS = {
+    casa: 'Azul', compras: 'Rosa', comida: 'Naranja', auto: 'Violeta', tel: 'Celeste', super: 'Amarillo', otros: 'Gris',
+  };
+  const OTROS_COLOR = 'var(--c-otros)';
+  function catColorKey(catId) {
+    const g = catById(topCategoryOf(catId));
+    return g && Store.CATEGORY_COLORS.includes(g.color) ? g.color : 'otros';
+  }
+  const catColor = (catId) => `var(--c-${catColorKey(catId)})`;
+  // Para series que no son categorías (cuentas de ahorro): los mismos tonos
+  // de los tokens, sin el gris de "Otros".
+  const SERIES_PALETTE = ['var(--c-casa)', 'var(--c-tel)', 'var(--c-auto)', 'var(--c-comida)', 'var(--c-compras)', 'var(--c-super)'];
+  // Medios de pago: no son categorías, van en grises para no confundirse.
+  const NEUTRAL_PALETTE = ['var(--t1)', 'var(--t2)', 'var(--t3)', 'color-mix(in srgb, var(--t3) 55%, var(--bg))', 'var(--s3)'];
   const CAT_ICON = {
     'c-casa': 'home', 'c-comida': 'food', 'c-auto': 'car', 'c-salud': 'heart',
     'c-entret': 'film', 'c-ropa': 'shirt', 'c-educ': 'book', 'c-viajes': 'plane',
@@ -1079,12 +1092,13 @@
 
   /* ================= Tema claro / oscuro ================= */
   const THEME_KEY = 'finpepe:theme';
+  // Oscuro por defecto (tokens.css); el claro se activa con data-theme="light".
   function currentTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
   }
   function toggleTheme() {
     const next = currentTheme() === 'dark' ? 'light' : 'dark';
-    if (next === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    if (next === 'light') document.documentElement.setAttribute('data-theme', 'light');
     else document.documentElement.removeAttribute('data-theme');
     localStorage.setItem(THEME_KEY, next);
     render(); // Repinta los gráficos con los colores del nuevo tema.
@@ -2115,11 +2129,10 @@
       const topId = topCategoryOf(t.categoryId);
       byCat.set(topId, (byCat.get(topId) || 0) + v);
     }
-    let catItems = [...byCat.entries()]
-      .map(([id, value]) => ({ label: catName(id), value }))
+    const catItems = [...byCat.entries()]
+      .map(([id, value]) => ({ label: catName(id), value, color: catColor(id) }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
-    catItems = catItems.map((it, i) => ({ ...it, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
 
     // "Cómo vas este mes": comentario automático a partir de reglas simples
     // (nada de IA, son heurísticas sobre los datos que ya tenemos) — junta
@@ -3019,38 +3032,24 @@
       .sort((a, b) => b[1] - a[1])
       .map(([id, value], i) => ({
         id, value, label: id === '__sin' ? 'Sin medio de pago' : methodName(id),
-        color: CAT_PALETTE[i % CAT_PALETTE.length],
+        color: NEUTRAL_PALETTE[Math.min(i, NEUTRAL_PALETTE.length - 1)],
       }));
     const methodTxs = (list, id) => list.filter((t) => t.type === 'gasto' &&
       (id === '__sin' ? !methodById(t.methodId) : t.methodId === id));
 
-    // Un solo color por categoría, asignado según su peso en la ventana de
-    // 6 meses (más estable que el ranking de un solo mes) y reutilizado
-    // tanto en la torta como en las barras apiladas — así una categoría se
-    // reconoce por su color en los dos gráficos, no solo en uno.
-    const catColorOf = new Map(windowBreakdown.map((g, i) => [g.id, CAT_PALETTE[i % CAT_PALETTE.length]]));
-    const OTROS_COLOR = '#64748b';
-    // Mismo criterio para las categorías de ingreso, pero como no comparten
-    // gráficos con las de gasto no hace falta que salga de la ventana de 6
-    // meses: alcanza con las del mes elegido.
-    // Colores de ingresos sacados de la ventana de 6 meses (como los de
-    // gastos), así una categoría tiene el mismo color en la tabla, la torta
-    // y las líneas de evolución.
+    // Cada categoría con su color fijo (catColor), el mismo en la tabla, la
+    // torta, las barras apiladas y las líneas de evolución.
     const incomeWindowBreakdown = categoryBreakdown(txs.filter((t) => t.type === 'ingreso' && months.includes(monthKeyOf(t.date))));
-    const incomeColorOf = new Map(incomeWindowBreakdown.map((g, i) => [g.id, CAT_PALETTE[i % CAT_PALETTE.length]]));
-    for (const g of incomeBreakdown) {
-      if (!incomeColorOf.has(g.id)) incomeColorOf.set(g.id, CAT_PALETTE[incomeColorOf.size % CAT_PALETTE.length]);
-    }
     // Torta de ingresos del mes: hasta 4 orígenes + "Otros".
     const incPie = incomeBreakdown.filter((g) => g.total > 0);
-    const incPieItems = incPie.slice(0, 4).map((g) => ({ label: g.name, value: g.total, color: incomeColorOf.get(g.id) }));
-    if (incPie.length > 4) incPieItems.push({ label: 'Otros', value: incPie.slice(4).reduce((a, g) => a + g.total, 0), color: '#64748b' });
+    const incPieItems = incPie.slice(0, 4).map((g) => ({ label: g.name, value: g.total, color: catColor(g.id) }));
+    if (incPie.length > 4) incPieItems.push({ label: 'Otros', value: incPie.slice(4).reduce((a, g) => a + g.total, 0), color: OTROS_COLOR });
     // Evolución de ingresos: una línea por categoría (las 5 con más peso en
     // la ventana + "Otros"), sólo en los meses con ingresos.
     const INC_LINES_MAX = 5;
-    const incLineCats = incomeWindowBreakdown.slice(0, INC_LINES_MAX).map((g) => ({ id: g.id, name: g.name, color: incomeColorOf.get(g.id) }));
+    const incLineCats = incomeWindowBreakdown.slice(0, INC_LINES_MAX).map((g) => ({ id: g.id, name: g.name, color: catColor(g.id) }));
     const incLineIds = new Set(incLineCats.map((c) => c.id));
-    if (incomeWindowBreakdown.length > INC_LINES_MAX) incLineCats.push({ id: '__otros', name: 'Otros', color: '#64748b' });
+    if (incomeWindowBreakdown.length > INC_LINES_MAX) incLineCats.push({ id: '__otros', name: 'Otros', color: OTROS_COLOR });
     // Barras apiladas al 100% de ingresos: mismas categorías, colores y
     // meses que las líneas, pero como participación de cada una en el mes.
     const incStackRows = activeMonths.map((m, i) => {
@@ -3083,7 +3082,7 @@
     const pieTop = pieBreakdown.slice(0, PIE_MAX);
     const pieRest = pieBreakdown.slice(PIE_MAX);
     const pieItems = pieTop.map((g) => ({
-      label: g.name, value: g.total, color: catColorOf.get(g.id) || CAT_PALETTE[0],
+      label: g.name, value: g.total, color: catColor(g.id),
     }));
     if (pieRest.length) {
       pieItems.push({ label: 'Otros', value: pieRest.reduce((a, g) => a + g.total, 0), color: OTROS_COLOR });
@@ -3095,7 +3094,7 @@
     const STACK_MAX = 6;
     const stackTop = windowBreakdown.slice(0, STACK_MAX);
     const stackRest = windowBreakdown.slice(STACK_MAX);
-    const stackCats = stackTop.map((g) => ({ id: g.id, name: g.name, color: catColorOf.get(g.id) }));
+    const stackCats = stackTop.map((g) => ({ id: g.id, name: g.name, color: catColor(g.id) }));
     if (stackRest.length) stackCats.push({ id: '__otros', name: 'Otros', color: OTROS_COLOR });
     const stackIds = new Set(stackTop.map((g) => g.id));
     const stackRows = activeMonths.map((m) => {
@@ -3140,7 +3139,6 @@
     // movimientos contra el mes anterior.
     function breakdownRowsHTML(list, kind) {
       const isInc = kind === 'ingreso';
-      const colorOf = isInc ? incomeColorOf : catColorOf;
       const prevGroups = isInc ? prevIncomeGroupTotals : prevGroupTotals;
       const prevSubs = isInc ? prevIncomeSubTotals : prevSubTotals;
       const pctCells = (v) => isInc
@@ -3161,8 +3159,8 @@
           <tr class="cat-sub-row cat-sub-all${open ? ' open' : ''}" data-catid="${esc(g.id)}" data-parent="${esc(g.id)}"${kindAttr}>
             ${wrapCells(`<td colspan="${isInc ? 4 : 5}" class="cell-sub">Ver todos los movimientos de ${esc(g.name)} ›</td>`)}
           </tr>` : '';
-        const groupColor = colorOf.get(g.id) || CAT_PALETTE[0];
-        return `<tr class="cat-break-group${showSubs ? ' has-subs' : ''}${open ? ' open' : ''}" data-catid="${esc(g.id)}"${showSubs ? ' data-toggle="1"' : ''}${kindAttr} style="--row-tint:${hexToRgba(groupColor, 0.12)}">
+        const groupColor = catColor(g.id);
+        return `<tr class="cat-break-group${showSubs ? ' has-subs' : ''}${open ? ' open' : ''}" data-catid="${esc(g.id)}"${showSubs ? ' data-toggle="1"' : ''}${kindAttr} style="--row-tint:${tint(groupColor, 12)}">
           <td><span class="cat-chev${showSubs ? '' : ' is-empty'}" aria-hidden="true">›</span>${esc(g.name)}</td>
           <td class="num amount-out">${fmtDisp(g.total)}</td>
           ${pctCells(g.total)}
@@ -3883,7 +3881,7 @@
               (t) => t.methodId === m.id && t.type === 'gasto' && monthKeyOf(t.date) === curMonth()));
             details = `<dl><dt>Gastado este mes</dt><dd><button type="button" class="dd-link" data-detail="month:${esc(m.id)}">${fmtDisp(monthTotal)}</button></dd></dl>`;
           }
-          const kindColor = KIND_COLOR[m.kind] || CAT_PALETTE[0];
+          const kindColor = KIND_COLOR[m.kind] || OTROS_COLOR;
           return `<div class="entity entity-method" style="--kind-color:${kindColor}">
             <div class="entity-head">
               <span class="entity-name">${esc(m.name)}</span>
@@ -3983,7 +3981,7 @@
     if (t.note) subParts.push(catName(t.categoryId));
     subParts.push(methodName(t.methodId));
     return `<div class="tx-card-row" data-tx="${esc(t.id)}">
-      <div class="row-icon ${isIncome ? 'row-icon-income' : 'row-icon-expense'}">${iconSvg(categoryIconName(t.categoryId))}</div>
+      <div class="row-icon cic" style="--c:${catColor(t.categoryId)}">${iconSvg(categoryIconName(t.categoryId))}</div>
       <div class="tx-card-main">
         <div class="tx-card-title">${esc(title)}</div>
         <div class="tx-card-sub">${esc(subParts.join(' · '))}${inst}${rec}${cur}</div>
@@ -4563,7 +4561,7 @@
 
     // Cada cuenta con su saldo en la moneda elegida, para la barra de
     // composición del total (mismo color en la barra y en la lista).
-    const accounts = savings.map((s, i) => ({ s, ...savingBalances(s), color: CAT_PALETTE[i % CAT_PALETTE.length] }));
+    const accounts = savings.map((s, i) => ({ s, ...savingBalances(s), color: SERIES_PALETTE[i % SERIES_PALETTE.length] }));
     const posTotal = accounts.reduce((a, x) => a + Math.max(0, x.inDisp), 0);
 
     const CHARTS = {
@@ -4971,7 +4969,7 @@
     const barRows = rows.map((r, i) => ({
       groupId: r.groupId,
       label: r.note || catName(r.categoryId),
-      color: CAT_PALETTE[i % CAT_PALETTE.length],
+      color: catColor(r.categoryId),
       startIdx: months.indexOf(effectiveMonthOf(r.all[0])),
       endIdx: months.indexOf(effectiveMonthOf(r.all[r.all.length - 1])),
     }));
@@ -5014,7 +5012,7 @@
     const prog = Math.round((r.nextK / r.n) * 100);
     return `
           <div class="inst-row ${link ? 'rowlink' : ''}" ${link ? `data-instgroup="${esc(r.groupId)}"` : ''} style="--prog:${prog}%">
-            <div class="row-icon row-icon-expense">${iconSvg(categoryIconName(r.categoryId))}</div>
+            <div class="row-icon cic" style="--c:${catColor(r.categoryId)}">${iconSvg(categoryIconName(r.categoryId))}</div>
             <div class="inst-row-main">
               <div class="inst-row-title">${esc(r.note || catName(r.categoryId))}</div>
               <div class="inst-row-sub">${esc(methodName(r.methodId))} · cuota ${r.nextK}/${r.n} · ${paymentDateOf(r.next) > todayStr() ? 'próx. ' + esc(fmtDateShort(paymentDateOf(r.next))) : 'este mes'}</div>
@@ -5696,6 +5694,16 @@
         <label for="cg-name">Nombre</label>
         <input type="text" name="name" id="cg-name" required maxlength="30" value="${esc(editing ? group.name : '')}">
       </div>
+      <div class="field">
+        <label>Color</label>
+        <div class="cat-colors" role="radiogroup" aria-label="Color de la categoría">
+          ${Store.CATEGORY_COLORS.map((k) => `<label class="cat-color" style="--c:var(--c-${k})">
+            <input type="radio" name="cgcolor" value="${k}" ${(editing ? catColorKey(group.id) : 'otros') === k ? 'checked' : ''}>
+            <span class="cat-color-dot" aria-hidden="true"></span>
+            <span class="cat-color-name">${CAT_COLOR_LABELS[k]}</span>
+          </label>`).join('')}
+        </div>
+      </div>
       ${editing ? `
       <div class="field">
         <label>Subcategorías</label>
@@ -5716,10 +5724,13 @@
       onSubmit(d) {
         const name = d.name.trim();
         if (!name) return false;
+        const picked = $('input[name="cgcolor"]:checked', dlg);
+        const color = picked ? picked.value : 'otros';
         if (editing) {
           group.name = name;
+          group.color = color;
         } else {
-          S().categories.push({ id: Store.uid(), name, type, parentId: null });
+          S().categories.push({ id: Store.uid(), name, type, parentId: null, color });
         }
         Store.save();
         render();
