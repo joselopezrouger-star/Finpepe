@@ -2164,9 +2164,12 @@
     const G = Charts.g;
     const W = 320, H = 140, x0 = 44, x1 = 290, yTop = 18, yBase = 112;
     const rates = rows.map((r) => r.rate);
-    const lo = Math.min(0, Math.floor(Math.min(...rates) / 25) * 25);
-    const hi = Math.max(75, Math.ceil(Math.max(...rates) / 25) * 25);
-    const step = (hi - lo) > 100 ? 50 : 25;
+    // El techo es 5 puntos arriba del máximo que se lee (así la curva usa
+    // todo el alto); la grilla va en pasos redondos, de 3 a 5 líneas.
+    const hi = Math.max(5, Math.max(...rates) + 5);
+    const minR = Math.min(...rates);
+    const step = [5, 10, 20, 25, 50, 100].find((st) => (hi - Math.min(0, minR)) / st <= 4) || 100;
+    const lo = Math.min(0, Math.floor(minR / step) * step);
     const ticks = [];
     for (let v = lo; v <= hi; v += step) ticks.push(v);
     const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
