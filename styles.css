@@ -2387,7 +2387,7 @@ body.syncing .view-content .big small { color: transparent; }
 .crow.sub .l2 { margin-top: 4px; }
 
 /* ---------- Cuentas (rediseño) ---------- */
-.acc-bar { margin-bottom: -2px; }
+.acc-bar { margin-bottom: -8px; min-height: 36px; }
 .acc-card { display: grid; gap: 12px; }
 .acc-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; }
 .acc-head .cic, .acc-row .cic { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; }
@@ -2429,9 +2429,9 @@ body.syncing .view-content .big small { color: transparent; }
 .dt-row > .num { font-size: 15px; font-weight: 600; white-space: nowrap; }
 
 /* ---------- Más: todo más arriba y la marca al pie ---------- */
-body[data-grp="mas"] .view { padding-top: 0; gap: 10px; }
-body[data-grp="mas"] .largetitle { margin: 0; font-size: 28px; }
-body[data-grp="mas"] .topbar-inner { min-height: 48px; }
+body[data-grp="mas"] .view, body[data-grp="cuentas"] .view { padding-top: 0; gap: 10px; }
+body[data-grp="mas"] .largetitle, body[data-grp="cuentas"] .largetitle { margin: 0; font-size: 28px; }
+body[data-grp="mas"] .topbar-inner, body[data-grp="cuentas"] .topbar-inner { min-height: 48px; }
 .brand-mark {
   display: grid; justify-items: center; gap: 4px; margin: 28px auto 4px; padding-bottom: 8px;
   opacity: .55; user-select: none; pointer-events: none;
