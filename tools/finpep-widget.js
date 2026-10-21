@@ -25,6 +25,7 @@ const C = {
   neg: Color.dynamic(new Color('#D93A3A'), new Color('#FF6B6B')),
   super: Color.dynamic(new Color('#C9A21A'), new Color('#E6C84F')),
   s2: Color.dynamic(new Color('#EEF1F5'), new Color('#1A2133')),
+  line: Color.dynamic(new Color('#0F1726', 0.1), new Color('#EEF2F7', 0.1)),
   // Versiones apagadas para el widget de inicio (los anillos y sus puntos).
   ringOut: new Color('#3BAE8C'),
   ringIn: new Color('#B9A25A'),
@@ -298,6 +299,12 @@ function buildWidget(state, forceFamily) {
     top.addSpacer();
     addPill(top, true);
     text(w, money(saldo, cur), 24, amountColor, 'bold');
+    w.addSpacer();
+    // Línea finita entre el saldo y el detalle de abajo.
+    const line = w.addStack();
+    line.size = new Size(0, 1);
+    line.backgroundColor = C.line;
+    line.addSpacer();
     w.addSpacer();
     const row = w.addStack();
     row.centerAlignContent();
