@@ -130,8 +130,125 @@ function addButton(stack, small) {
   return b;
 }
 
-function buildWidget({ summary, error, needsSetup }) {
-  const family = config.widgetFamily || 'medium';
+/* ---------- Pantalla de bloqueo ---------- */
+// Los mismos anillos que Inicio: afuera el % de balance que queda, adentro
+// el % del mes que falta. En la pantalla de bloqueo iOS los pinta de un solo
+// color, así que van en blanco con distinta opacidad.
+const LOCK_FAMILIES = ['accessoryCircular', 'accessoryRectangular', 'accessoryInline'];
+function monthLeftPct() {
+  const d = new Date();
+  const total = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return Math.max(0, Math.min(100, Math.round(((total - d.getDate()) / total) * 100)));
+}
+function ringsImage(pctOut, pctIn, size) {
+  const ctx = new DrawContext();
+  ctx.size = new Size(size, size);
+  ctx.opaque = false;
+  ctx.respectScreenScale = true;
+  const c = size / 2;
+  const ring = (r, width, pct, alpha) => {
+    const stroke = (frac, a) => {
+      if (frac <= 0) return;
+      const n = Math.max(2, Math.round(120 * frac));
+      const pts = [];
+      for (let i = 0; i <= n; i++) {
+        const ang = -Math.PI / 2 + 2 * Math.PI * frac * (i / n);
+        pts.push(new Point(c + r * Math.cos(ang), c + r * Math.sin(ang)));
+      }
+      const path = new Path();
+      path.addLines(pts);
+      ctx.addPath(path);
+      ctx.setStrokeColor(new Color('#FFFFFF', a));
+      ctx.setLineWidth(width);
+      ctx.strokePath();
+      // Puntas redondeadas (solo en el trazo opaco: en los translúcidos el
+      // punto encima se vería más claro).
+      if (a >= 1 && frac < 1) {
+        ctx.setFillColor(new Color('#FFFFFF', a));
+        for (const p of [pts[0], pts[pts.length - 1]]) ctx.fillEllipse(new Rect(p.x - width / 2, p.y - width / 2, width, width));
+      }
+    };
+    stroke(1, 0.22 * alpha);
+    stroke(Math.max(0, Math.min(100, pct)) / 100, alpha);
+  };
+  const w1 = size * 0.11, w2 = size * 0.085;
+  ring(c - w1 / 2 - 1, w1, pctOut, 1);
+  ring(c - w1 - 3 - w2 / 2, w2, pctIn, 0.7);
+  return ctx.getImage();
+}
+function shortMoney(n, cur) {
+  // En la pantalla de bloqueo no entra el número entero con los miles.
+  const a = Math.abs(n), sign = n < 0 ? '−' : '', sym = cur === 'USD' ? 'US$' : '$';
+  if (a >= 1e6) return `${sign}${sym} ${(a / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M`;
+  if (a >= 1e4) return `${sign}${sym} ${Math.round(a / 1e3).toLocaleString('es-AR')} mil`;
+  return money(n, cur);
+}
+function buildLockWidget(family, { summary, error, needsSetup }) {
+  const w = new ListWidget();
+  w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
+  w.url = needsSetup ? URLScheme.forRunningScript() : NEW_EXPENSE_URL;
+  const ok = !needsSetup && !error && summary && summary.month === curMonth();
+  const white = Color.white();
+  if (!ok) {
+    const t = w.addText(needsSetup ? 'FinPep: tocá para configurar' : 'FinPep: abrí la app');
+    t.font = Font.semiboldSystemFont(12);
+    t.textColor = white;
+    t.minimumScaleFactor = 0.6;
+    return w;
+  }
+  const saldo = summary.saldo || 0;
+  const days = daysLeft();
+  const perDay = saldo / Math.max(1, days);
+  const pctOut = summary.pctLeft != null ? summary.pctLeft : 0;
+  if (family === 'accessoryInline') {
+    const t = w.addText(`${shortMoney(saldo, summary.currency)} · ${shortMoney(perDay, summary.currency)}/día`);
+    t.font = Font.semiboldSystemFont(14);
+    return w;
+  }
+  if (family === 'accessoryCircular') {
+    w.addAccessoryWidgetBackground = true;
+    w.backgroundImage = ringsImage(pctOut, monthLeftPct(), 76);
+    w.setPadding(0, 0, 0, 0);
+    const col = w.addStack();
+    col.layoutVertically();
+    col.centerAlignContent();
+    const t = col.addText(`${pctOut}%`);
+    t.font = Font.boldRoundedSystemFont(14);
+    t.textColor = white;
+    t.centerAlignText();
+    t.minimumScaleFactor = 0.6;
+    return w;
+  }
+  // Rectangular: anillos a la izquierda, saldo y por día a la derecha.
+  w.setPadding(2, 2, 2, 2);
+  const row = w.addStack();
+  row.centerAlignContent();
+  const img = row.addImage(ringsImage(pctOut, monthLeftPct(), 54));
+  img.imageSize = new Size(50, 50);
+  row.addSpacer(8);
+  const col = row.addStack();
+  col.layoutVertically();
+  const l = col.addText('Saldo');
+  l.font = Font.mediumSystemFont(11);
+  l.textColor = new Color('#FFFFFF', 0.7);
+  const v = col.addText(money(saldo, summary.currency));
+  v.font = Font.boldRoundedSystemFont(17);
+  v.textColor = white;
+  v.lineLimit = 1;
+  v.minimumScaleFactor = 0.5;
+  const d = col.addText(`${money(perDay, summary.currency)}/día`);
+  d.font = Font.semiboldSystemFont(12);
+  d.textColor = white;
+  d.lineLimit = 1;
+  d.minimumScaleFactor = 0.6;
+  row.addSpacer();
+  return w;
+}
+
+function buildWidget(state, forceFamily) {
+  const family = forceFamily || config.widgetFamily || 'medium';
+  if (LOCK_FAMILIES.includes(family)) return buildLockWidget(family, state);
+  const { summary, error, needsSetup } = state;
   const small = family === 'small';
   const w = new ListWidget();
   w.backgroundColor = C.bg;
@@ -183,6 +300,7 @@ const KC_LAST = 'finpep-widget-last';
 
 async function main() {
   let cred = readKC(KC_CRED);
+  let previewLock = false;
   // Abierto desde Scriptable (no como widget): pedir o cambiar la cuenta.
   if (!config.runsInWidget) {
     if (!cred) cred = await askCredentials();
@@ -192,10 +310,12 @@ async function main() {
       a.message = `Conectado como ${cred.user}.`;
       a.addAction('Ver el widget');
       a.addAction('Cambiar de cuenta');
+      a.addAction('Ver el de bloqueo');
       a.addCancelAction('Cerrar');
       const r = await a.presentSheet();
       if (r === -1) return;
       if (r === 1) cred = await askCredentials();
+      if (r === 2) previewLock = true;
     }
   }
 
@@ -210,6 +330,10 @@ async function main() {
       if (last) state.summary = last;
       else state.error = `No se pudo actualizar: ${e.message}`;
     }
+  }
+  if (previewLock) {
+    await buildWidget(state, 'accessoryRectangular').presentAccessoryRectangular();
+    return;
   }
   const widget = buildWidget(state);
   if (config.runsInWidget) Script.setWidget(widget);
