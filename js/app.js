@@ -890,6 +890,13 @@
     return inc - exp - savingsMonth;
   }
 
+  // Lo que lee el widget del iPhone (ver tools/finpep-widget.js). El "por
+  // día" lo calcula el widget con los días que quedan al momento de mostrarse.
+  function widgetSummary() {
+    const mk = curMonth();
+    return { v: 1, month: mk, saldo: Math.round(monthBalance(mk)), currency: disp(), updatedAt: new Date().toISOString() };
+  }
+
   /* ================= Sobrante del mes anterior: generación automática =================
      Si está activado en Ajustes, cada vez que arranca un mes nuevo se le
      acredita como Ingreso el Balance del mes recién terminado, cuando dio
@@ -1675,7 +1682,7 @@
           <div class="grab" aria-hidden="true"></div>
           <div class="sh-h">
             <button type="button" class="icb" data-close aria-label="Cerrar">${spriteIcon('x')}</button>
-            <h2>${editing ? 'Editar movimiento' : pf ? 'Revisá y guardá' : 'Nuevo movimiento'}</h2>
+            <h2>${editing ? 'Editar movimiento' : pf && pf.amount ? 'Revisá y guardá' : 'Nuevo movimiento'}</h2>
             ${editing ? `<button type="button" class="icb icb-danger" data-del aria-label="Eliminar movimiento">${iconSvg('trash')}</button>` : '<span></span>'}
           </div>
         </div>
@@ -6794,6 +6801,9 @@
   // cambió la cuenta (login/logout/otra persona).
   let lastAuthUserId; // undefined = todavía no se llamó ni una vez
   // Al cambiar el estado de sesión: traer datos remotos o subir los locales.
+  // true cuando la última sincronización al abrir salió bien (ahí lo local
+  // ya es lo más nuevo y se puede subir el resumen del widget sin riesgo).
+  let syncedOk = false;
   async function onAuthChanged() {
     renderAccountChip();
     const uid = Cloud.user() ? Cloud.user().id : null;
@@ -6844,7 +6854,9 @@
         } else {
           await Cloud.push(S()); // primera vez: sembrar la nube con lo local
         }
+        syncedOk = true;
       } catch (e) {
+        syncedOk = false;
         console.error(e);
       }
     }
@@ -7944,7 +7956,12 @@
     $('#dialog').addEventListener('close', (e) => { if (!e.target.open) document.body.style.overflow = ''; });
 
     // Cada guardado local se sube a la nube (si hay sesión activa).
-    Store.onSave((state) => Cloud.schedulePush(state));
+    // Junto con cada guardado va un resumen para el widget del iPhone
+    // (tools/finpep-widget.js): el saldo del mes actual, igual que Inicio.
+    Store.onSave((state) => {
+      try { state.widget = widgetSummary(); } catch (e) { console.error('Resumen del widget', e); }
+      Cloud.schedulePush(state);
+    });
 
     // Un link con ?nuevo=… se lee (y se borra de la dirección) antes que
     // nada; el formulario se abre cuando terminó la sincronización (para
@@ -7952,6 +7969,17 @@
     const linkPf = readLinkPrefill();
     render();
     const cloudReady = initCloud();
+    // Al abrir, si el resumen del widget quedó viejo (otro mes, o el saldo
+    // cambió por la cotización) se sube de nuevo, recién después de traer
+    // lo de la nube, sin tocar _updatedAt (no es un cambio de datos).
+    Promise.resolve(cloudReady).then(() => {
+      if (!Cloud.user() || !syncedOk) return;
+      const w = widgetSummary(), old = S().widget;
+      if (old && old.month === w.month && old.currency === w.currency && Math.abs((old.saldo || 0) - w.saldo) < 1) return;
+      S().widget = w;
+      Store.saveLocal();
+      Cloud.push(S()).catch((e) => console.error('Resumen del widget', e));
+    }).catch(() => {});
     if (linkPf) {
       const openLink = () => {
         const dlg = $('#dialog');
