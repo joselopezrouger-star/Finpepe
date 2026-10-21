@@ -37,8 +37,8 @@ function readKC(key) {
 async function askCredentials() {
   const a = new Alert();
   a.title = 'FinPep';
-  a.message = 'Tu usuario y contraseña de FinPep (los mismos de la app). Quedan guardados solo en este iPhone.';
-  a.addTextField('Usuario (ej. jose)', '');
+  a.message = 'Tu usuario de FinPep (o tu email, si entrás con Google) y tu contraseña. Si no tenés contraseña, creala en FinPep › Ajustes › Cuenta. Quedan guardados solo en este iPhone.';
+  a.addTextField('Usuario o email', '');
   a.addSecureTextField('Contraseña', '');
   a.addAction('Guardar');
   a.addCancelAction('Cancelar');
@@ -155,7 +155,9 @@ function buildWidget({ summary, error, needsSetup }) {
       : 'Abrí FinPep para actualizar el mes';
     const t = text(info, msg, 13, C.t1, 'regular');
     t.lineLimit = 3;
-    if (needsSetup) w.url = URLScheme.forRunningScript();
+    // Sin cuenta configurada, tocar el texto abre el script en Scriptable
+    // (para pedir usuario y contraseña), no FinPep.
+    if (needsSetup) { w.url = URLScheme.forRunningScript(); info.url = w.url; }
   } else {
     const saldo = summary.saldo || 0;
     const days = daysLeft();
