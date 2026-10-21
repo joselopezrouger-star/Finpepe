@@ -269,7 +269,7 @@ function buildWidget(state, forceFamily) {
   const pctOut = summary.pctLeft != null ? summary.pctLeft : 0;
   // Colores apagados: el número manda, los anillos acompañan.
   const ringOpts = { out: '#3BAE8C', in: '#B9A25A', track: '#7D889C', thin: true };
-  const legend = (stack, color, strong, rest) => {
+  const legend = (stack, color, strong, rest, size = 12) => {
     const r = stack.addStack();
     r.centerAlignContent();
     const dot = r.addText('●');
@@ -277,29 +277,44 @@ function buildWidget(state, forceFamily) {
     dot.textColor = color;
     r.addSpacer(5);
     const b = r.addText(strong);
-    b.font = Font.semiboldSystemFont(12);
+    b.font = Font.semiboldSystemFont(size);
     b.textColor = C.t1;
     r.addSpacer(3);
     const t = r.addText(rest);
-    t.font = Font.regularSystemFont(12);
+    t.font = Font.regularSystemFont(size);
     t.textColor = C.t2;
     t.lineLimit = 1;
+    t.minimumScaleFactor = 0.7;
   };
   const amountColor = saldo < 0 ? C.neg : C.t1;
 
   if (small) {
-    // Chico: anillos y botón arriba, saldo y por día abajo. Todo el widget
-    // abre el formulario de gasto (iOS no deja dos botones en el chico).
+    // Chico: la misma info que el mediano. Arriba el saldo y el "+"; abajo
+    // los anillos con el por día y la leyenda al lado. Todo el widget abre
+    // el formulario de gasto (iOS no deja dos botones en el chico).
     const top = w.addStack();
     top.centerAlignContent();
-    const img = top.addImage(ringsImage(pctOut, monthLeftPct(), 88, ringOpts));
-    img.imageSize = new Size(44, 44);
+    text(top, 'Saldo del mes', 11, C.t2, 'regular');
     top.addSpacer();
     addPill(top, true);
+    text(w, money(saldo, cur), 24, amountColor, 'bold');
     w.addSpacer();
-    text(w, 'Saldo', 11, C.t2, 'regular');
-    text(w, money(saldo, cur), 22, amountColor, 'bold');
-    text(w, `${money(perDay, cur)} por día`, 12, perDay < 0 ? C.neg : C.t2, 'regular');
+    const row = w.addStack();
+    row.centerAlignContent();
+    const img = row.addImage(ringsImage(pctOut, monthLeftPct(), 104, ringOpts));
+    img.imageSize = new Size(48, 48);
+    row.addSpacer(8);
+    const col = row.addStack();
+    col.layoutVertically();
+    const pd = col.addText(`${money(perDay, cur)}/día`);
+    pd.font = Font.semiboldSystemFont(12);
+    pd.textColor = perDay < 0 ? C.neg : C.t1;
+    pd.lineLimit = 1;
+    pd.minimumScaleFactor = 0.6;
+    col.addSpacer(3);
+    legend(col, C.ringOut, `${pctOut}%`, 'balance', 11);
+    col.addSpacer(1);
+    legend(col, C.ringIn, `${days}`, days === 1 ? 'día' : 'días', 11);
     return w;
   }
 
