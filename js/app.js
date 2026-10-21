@@ -6606,6 +6606,7 @@
              </div>`}
         <div class="inline-form">
           <button class="btn btn-sm" id="btn-cloud-pull">Traer datos de la nube</button>
+          <button class="btn btn-sm" id="btn-cloud-pass">${Cloud.hasPassword() ? 'Cambiar contraseña' : 'Crear contraseña'}</button>
         </div>`;
     }
     if (Cloud.isConfigured()) {
@@ -6658,6 +6659,40 @@
     onAuthChanged();
   }
 
+  // Crear o cambiar la contraseña con la sesión iniciada. Quien entra con
+  // Google la necesita para el widget del iPhone (que entra con email y
+  // contraseña): ahí se le muestra con qué entrar.
+  function passwordDialog() {
+    const email = Cloud.user() ? Cloud.user().email : '';
+    const loginId = email.endsWith('@' + AUTH_DOMAIN) ? usernameOf(email) : email;
+    const had = Cloud.hasPassword();
+    const dlg = openDialog(had ? 'Cambiar contraseña' : 'Crear contraseña', `
+      <p class="hint" style="margin:0 0 12px">${had ? '' : 'Así podés entrar también con usuario y contraseña (por ejemplo, en el widget del iPhone). '}Para entrar, usá <b>${esc(loginId)}</b> y esta contraseña.</p>
+      <div class="field">
+        <label for="pw-new">Contraseña nueva</label>
+        <input type="password" id="pw-new" name="pw" minlength="6" required autocomplete="new-password" placeholder="Mínimo 6 caracteres">
+      </div>
+      <div class="field">
+        <label for="pw-rep">Repetila</label>
+        <input type="password" id="pw-rep" name="pw2" minlength="6" required autocomplete="new-password">
+      </div>
+      <p class="hint" id="pw-msg" role="alert" style="margin:4px 0 0"></p>`, {
+      submitLabel: 'Guardar',
+      onSubmit(d) {
+        const msg = $('#pw-msg', dlg);
+        if (d.pw.length < 6) { msg.textContent = 'Tiene que tener 6 caracteres o más.'; return false; }
+        if (d.pw !== d.pw2) { msg.textContent = 'Las dos contraseñas no coinciden.'; return false; }
+        msg.textContent = 'Guardando…';
+        Cloud.setPassword(d.pw).then(() => {
+          closeSheet(dlg).then(() => { refreshAccountCard(); showToast('Contraseña guardada'); });
+        }).catch((e) => { msg.textContent = 'No se pudo: ' + friendlyCloudError(e); });
+        return false;
+      },
+    });
+    const first = $('#pw-new', dlg);
+    if (first) first.focus();
+  }
+
   function wireAccountCard(root) {
     const save = $('#btn-cloud-save', root);
     if (save) save.addEventListener('click', () => {
@@ -6679,6 +6714,8 @@
         refreshAccountCard();
       } catch (e) { alert('No se pudo vincular: ' + friendlyCloudError(e)); }
     });
+    const pass = $('#btn-cloud-pass', root);
+    if (pass) pass.addEventListener('click', passwordDialog);
     const pull = $('#btn-cloud-pull', root);
     if (pull) pull.addEventListener('click', async () => {
       try {

@@ -138,6 +138,19 @@ const Cloud = (() => {
     if (error) throw error;
   }
 
+  // Crea o cambia la contraseña de la cuenta con sesión iniciada (sirve
+  // también para quien entra con Google y quiere usar el widget).
+  async function setPassword(password) {
+    const cl = ensureClient();
+    if (!cl || !user()) throw new Error('Iniciá sesión primero.');
+    const { error } = await cl.auth.updateUser({ password });
+    if (error) throw error;
+  }
+  function hasPassword() {
+    const u = user();
+    return !!(u && u.identities && u.identities.some((i) => i.provider === 'email'));
+  }
+
   function hasGoogle() {
     const u = user();
     return !!(u && u.identities && u.identities.some((i) => i.provider === 'google'));
@@ -342,7 +355,7 @@ const Cloud = (() => {
 
   return {
     available, config, saveConfig, clearConfig, isConfigured, hasDefaults,
-    init, user, signUp, signIn, signOut, signInWithGoogle, linkGoogle, hasGoogle, pull, push, schedulePush,
+    init, user, signUp, signIn, signOut, signInWithGoogle, linkGoogle, hasGoogle, setPassword, hasPassword, pull, push, schedulePush,
     getHousehold, createHousehold, createInvite, redeemInvite, leaveHousehold, updateDisplayName,
     listSharedExpenses, addSharedExpense, updateSharedExpense, deleteSharedExpense,
     listSettlements, addSettlement, deleteSettlement,

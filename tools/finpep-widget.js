@@ -37,8 +37,8 @@ function readKC(key) {
 async function askCredentials() {
   const a = new Alert();
   a.title = 'FinPep';
-  a.message = 'Tu usuario y contraseña de FinPep (los mismos de la app). Quedan guardados solo en este iPhone.';
-  a.addTextField('Usuario (ej. jose)', '');
+  a.message = 'Tu usuario de FinPep (o tu email, si entrás con Google) y tu contraseña. Si no tenés contraseña, creala en FinPep › Ajustes › Cuenta. Quedan guardados solo en este iPhone.';
+  a.addTextField('Usuario o email', '');
   a.addSecureTextField('Contraseña', '');
   a.addAction('Guardar');
   a.addCancelAction('Cancelar');
