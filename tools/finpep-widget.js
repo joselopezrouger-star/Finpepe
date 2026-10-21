@@ -23,6 +23,11 @@ const C = {
   onBrand: new Color('#04261B'),
   brandText: Color.dynamic(new Color('#047857'), new Color('#10D39E')),
   neg: Color.dynamic(new Color('#D93A3A'), new Color('#FF6B6B')),
+  super: Color.dynamic(new Color('#C9A21A'), new Color('#E6C84F')),
+  s2: Color.dynamic(new Color('#EEF1F5'), new Color('#1A2133')),
+  // Versiones apagadas para el widget de inicio (los anillos y sus puntos).
+  ringOut: new Color('#3BAE8C'),
+  ringIn: new Color('#B9A25A'),
 };
 
 /* ---------- Cuenta ---------- */
@@ -111,25 +116,6 @@ function text(stack, str, size, color, weight = 'semibold') {
   t.minimumScaleFactor = 0.6;
   return t;
 }
-function addButton(stack, small) {
-  const b = stack.addStack();
-  b.backgroundColor = C.brand;
-  b.cornerRadius = small ? 12 : 16;
-  b.setPadding(small ? 7 : 10, 12, small ? 7 : 10, 12);
-  b.centerAlignContent();
-  b.url = NEW_EXPENSE_URL;
-  if (!small) b.layoutVertically();
-  const plus = b.addText(small ? '+  Gasto' : '+');
-  plus.font = small ? Font.semiboldSystemFont(14) : Font.boldSystemFont(30);
-  plus.textColor = C.onBrand;
-  if (!small) {
-    const l = b.addText('Gasto');
-    l.font = Font.semiboldSystemFont(13);
-    l.textColor = C.onBrand;
-  }
-  return b;
-}
-
 /* ---------- Pantalla de bloqueo ---------- */
 // Los mismos anillos que Inicio: afuera el % de balance que queda, adentro
 // el % del mes que falta. En la pantalla de bloqueo iOS los pinta de un solo
@@ -140,14 +126,16 @@ function monthLeftPct() {
   const total = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
   return Math.max(0, Math.min(100, Math.round(((total - d.getDate()) / total) * 100)));
 }
-function ringsImage(pctOut, pctIn, size) {
+// opts: colores de cada anillo (out/in) y de la pista de fondo (track).
+// Sin opts, todo blanco con distinta opacidad (pantalla de bloqueo).
+function ringsImage(pctOut, pctIn, size, opts = {}) {
   const ctx = new DrawContext();
   ctx.size = new Size(size, size);
   ctx.opaque = false;
   ctx.respectScreenScale = true;
   const c = size / 2;
-  const ring = (r, width, pct, alpha) => {
-    const stroke = (frac, a) => {
+  const ring = (r, width, pct, hex, alpha, trackHex, trackAlpha) => {
+    const stroke = (frac, color, a) => {
       if (frac <= 0) return;
       const n = Math.max(2, Math.round(120 * frac));
       const pts = [];
@@ -158,22 +146,23 @@ function ringsImage(pctOut, pctIn, size) {
       const path = new Path();
       path.addLines(pts);
       ctx.addPath(path);
-      ctx.setStrokeColor(new Color('#FFFFFF', a));
+      ctx.setStrokeColor(new Color(color, a));
       ctx.setLineWidth(width);
       ctx.strokePath();
       // Puntas redondeadas (solo en el trazo opaco: en los translúcidos el
       // punto encima se vería más claro).
       if (a >= 1 && frac < 1) {
-        ctx.setFillColor(new Color('#FFFFFF', a));
+        ctx.setFillColor(new Color(color, a));
         for (const p of [pts[0], pts[pts.length - 1]]) ctx.fillEllipse(new Rect(p.x - width / 2, p.y - width / 2, width, width));
       }
     };
-    stroke(1, 0.22 * alpha);
-    stroke(Math.max(0, Math.min(100, pct)) / 100, alpha);
+    stroke(1, trackHex, trackAlpha);
+    stroke(Math.max(0, Math.min(100, pct)) / 100, hex, alpha);
   };
-  const w1 = size * 0.11, w2 = size * 0.085;
-  ring(c - w1 / 2 - 1, w1, pctOut, 1);
-  ring(c - w1 - 3 - w2 / 2, w2, pctIn, 0.7);
+  const w1 = size * (opts.thin ? 0.075 : 0.11), w2 = size * (opts.thin ? 0.06 : 0.085);
+  const gap = opts.thin ? size * 0.035 : 3;
+  ring(c - w1 / 2 - 1, w1, pctOut, opts.out || '#FFFFFF', 1, opts.track || '#FFFFFF', opts.track ? 0.28 : 0.22);
+  ring(c - w1 - gap - w2 / 2, w2, pctIn, opts.in || '#FFFFFF', opts.in ? 1 : 0.7, opts.track || '#FFFFFF', opts.track ? 0.28 : 0.154);
   return ctx.getImage();
 }
 function shortMoney(n, cur) {
@@ -252,47 +241,129 @@ function buildWidget(state, forceFamily) {
   const small = family === 'small';
   const w = new ListWidget();
   w.backgroundColor = C.bg;
-  w.setPadding(14, 16, 14, 16);
+  w.setPadding(small ? 14 : 16, small ? 14 : 18, small ? 14 : 16, small ? 14 : 16);
   w.url = small ? NEW_EXPENSE_URL : APP_URL;
   w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
 
-  const row = w.addStack();
-  row.centerAlignContent();
-  const info = row.addStack();
-  info.layoutVertically();
-  if (!small) info.url = APP_URL;
-
-  text(info, 'FinPep · Saldo', 12, C.t2);
-  info.addSpacer(2);
-
   if (needsSetup || error || !summary || summary.month !== curMonth()) {
+    text(w, 'FinPep · Saldo', 12, C.t2);
+    w.addSpacer(4);
     const msg = needsSetup ? 'Tocá para configurar'
       : error ? error
       : !summary ? 'Abrí FinPep una vez para ver tu saldo acá'
       : 'Abrí FinPep para actualizar el mes';
-    const t = text(info, msg, 13, C.t1, 'regular');
+    const t = text(w, msg, 13, C.t1, 'regular');
     t.lineLimit = 3;
-    // Sin cuenta configurada, tocar el texto abre el script en Scriptable
-    // (para pedir usuario y contraseña), no FinPep.
-    if (needsSetup) { w.url = URLScheme.forRunningScript(); info.url = w.url; }
-  } else {
-    const saldo = summary.saldo || 0;
-    const days = daysLeft();
-    const perDay = saldo / Math.max(1, days);
-    text(info, money(saldo, summary.currency), small ? 24 : 30, saldo < 0 ? C.neg : C.brandText, 'bold');
-    info.addSpacer(4);
-    text(info, `${money(perDay, summary.currency)} por día`, small ? 13 : 15, perDay < 0 ? C.neg : C.t1);
-    text(info, days === 1 ? 'queda 1 día' : `quedan ${days} días`, 12, C.t3, 'regular');
+    // Sin cuenta configurada, tocar abre el script en Scriptable (para pedir
+    // usuario y contraseña), no FinPep.
+    if (needsSetup) w.url = URLScheme.forRunningScript();
+    w.addSpacer();
+    if (!needsSetup) addPill(w);
+    return w;
   }
 
+  const cur = summary.currency;
+  const saldo = summary.saldo || 0;
+  const days = daysLeft();
+  const perDay = saldo / Math.max(1, days);
+  const pctOut = summary.pctLeft != null ? summary.pctLeft : 0;
+  // Colores apagados: el número manda, los anillos acompañan.
+  const ringOpts = { out: '#3BAE8C', in: '#B9A25A', track: '#7D889C', thin: true };
+  const legend = (stack, color, strong, rest) => {
+    const r = stack.addStack();
+    r.centerAlignContent();
+    const dot = r.addText('●');
+    dot.font = Font.systemFont(8);
+    dot.textColor = color;
+    r.addSpacer(5);
+    const b = r.addText(strong);
+    b.font = Font.semiboldSystemFont(12);
+    b.textColor = C.t1;
+    r.addSpacer(3);
+    const t = r.addText(rest);
+    t.font = Font.regularSystemFont(12);
+    t.textColor = C.t2;
+    t.lineLimit = 1;
+  };
+  const amountColor = saldo < 0 ? C.neg : C.t1;
+
   if (small) {
+    // Chico: anillos y botón arriba, saldo y por día abajo. Todo el widget
+    // abre el formulario de gasto (iOS no deja dos botones en el chico).
+    const top = w.addStack();
+    top.centerAlignContent();
+    const img = top.addImage(ringsImage(pctOut, monthLeftPct(), 88, ringOpts));
+    img.imageSize = new Size(44, 44);
+    top.addSpacer();
+    addPill(top, true);
     w.addSpacer();
-    addButton(w, true);
-  } else {
-    row.addSpacer();
-    addButton(row, false);
+    text(w, 'Saldo', 11, C.t2, 'regular');
+    text(w, money(saldo, cur), 22, amountColor, 'bold');
+    text(w, `${money(perDay, cur)} por día`, 12, perDay < 0 ? C.neg : C.t2, 'regular');
+    return w;
   }
+
+  // Mediano: anillos a la izquierda con el "por día" adentro; a la derecha
+  // el saldo, la leyenda y el botón abajo a la derecha.
+  const row = w.addStack();
+  row.centerAlignContent();
+  const ring = row.addStack();
+  ring.size = new Size(112, 112);
+  ring.backgroundImage = ringsImage(pctOut, monthLeftPct(), 224, ringOpts);
+  ring.layoutVertically();
+  ring.url = APP_URL;
+  ring.setPadding(0, 20, 0, 20);
+  ring.addSpacer();
+  const v = ring.addStack();
+  v.addSpacer();
+  const vt = v.addText(money(perDay, cur));
+  vt.font = Font.semiboldRoundedSystemFont(14);
+  vt.textColor = perDay < 0 ? C.neg : C.t1;
+  vt.lineLimit = 1;
+  vt.minimumScaleFactor = 0.6;
+  v.addSpacer();
+  const l = ring.addStack();
+  l.addSpacer();
+  const lt = l.addText('por día');
+  lt.font = Font.regularSystemFont(11);
+  lt.textColor = C.t2;
+  l.addSpacer();
+  ring.addSpacer();
+
+  row.addSpacer(16);
+  const info = row.addStack();
+  info.layoutVertically();
+  info.url = APP_URL;
+  text(info, 'Saldo del mes', 12, C.t2, 'regular');
+  info.addSpacer(1);
+  text(info, money(saldo, cur), 26, amountColor, 'bold');
+  info.addSpacer(6);
+  legend(info, C.ringOut, `${pctOut}%`, 'balance');
+  info.addSpacer(2);
+  legend(info, C.ringIn, `${days}`, days === 1 ? 'día restante' : 'días restantes');
+  info.addSpacer(10);
+  const bottom = info.addStack();
+  bottom.addSpacer();
+  addPill(bottom);
   return w;
+}
+
+// Botón "+ Gasto" (gris suave con el texto verde): abre el formulario de
+// nuevo gasto. compact = solo el "+" (widget chico).
+function addPill(stack, compact) {
+  const b = stack.addStack();
+  b.backgroundColor = C.s2;
+  b.cornerRadius = 15;
+  b.size = new Size(compact ? 32 : 0, 30);
+  b.setPadding(0, compact ? 0 : 12, 0, compact ? 0 : 14);
+  b.centerAlignContent();
+  b.url = NEW_EXPENSE_URL;
+  if (compact) b.addSpacer();
+  const t = b.addText(compact ? '+' : '+  Gasto');
+  t.font = compact ? Font.semiboldSystemFont(18) : Font.semiboldSystemFont(14);
+  t.textColor = C.brandText;
+  if (compact) b.addSpacer();
+  return b;
 }
 
 /* ---------- Arranque ---------- */
