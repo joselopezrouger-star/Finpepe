@@ -2475,3 +2475,10 @@ body[data-grp="mas"] .topbar-inner, body[data-grp="cuentas"] .topbar-inner { min
 .inst-grid.inst-grid-4 { grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .inst-grid.inst-grid-4 .inst-opt { height: 44px; font-size: 15px; }
 .inst-grid.inst-grid-4 .inst-opt:first-child { grid-column: auto; }
+
+/* Ajustes › Widget para el iPhone */
+.widget-steps { margin: 0; padding-left: 22px; display: grid; gap: 10px; font-size: 15px; line-height: 1.4; color: var(--t2); }
+.widget-steps b { color: var(--t1); font-weight: 600; }
+.widget-steps li::marker { color: var(--t3); font-weight: 600; }
+.widget-copy-msg { min-height: 20px; margin: 12px 0 0; text-align: center; color: var(--brand-text); font-weight: 600; }
+.widget-copy-msg a { color: inherit; }

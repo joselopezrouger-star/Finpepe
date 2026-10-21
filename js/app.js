@@ -6428,6 +6428,42 @@
     </label>`;
   }
 
+  /* Cómo sumar el widget del iPhone (app Scriptable + tools/finpep-widget.js),
+     con el botón para copiar el script. */
+  function widgetSetupPanel() {
+    const email = Cloud.user() ? Cloud.user().email : '';
+    const loginId = !email ? 'tu usuario' : email.endsWith('@' + AUTH_DOMAIN) ? usernameOf(email) : email;
+    const needsPass = Cloud.user() && !Cloud.hasPassword();
+    openPanel({
+      title: 'Widget para el iPhone',
+      subtitle: 'Saldo, por día y + Gasto en tu pantalla',
+      body: `<ol class="widget-steps">
+          <li>Instalá <b>Scriptable</b> (gratis) desde la App Store.</li>
+          <li>Tocá <b>Copiar el script</b> acá abajo.</li>
+          <li>En Scriptable tocá <b>+</b>, pegá el script y llamalo <b>FinPep</b>.</li>
+          <li>Tocá ▶︎ y entrá con <b>${esc(loginId)}</b> y tu contraseña.${needsPass ? ' Como entrás con Google, primero creá una en Ajustes › Cuenta › <b>Crear contraseña</b>.' : ''}</li>
+          <li>En la pantalla de inicio, mantené apretado → <b>Editar</b> → <b>Agregar widget</b> → <b>Scriptable</b>. Después tocá el widget y en <b>Script</b> elegí <b>FinPep</b>.</li>
+          <li>También va en la <b>pantalla bloqueada</b>: mantenela apretada → <b>Personalizar</b> → widgets → <b>Scriptable</b>.</li>
+        </ol>
+        <p class="hint widget-copy-msg" data-wmsg role="status"></p>`,
+      primary: {
+        label: 'Copiar el script',
+        onClick(dlg) {
+          const msg = $('[data-wmsg]', dlg);
+          // En Safari el permiso para copiar se pierde si se espera la
+          // descarga: con ClipboardItem se le pasa la promesa directamente.
+          const text = fetch('tools/finpep-widget.js', { cache: 'no-store' })
+            .then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); });
+          const copy = window.ClipboardItem && navigator.clipboard && navigator.clipboard.write
+            ? navigator.clipboard.write([new ClipboardItem({ 'text/plain': text.then((t) => new Blob([t], { type: 'text/plain' })) })])
+            : text.then((t) => navigator.clipboard.writeText(t));
+          copy.then(() => { msg.textContent = 'Copiado. Ahora pegalo en Scriptable.'; })
+            .catch(() => { msg.innerHTML = 'No se pudo copiar solo. Abrí <a href="tools/widget.html" target="_blank" rel="noopener">esta página</a> y copialo desde ahí.'; });
+        },
+      },
+    });
+  }
+
   function vAjustes(el) {
     const s = S().settings;
     const updated = s.ratesUpdatedAt
@@ -6446,6 +6482,7 @@
       <div class="group">
         ${setRow({ id: 'btn-notif-config', icon: 'bolt', color: 'var(--c-comida)', label: 'Notificaciones', value: '<span id="notif-summary" class="t3"></span>' })}
         ${setRow({ id: 'btn-open-categories', icon: 'target', color: 'var(--c-compras)', label: 'Categorías', value: `${nCats}` })}
+        ${setRow({ id: 'btn-widget', icon: 'phone', color: 'var(--c-tel)', label: 'Widget para el iPhone', sub: 'Saldo y botón para cargar gastos' })}
       </div>
 
       <h2 class="ovl set-h">Cotización del dólar</h2>
@@ -6485,6 +6522,7 @@
     paintNotifSummary().catch((e) => console.error(e));
     $('#btn-notif-config', el).addEventListener('click', notifDialog);
     $('#btn-open-categories', el).addEventListener('click', () => categoriesSettingsDialog());
+    $('#btn-widget', el).addEventListener('click', widgetSetupPanel);
     $('#set-fx', el).addEventListener('change', (e) => {
       S().settings.fxSource = e.target.value;
       Store.save();
