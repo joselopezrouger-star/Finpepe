@@ -155,7 +155,9 @@ function buildWidget({ summary, error, needsSetup }) {
       : 'Abrí FinPep para actualizar el mes';
     const t = text(info, msg, 13, C.t1, 'regular');
     t.lineLimit = 3;
-    if (needsSetup) w.url = URLScheme.forRunningScript();
+    // Sin cuenta configurada, tocar el texto abre el script en Scriptable
+    // (para pedir usuario y contraseña), no FinPep.
+    if (needsSetup) { w.url = URLScheme.forRunningScript(); info.url = w.url; }
   } else {
     const saldo = summary.saldo || 0;
     const days = daysLeft();
