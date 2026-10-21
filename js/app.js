@@ -894,7 +894,14 @@
   // día" lo calcula el widget con los días que quedan al momento de mostrarse.
   function widgetSummary() {
     const mk = curMonth();
-    return { v: 1, month: mk, saldo: Math.round(monthBalance(mk)), currency: disp(), updatedAt: new Date().toISOString() };
+    // Mismas cuentas que el anillo de Inicio (% de balance sobre lo que entró).
+    const inMonth = S().transactions.filter((t) => effectiveMonthOf(t) === mk);
+    const inc = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
+    const exp = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
+    const sav = savingsAtEndOf(mk, { excludeOpening: true }) - savingsAtEndOf(addMonthsKey(mk, -1), { excludeOpening: true });
+    const saldo = inc - exp - sav;
+    const pctLeft = (exp <= 0 && sav <= 0) ? 100 : (inc > 0 ? Math.max(0, Math.min(100, Math.round((saldo / inc) * 100))) : 0);
+    return { v: 2, month: mk, saldo: Math.round(saldo), pctLeft, currency: disp(), updatedAt: new Date().toISOString() };
   }
 
   /* ================= Sobrante del mes anterior: generación automática =================
@@ -8012,7 +8019,7 @@
     Promise.resolve(cloudReady).then(() => {
       if (!Cloud.user() || !syncedOk) return;
       const w = widgetSummary(), old = S().widget;
-      if (old && old.month === w.month && old.currency === w.currency && Math.abs((old.saldo || 0) - w.saldo) < 1) return;
+      if (old && old.v === w.v && old.month === w.month && old.currency === w.currency && old.pctLeft === w.pctLeft && Math.abs((old.saldo || 0) - w.saldo) < 1) return;
       S().widget = w;
       Store.saveLocal();
       Cloud.push(S()).catch((e) => console.error('Resumen del widget', e));
