@@ -24,6 +24,10 @@ const C = {
   brandText: Color.dynamic(new Color('#047857'), new Color('#10D39E')),
   neg: Color.dynamic(new Color('#D93A3A'), new Color('#FF6B6B')),
   super: Color.dynamic(new Color('#C9A21A'), new Color('#E6C84F')),
+  s2: Color.dynamic(new Color('#EEF1F5'), new Color('#1A2133')),
+  // Versiones apagadas para el widget de inicio (los anillos y sus puntos).
+  ringOut: new Color('#3BAE8C'),
+  ringIn: new Color('#B9A25A'),
 };
 
 /* ---------- Cuenta ---------- */
@@ -263,12 +267,13 @@ function buildWidget(state, forceFamily) {
   const days = daysLeft();
   const perDay = saldo / Math.max(1, days);
   const pctOut = summary.pctLeft != null ? summary.pctLeft : 0;
-  const ringOpts = { out: '#10D39E', in: '#E6C84F', track: '#7D889C', thin: true };
+  // Colores apagados: el número manda, los anillos acompañan.
+  const ringOpts = { out: '#3BAE8C', in: '#B9A25A', track: '#7D889C', thin: true };
   const legend = (stack, color, strong, rest) => {
     const r = stack.addStack();
     r.centerAlignContent();
     const dot = r.addText('●');
-    dot.font = Font.systemFont(9);
+    dot.font = Font.systemFont(8);
     dot.textColor = color;
     r.addSpacer(5);
     const b = r.addText(strong);
@@ -280,49 +285,34 @@ function buildWidget(state, forceFamily) {
     t.textColor = C.t2;
     t.lineLimit = 1;
   };
+  const amountColor = saldo < 0 ? C.neg : C.t1;
 
   if (small) {
-    // Chico: saldo arriba; abajo los anillos y el botón. Todo el widget abre
-    // el formulario de gasto (iOS no deja dos botones en el chico).
-    text(w, 'SALDO', 10, C.t2);
-    w.addSpacer(2);
-    text(w, money(saldo, cur), 22, saldo < 0 ? C.neg : C.brandText, 'bold');
-    text(w, `${money(perDay, cur)} por día`, 12, perDay < 0 ? C.neg : C.t1);
+    // Chico: anillos y botón arriba, saldo y por día abajo. Todo el widget
+    // abre el formulario de gasto (iOS no deja dos botones en el chico).
+    const top = w.addStack();
+    top.centerAlignContent();
+    const img = top.addImage(ringsImage(pctOut, monthLeftPct(), 88, ringOpts));
+    img.imageSize = new Size(44, 44);
+    top.addSpacer();
+    addPill(top, true);
     w.addSpacer();
-    const row = w.addStack();
-    row.centerAlignContent();
-    const img = row.addImage(ringsImage(pctOut, monthLeftPct(), 84, ringOpts));
-    img.imageSize = new Size(42, 42);
-    row.addSpacer();
-    addPill(row);
+    text(w, 'Saldo', 11, C.t2, 'regular');
+    text(w, money(saldo, cur), 22, amountColor, 'bold');
+    text(w, `${money(perDay, cur)} por día`, 12, perDay < 0 ? C.neg : C.t2, 'regular');
     return w;
   }
 
-  // Mediano: como la tarjeta de Inicio. Saldo y leyenda a la izquierda,
-  // anillos con el "por día" en el centro a la derecha, y el botón abajo.
+  // Mediano: anillos a la izquierda con el "por día" adentro; a la derecha
+  // el saldo, la leyenda y el botón abajo a la derecha.
   const row = w.addStack();
   row.centerAlignContent();
-  const info = row.addStack();
-  info.layoutVertically();
-  info.url = APP_URL;
-  text(info, 'SALDO', 11, C.t2);
-  info.addSpacer(1);
-  text(info, money(saldo, cur), 28, saldo < 0 ? C.neg : C.brandText, 'bold');
-  info.addSpacer(6);
-  legend(info, C.brand, `${pctOut}%`, 'balance');
-  info.addSpacer(3);
-  legend(info, C.super, `${days}`, days === 1 ? 'día restante' : 'días restantes');
-  info.addSpacer(10);
-  addPill(info);
-
-  row.addSpacer(10);
-  row.addSpacer();
   const ring = row.addStack();
-  ring.size = new Size(108, 108);
-  ring.backgroundImage = ringsImage(pctOut, monthLeftPct(), 216, ringOpts);
+  ring.size = new Size(112, 112);
+  ring.backgroundImage = ringsImage(pctOut, monthLeftPct(), 224, ringOpts);
   ring.layoutVertically();
-  ring.centerAlignContent();
   ring.url = APP_URL;
+  ring.setPadding(0, 20, 0, 20);
   ring.addSpacer();
   const v = ring.addStack();
   v.addSpacer();
@@ -339,22 +329,40 @@ function buildWidget(state, forceFamily) {
   lt.textColor = C.t2;
   l.addSpacer();
   ring.addSpacer();
-  ring.setPadding(0, 20, 0, 20);
+
+  row.addSpacer(16);
+  const info = row.addStack();
+  info.layoutVertically();
+  info.url = APP_URL;
+  text(info, 'Saldo del mes', 12, C.t2, 'regular');
+  info.addSpacer(1);
+  text(info, money(saldo, cur), 26, amountColor, 'bold');
+  info.addSpacer(6);
+  legend(info, C.ringOut, `${pctOut}%`, 'balance');
+  info.addSpacer(2);
+  legend(info, C.ringIn, `${days}`, days === 1 ? 'día restante' : 'días restantes');
+  info.addSpacer(10);
+  const bottom = info.addStack();
+  bottom.addSpacer();
+  addPill(bottom);
   return w;
 }
 
-// Botón verde "+ Gasto": abre el formulario de nuevo gasto.
-function addPill(stack) {
+// Botón "+ Gasto" (gris suave con el texto verde): abre el formulario de
+// nuevo gasto. compact = solo el "+" (widget chico).
+function addPill(stack, compact) {
   const b = stack.addStack();
-  b.backgroundColor = C.brand;
+  b.backgroundColor = C.s2;
   b.cornerRadius = 15;
-  b.size = new Size(0, 30);
-  b.setPadding(0, 12, 0, 14);
+  b.size = new Size(compact ? 32 : 0, 30);
+  b.setPadding(0, compact ? 0 : 12, 0, compact ? 0 : 14);
   b.centerAlignContent();
   b.url = NEW_EXPENSE_URL;
-  const t = b.addText('+  Gasto');
-  t.font = Font.semiboldSystemFont(14);
-  t.textColor = C.onBrand;
+  if (compact) b.addSpacer();
+  const t = b.addText(compact ? '+' : '+  Gasto');
+  t.font = compact ? Font.semiboldSystemFont(18) : Font.semiboldSystemFont(14);
+  t.textColor = C.brandText;
+  if (compact) b.addSpacer();
   return b;
 }
 
