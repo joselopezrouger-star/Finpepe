@@ -403,77 +403,6 @@
   </svg>`;
   // Íconos del sprite de index.html (docs/rediseno/iconos.svg).
   const spriteIcon = (id) => `<svg class="ic" aria-hidden="true"><use href="#i-${id}"/></svg>`;
-  // Tendencia de la tasa de ahorro (media tarjeta del Resumen): curva suave
-  // con marcador en cada mes y relleno en degradé debajo. Sin eje numérico:
-  // los valores los dan las etiquetas. rows: [{label, rate}] (rate en %,
-  // puede ser negativo).
-  function savingsRateTrendSvg(rows) {
-    if (!rows.length) return '';
-    const W = 300, H = 165;
-    const topPad = 38, bottomPad = 26, padX = 24;
-    const plotTop = topPad, plotBottom = H - bottomPad;
-    const plotH = plotBottom - plotTop;
-    const plotW = W - padX * 2;
-    const x = (i) => rows.length > 1 ? padX + (plotW * i) / (rows.length - 1) : W / 2;
-
-    const rates = rows.map((r) => r.rate);
-    const domainMax = Math.max(...rates);
-    const domainMin = Math.min(...rates);
-    const span = Math.max(domainMax - domainMin, 1);
-    const scaledMax = domainMax + span * 0.15, scaledMin = domainMin - span * 0.25;
-    const y = (v) => plotTop + (scaledMax - v) / (scaledMax - scaledMin) * plotH;
-
-    // Verde si el mes en curso quedó ahorrando; si fue un retiro neto
-    // (negativo), toda la curva pasa a la paleta de alerta.
-    const bad = rates[rates.length - 1] < 0;
-    const lineColor = bad ? 'var(--crit)' : 'var(--income)';
-    const gradId = 'savRateGrad' + Math.round(Math.random() * 1e6);
-
-    const pts = rows.map((r, i) => ({ x: x(i), y: y(r.rate), rate: r.rate, label: r.label }));
-    const linePath = Charts.smoothPathD(pts);
-    const areaPath = `${linePath} L${pts[pts.length - 1].x},${plotBottom} L${pts[0].x},${plotBottom} Z`;
-
-    const gridLines = pts.map((p) => `<line x1="${p.x}" y1="${p.y}" x2="${p.x}" y2="${plotBottom}"
-      stroke="var(--border)" stroke-width="1.5" stroke-dasharray="3 4"/>`).join('');
-    const dots = pts.map((p, i) => {
-      const isLast = i === pts.length - 1;
-      return `<circle cx="${p.x}" cy="${p.y}" r="${isLast ? 7.5 : 5.5}" fill="${isLast ? lineColor : 'var(--surface)'}" stroke="${lineColor}" stroke-width="3.5"/>`;
-    }).join('');
-
-    const svg = `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="Evolución de la tasa de ahorro">
-      <defs>
-        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.25"/>
-          <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      <line x1="${padX - 10}" y1="${plotBottom}" x2="${W - padX + 10}" y2="${plotBottom}" stroke="var(--axis)" stroke-width="1.5"/>
-      ${gridLines}
-      <path d="${areaPath}" fill="url(#${gradId})" stroke="none"/>
-      <path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-      ${dots}
-    </svg>`;
-
-    // Etiquetas como HTML encima del SVG (en % del contenedor) para que el
-    // tamaño de letra no se achique junto con el dibujo. El mes actual va
-    // en una píldora de color; los demás, como texto chico sin fondo (en
-    // una media tarjeta las píldoras de todos se pisaban entre sí). Con
-    // más de 4 meses no entran todos: quedan el primero y el actual.
-    const pctX = (px) => (px / W) * 100;
-    const pctY = (py) => (py / H) * 100;
-    const showLabel = (i) => rows.length <= 4 || i === 0 || i === pts.length - 1;
-    const labelsHTML = pts.map((p, i) => {
-      if (!showLabel(i)) return '';
-      const isLast = i === pts.length - 1;
-      const pos = `left:${pctX(p.x)}%;top:${pctY(p.y)}%`;
-      return isLast
-        ? `<span class="savings-rate-bubble current" style="${pos};background:${lineColor}">${p.rate}%</span>`
-        : `<span class="savings-rate-bubble" style="${pos}">${p.rate}%</span>`;
-    }).join('');
-    const monthLabelsHTML = pts.map((p) => `<span class="savings-rate-xlabel" style="left:${pctX(p.x)}%;top:${pctY(plotBottom + 6)}%">${esc(p.label)}</span>`).join('');
-
-    return `<div class="savings-rate-chart-inner">${svg}${labelsHTML}${monthLabelsHTML}</div>`;
-  }
 
   // % del mes elegido que todavía falta transcurrir (100 = no empezó, 0 = ya
   // terminó) — para dibujar el arco del anillo, que necesita una escala 0-100.
@@ -515,8 +444,6 @@
   // Para series que no son categorías (cuentas de ahorro): los mismos tonos
   // de los tokens, sin el gris de "Otros".
   const SERIES_PALETTE = ['var(--c-casa)', 'var(--c-tel)', 'var(--c-auto)', 'var(--c-comida)', 'var(--c-compras)', 'var(--c-super)'];
-  // Medios de pago: no son categorías, van en grises para no confundirse.
-  const NEUTRAL_PALETTE = ['var(--t1)', 'var(--t2)', 'var(--t3)', 'color-mix(in srgb, var(--t3) 55%, var(--bg))', 'var(--s3)'];
   const CAT_ICON = {
     'c-casa': 'home', 'c-comida': 'food', 'c-auto': 'car', 'c-salud': 'heart',
     'c-entret': 'film', 'c-ropa': 'shirt', 'c-educ': 'book', 'c-viajes': 'plane',
@@ -2791,7 +2718,7 @@
       if (go === 'categorias') {
         ui.catKind = 'gasto';
         const cat = row.dataset.insightCat;
-        if (cat) ui.catOpen = { ...ui.catOpen, ['gasto:' + cat]: true };
+        if (cat) { ui.catOpen = { ...ui.catOpen, ['gasto:' + cat]: true }; ui.catScrollTo = 'gasto:' + cat; }
       }
       render();
     }));
@@ -2816,6 +2743,7 @@
       ui.view = 'categorias';
       ui.catKind = 'gasto';
       ui.catOpen = { ...ui.catOpen, ['gasto:' + b.dataset.gotoCat]: true };
+      ui.catScrollTo = 'gasto:' + b.dataset.gotoCat;
       render();
     }));
   }
@@ -3522,8 +3450,31 @@
         byMethod.set(k, (byMethod.get(k) || 0) + v);
       }
     }
+    // Cada medio con el color de su tipo (el mismo de su ícono en Cuentas);
+    // si dos son del mismo tipo, el segundo toma otro tono de la paleta.
+    const usedColors = new Set();
     const methodRows = [...byMethod.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
-      .map(([id, value], i) => ({ id, value, name: id === '__sin' ? 'Sin medio de pago' : methodName(id), color: NEUTRAL_PALETTE[Math.min(i + 1, NEUTRAL_PALETTE.length - 1)] }));
+      .map(([id, value]) => {
+        const m = methodById(id);
+        let color = id === '__sin' ? OTROS_COLOR : m ? (KIND_COLOR[m.kind] || 'var(--c-tel)') : KIND_COLOR.ahorro;
+        if (usedColors.has(color)) color = SERIES_PALETTE.find((c) => !usedColors.has(c)) || color;
+        usedColors.add(color);
+        return { id, value, name: id === '__sin' ? 'Sin medio de pago' : methodName(id), color };
+      });
+
+    // Fijos, cuotas y del día a día: de dónde sale lo que gastaste este mes
+    // (solo gastos), con la variación contra el mes anterior completo.
+    const KINDS = [
+      { id: 'fijo', name: 'Fijos', sub: 'alquiler, servicios, suscripciones', color: 'var(--c-casa)', test: (t) => !!t.recurringId },
+      { id: 'cuota', name: 'Cuotas', sub: 'compras en cuotas', color: 'var(--c-auto)', test: (t) => !t.recurringId && !!t.installment },
+      { id: 'corriente', name: 'Del día a día', sub: 'todo lo demás', color: 'var(--c-tel)', test: (t) => !t.recurringId && !t.installment },
+    ];
+    const kindRows = isInc ? [] : KINDS.map((k) => ({
+      ...k,
+      value: sumDisp(inMonth.filter((t) => t.type === 'gasto' && k.test(t))),
+      prev: sumDisp(inPrevFull.filter((t) => t.type === 'gasto' && k.test(t))),
+    }));
+    const kindTotal = kindRows.reduce((a, r) => a + r.value, 0);
 
     // Evolución de una categoría (o subcategoría) en los últimos 6 meses:
     // en pesos, en % de los gastos o en % de los ingresos de cada mes.
@@ -3583,6 +3534,26 @@
         </div>
       </section>` : ''}
 
+      ${kindTotal > 0 ? `
+      <section class="k-card">
+        <div class="k-card-h"><h2>Fijos, cuotas y del día a día</h2></div>
+        <div class="stack">${kindRows.filter((r) => r.value > 0).map((r) => `<i style="width:${((r.value / kindTotal) * 100).toFixed(2)}%;background:${r.color}"></i>`).join('')}</div>
+        <div class="kind-lines">
+          ${kindRows.map((r) => {
+            const d = r.value - r.prev;
+            const pctVar = r.prev > 0 ? fmtVarPct((d / r.prev) * 100) : null;
+            const cls = !(r.prev > 0) || Math.abs(d) < 1 ? 'flat' : d > 0 ? 'bad' : 'good';
+            const varTxt = !(r.prev > 0) ? (r.value > 0 ? 'nuevo' : '–') : pctVar == null ? '= igual' : `${d > 0 ? '▲' : '▼'} ${pctVar}%`;
+            return `
+          <button type="button" class="kind-line" data-kindmoves="${r.id}">
+            <i style="background:${r.color}"></i>
+            <div class="kind-main"><b>${esc(r.name)}</b><span class="t3">${kindTotal > 0 ? `${fmtShare((r.value / kindTotal) * 100)}%` : ''} · ${esc(r.sub)}</span></div>
+            <div class="kind-amt"><span class="num">${money(r.value)}</span><span class="kind-var ${cls}">${varTxt} vs. ${esc(monthShortLabel(prevMk).toLowerCase())}</span></div>
+          </button>`;
+          }).join('')}
+        </div>
+      </section>` : ''}
+
       ${evoOptions.length ? `
       <section class="k-card">
         <div class="k-card-h"><h2>Evolución por categoría</h2></div>
@@ -3598,6 +3569,19 @@
       </section>` : ''}`;
 
     wireCatKindChips(el);
+    // Viniendo de un aviso o de Inicio: la categoría queda abierta y a la
+    // vista (sin tener que buscarla scrolleando).
+    if (ui.catScrollTo) {
+      const target = $(`[data-catopen="${CSS.escape(ui.catScrollTo)}"]`, el);
+      ui.catScrollTo = null;
+      if (target) {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const top = target.getBoundingClientRect().top + window.scrollY;
+          const bar = $('.topbar');
+          window.scrollTo({ top: Math.max(0, top - (bar ? bar.offsetHeight : 0) - 12), behavior: 'smooth' });
+        }));
+      }
+    }
     // Los movimientos de una categoría (o subcategoría, o medio de pago)
     // del mes, comparados con el mes anterior.
     const forRow = (list, gid, subId) => {
@@ -3626,6 +3610,12 @@
         const id = b.dataset.methodmoves;
         const pick = (list) => list.filter((t) => t.type === 'gasto' && (id === '__sin' ? !(methodById(t.methodId) || isSavingMethod(t.methodId)) : t.methodId === id));
         categoryCompareDialog(id === '__sin' ? 'Sin medio de pago' : methodName(id), mk, pick(monthAll), prevMk, pick(inPrevFull));
+        return;
+      }
+      if ((b = e.target.closest('[data-kindmoves]'))) {
+        const k = KINDS.find((x) => x.id === b.dataset.kindmoves);
+        const pick = (list) => list.filter((t) => t.type === 'gasto' && k.test(t));
+        categoryCompareDialog(k.name, mk, pick(monthAll), prevMk, pick(inPrevFull));
         return;
       }
       if ((b = e.target.closest('[data-evomode]'))) { ui.catEvoMode = b.dataset.evomode; render(); return; }
@@ -3933,9 +3923,11 @@
     const curTxs = txsIn(cy.prevClose, cy.close);
     const todayStrV = dateToStr(today);
     const done = curTxs.filter((t) => t.date <= todayStrV);
-    const ahead = curTxs.filter((t) => t.date > todayStrV);
-    const spent = sumDisp(done);
-    const committed = sumDisp(ahead);
+    // "Gastado" son solo los consumos que ya pasaron. Las cuotas y los
+    // fijos del ciclo van siempre aparte (aunque su fecha ya haya pasado):
+    // no dependen de cuánto uses la tarjeta.
+    const spent = sumDisp(done.filter(isVar));
+    const committed = sumDisp(curTxs.filter((t) => !isVar(t) || t.date > todayStrV));
     const elapsed = Math.max(1, days(cy.prevClose, today));
     const remaining = days(today, cy.close);
     const totalDays = Math.max(1, days(cy.prevClose, cy.close));
@@ -4079,7 +4071,7 @@
           ${marks.filter((m) => m.bar).map((m) => `<span class="mk" style="left:${pctOf(m.v).toFixed(1)}%;background:${m.color}"></span>`).join('')}
         </div>
         <div class="legend gauge-legend">
-          <span><i style="background:var(--tone)"></i>Gastado <b class="money">${esc(fmtPlain(A.spent))}</b></span>
+          <span><i style="background:var(--tone)"></i>Consumos <b class="money">${esc(fmtPlain(A.spent))}</b></span>
           ${A.committed > 0 ? `<span><i style="background:color-mix(in srgb,var(--tone) 50%,transparent)"></i>Cuotas y fijos <b class="money">${esc(fmtPlain(A.committed))}</b></span>` : ''}
           ${extra > 0 ? `<span><i class="hatch"></i>Proyección <b class="money">${esc(fmtPlain(extra))}</b></span>` : ''}
         </div>
@@ -4578,6 +4570,13 @@
     }));
   }
 
+  // Qué es cada cosa del calendario: color e ícono (los mismos en los
+  // puntos de cada día, la leyenda y la lista de abajo).
+  const CAL_KIND = {
+    gasto: { label: 'Gasto fijo', color: 'var(--c-casa)', icon: 'repeat' },
+    ingreso: { label: 'Ingreso fijo', color: 'var(--brand)', icon: 'in' },
+    card: { label: 'Vence tarjeta', color: 'var(--c-auto)', icon: 'card' },
+  };
   function vCalendario(el) {
     const mk = ui.month;
     // Si el mes se cambió desde otra hoja (Movimientos/Categorías comparten
@@ -4630,7 +4629,7 @@
       const ds = `${y}-${pad(mo)}-${pad(d)}`;
       const evs = byDay.get(ds) || [];
       const kinds = [...new Set(evs.map((e) => e.kind))].slice(0, 3);
-      const dots = kinds.map((k) => `<i class="dot-${k}"></i>`).join('');
+      const dots = kinds.map((k) => `<i style="background:${CAL_KIND[k].color}"></i>`).join('');
       // Clickeable si hay eventos previstos (agenda) O movimientos reales
       // cargados ese día — antes solo lo primero, así que un día con
       // gastos/ingresos pero sin gasto fijo/tarjeta no abría nada al tocarlo.
@@ -4639,14 +4638,12 @@
       if (clickable) cls.push('has');
       if (ds === today) cls.push('today');
       if (ds === ui.calSel) cls.push('sel');
-      // Gradiente de fondo según lo gastado ese día (relativo al día de más
-      // gasto del mes que se está viendo): a la selección no se le toca el
-      // fondo para que se siga viendo resaltada con su propio color.
+      // Fondo según lo gastado ese día, en 4 niveles de un mismo tono
+      // (relativo al día de más gasto del mes que se está viendo).
       const spend = daySpend.get(ds) || 0;
-      const heatStyle = (spend > 0 && maxDaySpend > 0 && ds !== ui.calSel)
-        ? ` style="background:color-mix(in srgb, var(--expense-series) ${10 + Math.round((spend / maxDaySpend) * 60)}%, transparent)"`
-        : '';
-      return `<div class="${cls.join(' ')}"${heatStyle} ${clickable ? `data-day="${ds}"` : ''}>
+      const level = spend > 0 && maxDaySpend > 0 ? Math.min(4, 1 + Math.floor((spend / maxDaySpend) * 4)) : 0;
+      if (level) cls.push(`heat${level}`);
+      return `<div class="${cls.join(' ')}" ${clickable ? `data-day="${ds}"` : ''}>
         <span class="cal-num">${d}</span>
         <span class="cal-dots">${dots}</span>
       </div>`;
@@ -4661,7 +4658,7 @@
     let agendaHTML = '';
     let lastDay = '';
     if (!agendaEvents.length) {
-      agendaHTML = '<div class="empty">No hay pagos ni ingresos previstos este mes. Cargá tus gastos fijos y tarjetas en “Planificar” y “Tarjetas”.</div>';
+      agendaHTML = '<div class="empty">No hay pagos ni ingresos previstos este mes. Cargá tus fijos en Más › Fijos y el cierre de tus tarjetas en Cuentas.</div>';
     } else {
       for (const ev of agendaEvents) {
         if (ev.date !== lastDay) {
@@ -4670,43 +4667,40 @@
           agendaHTML += `<div class="agenda-day">${esc(new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(dd))}</div>`;
         }
         const v = eventAmountDisp(ev);
+        const K = CAL_KIND[ev.kind];
         const amountTxt = ev.kind === 'card'
-          ? fmtDisp(v)
+          ? '− ' + fmtDisp(v)
           : (ev.kind === 'ingreso' ? '+ ' : '− ') + fmtMoney(ev.amount, ev.currency);
-        const amountCls = ev.kind === 'ingreso' ? 'amount-in' : '';
         agendaHTML += `<div class="agenda-item">
-          <div class="agenda-icon">${ev.icon}</div>
+          <span class="cic" style="--c:${K.color}">${spriteIcon(K.icon)}</span>
           <div class="agenda-body">
             <div class="agenda-name">${esc(ev.title)}</div>
             <div class="agenda-sub">${esc(ev.sub)}</div>
           </div>
-          <div class="agenda-amount ${amountCls}">${amountTxt}</div>
+          <div class="agenda-amount num ${ev.kind === 'ingreso' ? 'pos' : ''}">${amountTxt}</div>
         </div>`;
       }
     }
 
     el.innerHTML = `
-      <div class="card">
-        <h2 class="card-title"><span>Calendario</span></h2>
+      <section class="k-card cal-card">
         <div class="cal-grid">
-          ${dow.map((d) => `<div class="cal-dow">${d}</div>`).join('')}
+          ${dow.map((d) => `<div class="cal-dow">${d.slice(0, 2)}</div>`).join('')}
           ${cells.map(cellHTML).join('')}
         </div>
-        <div class="chart-legend" style="margin-top:12px">
-          <span><span class="key" style="background:var(--expense-series)"></span>Gasto fijo</span>
-          <span><span class="key" style="background:var(--income-series)"></span>Ingreso fijo</span>
-          <span><span class="key" style="background:var(--accent)"></span>Tarjeta</span>
+        <div class="cal-legend">
+          ${['gasto', 'ingreso', 'card'].map((k) => `<span><i style="background:${CAL_KIND[k].color}"></i>${CAL_KIND[k].label}</span>`).join('')}
+          ${maxDaySpend > 0 ? `<span class="cal-heat-key">Gasto del día <b class="heat1"></b><b class="heat2"></b><b class="heat3"></b><b class="heat4"></b></span>` : ''}
         </div>
-        ${maxDaySpend > 0 ? '<div class="hint" style="margin-top:6px">El fondo de cada día se pinta más oscuro cuanto más gastaste esa fecha.</div>' : ''}
-      </div>
+      </section>
 
-      <div class="card">
-        <h2 class="card-title">
-          <span>${ui.calSel ? 'Día seleccionado' : 'Agenda del mes'}</span>
-          ${ui.calSel ? '<button class="link-btn" data-calall>ver todo el mes</button>' : ''}
-        </h2>
+      <section class="k-card">
+        <div class="k-card-h">
+          <h2>${ui.calSel ? esc(new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(parseDate(ui.calSel))) : 'Lo que viene este mes'}</h2>
+          ${ui.calSel ? '<button type="button" class="link" data-calall>Todo el mes</button>' : ''}
+        </div>
         <div class="agenda">${agendaHTML}</div>
-      </div>`;
+      </section>`;
 
     $$('[data-day]', el).forEach((c) => c.addEventListener('click', () => {
       const ds = c.dataset.day;
@@ -4898,6 +4892,38 @@
     }));
   }
 
+  // Aportes por mes: barras (verde lo que sumaste, rojo si retiraste más de
+  // lo que pusiste), el último mes destacado y montos nominales donde entran.
+  function savingsBarsSvg(rows) {
+    const G = Charts.g;
+    const W = 320, H = 140, x0 = 20, x1 = 300, yTop = 24, yBase = 112;
+    const vals = rows.map((r) => r.value);
+    const hi = niceScale(Math.max(1, ...vals), 3).top;
+    const lo = Math.min(...vals) < 0 ? -niceScale(-Math.min(...vals), 2).top : 0;
+    const y = G.escala([lo, hi], [yBase, yTop]);
+    const n = rows.length;
+    const slot = (x1 - x0) / Math.max(1, n);
+    const bw = Math.min(26, slot * 0.6);
+    const cx = (i) => x0 + slot * (i + 0.5);
+    const last = n - 1;
+    const step = Math.max(1, Math.ceil(56 / slot));
+    const showLab = (i) => i === last || (last - i) % step === 0;
+    const bars = rows.map((r, i) => {
+      const y0 = y(0), y1 = y(r.value);
+      const top = Math.min(y0, y1), h = Math.max(1.5, Math.abs(y1 - y0));
+      const fill = r.value < 0 ? 'var(--neg)' : 'var(--brand)';
+      return `<rect x="${(cx(i) - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="4" style="fill:${fill};opacity:${i === last ? 1 : 0.5}"/>`
+        + (showLab(i) ? `<text x="${cx(i).toFixed(1)}" y="${(r.value < 0 ? y1 + 13 : y1 - 6).toFixed(1)}" text-anchor="middle" class="g-lab g-halo"${i === last ? ' style="fill:var(--t1);font-weight:700"' : ''}>${esc(chartMoney(r.value))}</text>` : '');
+    }).join('');
+    const every = Math.ceil(n / 7);
+    const months = rows.map((r, i) => ((last - i) % every === 0
+      ? `<text x="${cx(i).toFixed(1)}" y="132" text-anchor="middle"${i === last ? ' class="g-sel"' : ''}>${esc(r.label)}</text>` : '')).join('');
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(`Aportes por mes: ${rows.map((r) => `${r.label} ${hideAmounts ? '' : fmtPlain(r.value)}`).join(', ')}`)}">
+      <line x1="8" x2="312" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" class="g-grid"/>
+      ${bars}${months}
+    </svg>`;
+  }
+
   function vAhorros(el) {
     const savings = S().savings;
     const otherCur = disp() === 'ARS' ? 'USD' : 'ARS';
@@ -5015,7 +5041,7 @@
           ${chartKeys.map((k) => `<button type="button" data-savchart="${k}" class="${k === ui.savChart ? 'active' : ''}" role="tab">${CHARTS[k].label}</button>`).join('')}
         </div>
         <div class="hint" id="sav-chart-hint" style="margin-bottom:8px">${CHARTS[ui.savChart].hint}</div>
-        <div id="sav-chart"></div>
+        <div id="sav-chart" class="sav-chart-box"></div>
       </div>` : ''}`;
 
     // Un solo gráfico a la vez, con selector: se redibuja sin rearmar la
@@ -5026,23 +5052,16 @@
       const k = ui.savChart;
       $('#sav-chart-title', el).textContent = CHARTS[k].title;
       $('#sav-chart-hint', el).textContent = CHARTS[k].hint;
+      // Los tres en el mismo formato (mismo ancho y alto), con montos
+      // nominales; la tasa, igual que en Inicio.
       if (k === 'rate') {
-        box.innerHTML = savRateRows.length ? savingsRateTrendSvg(savRateRows)
+        box.innerHTML = savRateRows.length
+          ? savingsRateChartSvg(savRateRows.map((r, i) => ({ label: r.label.toLowerCase(), rate: r.rate, isSel: i === savRateRows.length - 1 })))
           : '<div class="empty">Ningún mes de esta ventana tuvo ingresos registrados.</div>';
       } else if (k === 'nominal') {
-        Charts.singleBars(box, savNominalRows, {
-          ariaLabel: 'Ahorro nominal por mes',
-          valueLabels: true, valueLabelSize: 18, topPad: 30, bottomPad: 30,
-          fmt: (v) => Charts.compact(v),
-        });
+        box.innerHTML = savingsBarsSvg(savNominalRows.map((r) => ({ label: r.label.toLowerCase(), value: r.value })));
       } else {
-        Charts.lines(box, savMonths.map((m) => monthShortLabel(m)), [
-          { label: 'Ahorro acumulado', color: Charts.COLORS.income, values: savCumulativeSeries },
-        ], {
-          fmtAxis: (v) => Charts.compact(v),
-          ariaLabel: 'Ahorro total acumulado por mes',
-          smooth: true, markerRadius: 5, pointLabels: true, pointLabelSize: 18, topPad: 34, leftPad: 52,
-        });
+        box.innerHTML = categoryEvoSvg(savMonths.map((m, i) => ({ label: monthShortLabel(m).toLowerCase(), value: savCumulativeSeries[i] })), 'var(--brand)', false);
       }
     }
     drawSavChart();
@@ -5308,8 +5327,11 @@
   // comprometido este mes y los que vienen", sin tener que sumarlo a ojo
   // mirando las barras.
   function installmentMonthTotals(rows) {
-    const today = curMonth();
-    let maxMk = today;
+    const cm = curMonth();
+    // Los dos meses anteriores (lo que ya pagaste) y del actual en adelante
+    // hasta la última cuota pendiente.
+    const from = addMonthsKey(cm, -2);
+    let maxMk = cm;
     for (const r of rows) {
       for (const t of r.pending) {
         const mo = effectiveMonthOf(t);
@@ -5317,20 +5339,58 @@
       }
     }
     const months = [];
-    for (let mk = today, guard = 0; mk <= maxMk && guard < 60; mk = addMonthsKey(mk, 1), guard++) months.push(mk);
-    // r.pending ya incluye la cuota del mes en curso aunque su fecha haya
-    // pasado (ver activeInstallmentGroups), así que el mes actual suma todo
-    // lo que se paga de cuotas en él.
+    for (let mk = from, guard = 0; mk <= maxMk && guard < 60; mk = addMonthsKey(mk, 1), guard++) months.push(mk);
+    // Todas las cuotas (también las de compras ya terminadas, para los
+    // meses pasados), por mes de pago.
     const totals = new Map(months.map((m) => [m, 0]));
-    for (const r of rows) {
-      for (const t of r.pending) {
-        const mo = effectiveMonthOf(t);
-        if (!totals.has(mo)) continue;
-        const v = txDispAmount(t);
-        if (v != null) totals.set(mo, totals.get(mo) + v);
-      }
+    for (const t of S().transactions) {
+      if (t.type !== 'gasto' || !t.installment) continue;
+      const mo = effectiveMonthOf(t);
+      if (!totals.has(mo)) continue;
+      const v = txDispAmount(t);
+      if (v != null) totals.set(mo, totals.get(mo) + v);
     }
-    return months.map((m) => ({ mk: m, label: monthShortLabel(m), total: totals.get(m) }));
+    return months.map((m) => ({ mk: m, label: monthShortLabel(m).toLowerCase(), total: totals.get(m), isCur: m === cm }));
+  }
+
+  // Cuotas por mes: línea suave con el mes actual remarcado (franja, punto
+  // grande y su monto en negrita). Con muchos meses, los montos van solo
+  // donde cambia el total (y en el actual), sin pisarse.
+  function installmentsChartSvg(rows) {
+    const G = Charts.g;
+    const W = 320, H = 150, x0 = 22, x1 = 298, yTop = 28, yBase = 118;
+    const color = 'var(--c-auto)';
+    const max = Math.max(1, ...rows.map((r) => r.total));
+    const { top, step } = niceScale(max * 1.1, 3);
+    const ticks = [];
+    for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+    const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
+    const y = G.escala([0, top], [yBase, yTop]);
+    const pts = rows.map((r, i) => [x(i), y(r.total)]);
+    const sel = Math.max(0, rows.findIndex((r) => r.isCur));
+    const colW = rows.length > 1 ? (x1 - x0) / (rows.length - 1) : 40;
+    const band = `<rect x="${(pts[sel][0] - Math.min(18, colW / 2)).toFixed(1)}" y="${yTop - 18}" width="${Math.min(36, colW).toFixed(1)}" height="${yBase - yTop + 34}" rx="8" style="fill:var(--t1);opacity:.06"/>`;
+    // Montos: el actual siempre; el resto, donde cambia el total y si no
+    // queda pegado a otro rótulo.
+    const show = new Set([sel]);
+    rows.forEach((r, i) => { if (i === 0 || r.total !== rows[i - 1].total || i === rows.length - 1) show.add(i); });
+    const placed = [];
+    const labelIdx = [...show].sort((a, b) => (a === sel ? -1 : b === sel ? 1 : a - b)).filter((i) => {
+      if (placed.some((j) => Math.abs(pts[j][0] - pts[i][0]) < 52)) return false;
+      placed.push(i);
+      return true;
+    });
+    const labels = labelIdx.map((i) => `<text x="${pts[i][0].toFixed(1)}" y="${(pts[i][1] - 11).toFixed(1)}" text-anchor="middle" class="g-lab g-halo"${i === sel ? ' style="fill:var(--t1);font-weight:700"' : ''}>${esc(chartMoney(rows[i].total))}</text>`).join('');
+    const every = Math.ceil(rows.length / 7);
+    const months = rows.map((r, i) => (i === sel || (i - sel) % every === 0
+      ? `<text x="${pts[i][0].toFixed(1)}" y="${H - 8}" text-anchor="middle"${i === sel ? ' class="g-sel"' : ''}>${esc(r.label)}</text>` : '')).join('');
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(`Cuotas por mes: ${rows.map((r) => `${r.label} ${hideAmounts ? '' : fmtPlain(r.total)}`).join(', ')}`)}">
+      ${band}
+      ${gridLines(ticks, y, 8, 312)}
+      ${pts.length > 1 ? `<path d="${G.lineaSuave(pts)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:${color}"/>` : ''}
+      ${pts.map((p, i) => G.marcador(p[0], p[1], color, i === sel)).join('')}
+      ${labels}${months}
+    </svg>`;
   }
 
   // Gantt de verdad: una fila por compra, una barra que va del mes de la
@@ -5395,13 +5455,18 @@
   function installmentRowHTML(r, link = true) {
     // Progreso de la compra: cuánto de las cuotas ya vas pagando —
     // 1 de 3 = un tercio coloreado, la última cuota = toda coloreada.
-    const prog = Math.round((r.nextK / r.n) * 100);
+    // Una compra cuya primera cuota cae en un mes que todavía no llegó no
+    // arrancó: se muestra "Arranca en …" y sin progreso, igual que el Gantt.
+    const started = effectiveMonthOf(r.all[0]) <= curMonth();
+    const prog = started ? Math.round((r.nextK / r.n) * 100) : 0;
     return `
           <div class="inst-row ${link ? 'rowlink' : ''}" ${link ? `data-instgroup="${esc(r.groupId)}"` : ''} style="--prog:${prog}%">
             <div class="row-icon cic" style="--c:${catColor(r.categoryId)}">${iconSvg(categoryIconName(r.categoryId))}</div>
             <div class="inst-row-main">
               <div class="inst-row-title">${esc(r.note || catName(r.categoryId))}</div>
-              <div class="inst-row-sub">${esc(methodName(r.methodId))} · cuota ${r.nextK}/${r.n} · ${paymentDateOf(r.next) > todayStr() ? 'próx. ' + esc(fmtDateShort(paymentDateOf(r.next))) : 'este mes'}</div>
+              <div class="inst-row-sub">${esc(methodName(r.methodId))} · ${started
+                ? `cuota ${r.nextK}/${r.n} · ${paymentDateOf(r.next) > todayStr() ? 'próx. ' + esc(fmtDateShort(paymentDateOf(r.next))) : 'este mes'}`
+                : `${r.n} cuotas · arranca en ${esc(monthLabel(effectiveMonthOf(r.all[0])).toLowerCase())}`}</div>
             </div>
             <div class="inst-row-amounts">
               <div class="inst-row-amount">${fmtMoney(r.next.amount, r.currency)} <span class="inst-row-amount-label">cuota</span></div>
@@ -5591,7 +5656,7 @@
     // Peso de las cuotas del mes sobre el total de gastos y de ingresos del
     // mismo mes (por mes de pago, igual que el gráfico de cuotas y que
     // "Gastos" en Inicio).
-    const cuotasMonth = monthTotals.length ? monthTotals[0].total : 0;
+    const cuotasMonth = (monthTotals.find((m) => m.isCur) || { total: 0 }).total;
     const calMonthTx = S().transactions.filter((t) => effectiveMonthOf(t) === mk);
     const expMonthCal = sumDisp(calMonthTx.filter((t) => t.type === 'gasto'));
     const incMonthCal = sumDisp(calMonthTx.filter((t) => t.type === 'ingreso'));
@@ -5624,7 +5689,7 @@
         </div>
         ${monthTotals.length ? `
         <div class="hint" style="margin-bottom:6px">Cuánto pagás de cuotas cada mes.</div>
-        <div id="chart-inst-months"></div>` : ''}
+        ${installmentsChartSvg(monthTotals)}` : ''}
         <div class="hint" style="margin:10px 0">Cuándo empieza y termina cada compra, con hoy marcado.</div>
         ${installmentGanttHTML(instRows)}
         <button class="link-btn" id="btn-inst-detail" style="margin-top:14px">Ver el detalle de cada compra ›</button>`
@@ -5710,16 +5775,6 @@
       </div>`;
     el.innerHTML = cards[section];
 
-    const instMonthsEl = $('#chart-inst-months', el);
-    if (instMonthsEl) {
-      Charts.lines(instMonthsEl, monthTotals.map((m) => m.label), [
-        { label: 'Cuotas', color: Charts.COLORS.expense, values: monthTotals.map((m) => m.total) },
-      ], {
-        smooth: true, pointLabels: 'changes', pointLabelSize: 20, topPad: 30, leftPad: 52,
-        fmtAxis: (v) => Charts.compact(v),
-        ariaLabel: 'Total de cuotas por mes',
-      });
-    }
     const instShareBtn = $('#btn-inst-share', el);
     if (instShareBtn) {
       instShareBtn.addEventListener('click', installmentShareHistoryDialog);
@@ -7406,15 +7461,23 @@
       const max = Math.max(1, ...monthRows.map((r) => r.mine + r.theirs));
       const slot = W / monthRows.length, bw = Math.min(44, slot * 0.55);
       const yh = (v) => (v / max) * (base - top);
-      const short = (v) => (hideAmounts ? '•••' : v >= 1e6 ? `${(v / 1e6).toFixed(2).replace('.', ',')} M` : v >= 1e3 ? `${Math.round(v / 1e3)} mil` : String(Math.round(v)));
       return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(`Gastos en común por mes: ${monthRows.map((r) => `${r.label} ${hideAmounts ? '' : fmtPlain(r.mine + r.theirs)} (${myName} ${hideAmounts ? '' : fmtPlain(r.mine)}, ${partnerName} ${hideAmounts ? '' : fmtPlain(r.theirs)})`).join('; ')}`)}">
         <line x1="0" x2="320" y1="${base}" y2="${base}" class="g-grid"/>
         ${monthRows.map((r, i) => {
           const x = slot * i + (slot - bw) / 2, cx = slot * i + slot / 2;
           const hMe = yh(r.mine), hTh = yh(r.theirs), tot = r.mine + r.theirs;
-          return `${hMe > 0 ? `<rect x="${x.toFixed(1)}" y="${(base - hMe).toFixed(1)}" width="${bw.toFixed(1)}" height="${hMe.toFixed(1)}" rx="${hTh > 0 ? 0 : 5}" style="fill:${ME_COLOR}"/>` : ''}
-            ${hTh > 0 ? `<rect x="${x.toFixed(1)}" y="${(base - hMe - hTh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hTh.toFixed(1)}" rx="5" style="fill:${PARTNER_COLOR}"/>` : ''}
-            ${tot > 0 ? `<text x="${cx.toFixed(1)}" y="${(base - hMe - hTh - 8).toFixed(1)}" text-anchor="middle" class="g-lab">${short(tot)}</text>` : ''}
+          // Una sola barra con las puntas redondeadas (recortada con un
+          // clipPath) y las dos partes adentro, separadas por una línea
+          // fina: así la tuya y la de tu pareja tienen la misma forma.
+          const hAll = hMe + hTh;
+          const gap = hMe > 0 && hTh > 0 ? 1.5 : 0;
+          const id = `shb${i}`;
+          return `${hAll > 0 ? `<clipPath id="${id}"><rect x="${x.toFixed(1)}" y="${(base - hAll).toFixed(1)}" width="${bw.toFixed(1)}" height="${hAll.toFixed(1)}" rx="6"/></clipPath>
+            <g clip-path="url(#${id})">
+              ${hMe > 0 ? `<rect x="${x.toFixed(1)}" y="${(base - hMe).toFixed(1)}" width="${bw.toFixed(1)}" height="${hMe.toFixed(1)}" style="fill:${ME_COLOR}"/>` : ''}
+              ${hTh > 0 ? `<rect x="${x.toFixed(1)}" y="${(base - hAll).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, hTh - gap).toFixed(1)}" style="fill:${PARTNER_COLOR}"/>` : ''}
+            </g>` : ''}
+            ${tot > 0 ? `<text x="${cx.toFixed(1)}" y="${(base - hAll - 8).toFixed(1)}" text-anchor="middle" class="g-lab">${esc(chartMoney(tot))}</text>` : ''}
             <text x="${cx.toFixed(1)}" y="135" text-anchor="middle"${shMonths[i] === cm ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`;
         }).join('')}
       </svg>`;
