@@ -7459,15 +7459,23 @@
       const max = Math.max(1, ...monthRows.map((r) => r.mine + r.theirs));
       const slot = W / monthRows.length, bw = Math.min(44, slot * 0.55);
       const yh = (v) => (v / max) * (base - top);
-      const short = (v) => (hideAmounts ? '•••' : v >= 1e6 ? `${(v / 1e6).toFixed(2).replace('.', ',')} M` : v >= 1e3 ? `${Math.round(v / 1e3)} mil` : String(Math.round(v)));
       return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(`Gastos en común por mes: ${monthRows.map((r) => `${r.label} ${hideAmounts ? '' : fmtPlain(r.mine + r.theirs)} (${myName} ${hideAmounts ? '' : fmtPlain(r.mine)}, ${partnerName} ${hideAmounts ? '' : fmtPlain(r.theirs)})`).join('; ')}`)}">
         <line x1="0" x2="320" y1="${base}" y2="${base}" class="g-grid"/>
         ${monthRows.map((r, i) => {
           const x = slot * i + (slot - bw) / 2, cx = slot * i + slot / 2;
           const hMe = yh(r.mine), hTh = yh(r.theirs), tot = r.mine + r.theirs;
-          return `${hMe > 0 ? `<rect x="${x.toFixed(1)}" y="${(base - hMe).toFixed(1)}" width="${bw.toFixed(1)}" height="${hMe.toFixed(1)}" rx="${hTh > 0 ? 0 : 5}" style="fill:${ME_COLOR}"/>` : ''}
-            ${hTh > 0 ? `<rect x="${x.toFixed(1)}" y="${(base - hMe - hTh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hTh.toFixed(1)}" rx="5" style="fill:${PARTNER_COLOR}"/>` : ''}
-            ${tot > 0 ? `<text x="${cx.toFixed(1)}" y="${(base - hMe - hTh - 8).toFixed(1)}" text-anchor="middle" class="g-lab">${short(tot)}</text>` : ''}
+          // Una sola barra con las puntas redondeadas (recortada con un
+          // clipPath) y las dos partes adentro, separadas por una línea
+          // fina: así la tuya y la de tu pareja tienen la misma forma.
+          const hAll = hMe + hTh;
+          const gap = hMe > 0 && hTh > 0 ? 1.5 : 0;
+          const id = `shb${i}`;
+          return `${hAll > 0 ? `<clipPath id="${id}"><rect x="${x.toFixed(1)}" y="${(base - hAll).toFixed(1)}" width="${bw.toFixed(1)}" height="${hAll.toFixed(1)}" rx="6"/></clipPath>
+            <g clip-path="url(#${id})">
+              ${hMe > 0 ? `<rect x="${x.toFixed(1)}" y="${(base - hMe).toFixed(1)}" width="${bw.toFixed(1)}" height="${hMe.toFixed(1)}" style="fill:${ME_COLOR}"/>` : ''}
+              ${hTh > 0 ? `<rect x="${x.toFixed(1)}" y="${(base - hAll).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, hTh - gap).toFixed(1)}" style="fill:${PARTNER_COLOR}"/>` : ''}
+            </g>` : ''}
+            ${tot > 0 ? `<text x="${cx.toFixed(1)}" y="${(base - hAll - 8).toFixed(1)}" text-anchor="middle" class="g-lab">${esc(chartMoney(tot))}</text>` : ''}
             <text x="${cx.toFixed(1)}" y="135" text-anchor="middle"${shMonths[i] === cm ? ' class="g-sel"' : ''}>${esc(r.label)}</text>`;
         }).join('')}
       </svg>`;
