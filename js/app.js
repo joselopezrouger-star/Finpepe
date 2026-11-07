@@ -5378,14 +5378,15 @@
     const band = `<rect x="${(pts[sel][0] - Math.min(16, colW / 2)).toFixed(1)}" y="6" width="${Math.min(32, colW).toFixed(1)}" height="${yBase - 6 + 14}" rx="8" style="fill:var(--t1);opacity:.05"/>`;
     // Rótulos en el mes actual y en cada mes en que cambia el total, un
     // poco arriba de su punto y unidos a él con una línea fina. Se ubican
-    // primero el mes actual y después los cambios más grandes; cada uno
-    // sube (o se corre apenas al costado) hasta un lugar donde no pisa la
-    // curva ni a otro rótulo, y su línea no cruza otra. Si no entra, se omite.
+    // primero los cambios más grandes (así un salto nunca queda tapado por
+    // el rótulo del mes de al lado) y después el mes actual, que como
+    // puede subir todo lo que haga falta siempre entra. Cada uno sube (o se
+    // corre apenas al costado) hasta un lugar donde no pisa la curva ni a
+    // otro rótulo, y su línea no cruza otra. Si un cambio no entra, se omite.
     const delta = (i) => (i === 0 ? 0 : Math.abs(rows[i].total - rows[i - 1].total));
-    const want = [sel, ...rows.map((r, i) => i)
+    const want = [...rows.map((r, i) => i)
       .filter((i) => i !== sel && (i === 0 || rows[i].total !== rows[i - 1].total))
-      .sort((a, b) => delta(b) - delta(a) || a - b)];
-    const boxes = [], leaders = [], out = [];
+      .sort((a, b) => delta(b) - delta(a) || a - b), sel];
     // ¿El segmento a–b pasa por el rectángulo? (muestreo: alcanza para esto)
     const segHitsBox = (a, b, r) => {
       for (let k = 0; k <= 12; k++) {
@@ -5400,33 +5401,49 @@
     };
     // La curva, como tramos rectos entre meses (alcanza para no pisarla).
     const curve = pts.slice(1).map((p, k) => [pts[k], p]);
-    for (const i of want) {
+    const placed = []; // { i, b, from, to, cx, ly, txt }
+    // Lugares posibles para el rótulo del mes i: primero justo arriba de su
+    // punto (subiendo lo que haga falta) y, si no, corrido al costado.
+    const spots = (i) => {
       const txt = chartMoney(rows[i].total);
       const w = txt.length * 6.1;
       const [px, py] = pts[i];
       const from = [px, py - 5];
-      let done = false;
-      for (let ly = py - 18; ly >= 14 && !done; ly -= 10) {
-        for (const dx of [0, 0.5 * w, -0.5 * w, w, -w]) {
+      const list = [];
+      for (const dx of [0, 0.5 * w, -0.5 * w, w, -w]) {
+        for (let ly = py - 18; ly >= 14; ly -= 10) {
           const cx = Math.min(W - 4 - w / 2, Math.max(4 + w / 2, px + dx));
           const b = { x0: cx - w / 2 - 2, x1: cx + w / 2 + 2, y0: ly - 11, y1: ly + 3 };
-          const to = [Math.min(b.x1 - 6, Math.max(b.x0 + 6, px)), ly + 4];
-          const free = boxes.every((o) => b.x1 <= o.x0 || b.x0 >= o.x1 || b.y1 <= o.y0 || b.y0 >= o.y1)
-            && curve.every(([a, c]) => !segHitsBox(a, c, b))
-            && leaders.every((l) => !segHitsBox(l[0], l[1], b))
-            && boxes.every((o) => !segHitsBox(from, to, o))
-            && leaders.every((l) => !segsCross(l[0], l[1], from, to));
-          if (!free) continue;
-          boxes.push(b);
-          leaders.push([from, to]);
-          const cur = i === sel;
-          out.push(`<line x1="${from[0].toFixed(1)}" y1="${from[1].toFixed(1)}" x2="${to[0].toFixed(1)}" y2="${to[1].toFixed(1)}" stroke-width="1" style="stroke:${cur ? 'var(--t2)' : 'var(--t3)'};opacity:${cur ? 0.8 : 0.5}"/>`
-            + `<text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" style="fill:${cur ? 'var(--t1)' : 'var(--t2)'};font-weight:${cur ? 600 : 500}">${esc(txt)}</text>`);
-          done = true;
-          break;
+          if (curve.some(([a, c]) => segHitsBox(a, c, b))) continue;
+          list.push({ i, b, from, to: [Math.min(b.x1 - 6, Math.max(b.x0 + 6, px)), ly + 4], cx, ly, txt });
         }
       }
+      return list;
+    };
+    // ¿Choca el lugar c con el rótulo ya ubicado o? Con loose (mes actual),
+    // su línea puede pasar por detrás de otro rótulo: el texto tiene un
+    // fondo que la tapa, así no hace falta sacar a ninguno.
+    const clash = (c, o, loose) => !(c.b.x1 <= o.b.x0 || c.b.x0 >= o.b.x1 || c.b.y1 <= o.b.y0 || c.b.y0 >= o.b.y1)
+      || (!loose && (segHitsBox(o.from, o.to, c.b) || segHitsBox(c.from, c.to, o.b)))
+      || segsCross(o.from, o.to, c.from, c.to);
+    for (const i of want) {
+      const opts = spots(i);
+      const free = opts.find((c) => placed.every((o) => !clash(c, o, i === sel)));
+      if (free) { placed.push(free); continue; }
+      // El mes actual va siempre: toma el lugar que menos rótulos pisa y
+      // esos se sacan.
+      if (i === sel && opts.length) {
+        const best = opts.map((c) => ({ c, n: placed.filter((o) => clash(c, o, true)).length })).sort((a, b) => a.n - b.n)[0].c;
+        for (let k = placed.length - 1; k >= 0; k--) if (clash(best, placed[k], true)) placed.splice(k, 1);
+        placed.push(best);
+      }
     }
+    // Primero todas las líneas y después todos los textos (con su fondo),
+    // así ninguna línea queda dibujada encima de un número.
+    const out = [
+      ...placed.map((c) => `<line x1="${c.from[0].toFixed(1)}" y1="${c.from[1].toFixed(1)}" x2="${c.to[0].toFixed(1)}" y2="${c.to[1].toFixed(1)}" stroke-width="1" style="stroke:${c.i === sel ? 'var(--t2)' : 'var(--t3)'};opacity:${c.i === sel ? 0.8 : 0.5}"/>`),
+      ...placed.map((c) => `<text x="${c.cx.toFixed(1)}" y="${c.ly.toFixed(1)}" text-anchor="middle" class="g-halo" style="fill:${c.i === sel ? 'var(--t1)' : 'var(--t2)'};font-weight:${c.i === sel ? 600 : 500}">${esc(c.txt)}</text>`),
+    ];
     const every = Math.ceil(rows.length / 7);
     const months = rows.map((r, i) => (i === sel || (i - sel) % every === 0
       ? `<text x="${pts[i][0].toFixed(1)}" y="${H - 6}" text-anchor="middle"${i === sel ? ' class="g-sel"' : ''}>${esc(r.label)}</text>` : '')).join('');
