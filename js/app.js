@@ -4570,6 +4570,13 @@
     }));
   }
 
+  // Qué es cada cosa del calendario: color e ícono (los mismos en los
+  // puntos de cada día, la leyenda y la lista de abajo).
+  const CAL_KIND = {
+    gasto: { label: 'Gasto fijo', color: 'var(--c-casa)', icon: 'repeat' },
+    ingreso: { label: 'Ingreso fijo', color: 'var(--brand)', icon: 'in' },
+    card: { label: 'Vence tarjeta', color: 'var(--c-auto)', icon: 'card' },
+  };
   function vCalendario(el) {
     const mk = ui.month;
     // Si el mes se cambió desde otra hoja (Movimientos/Categorías comparten
@@ -4622,7 +4629,7 @@
       const ds = `${y}-${pad(mo)}-${pad(d)}`;
       const evs = byDay.get(ds) || [];
       const kinds = [...new Set(evs.map((e) => e.kind))].slice(0, 3);
-      const dots = kinds.map((k) => `<i class="dot-${k}"></i>`).join('');
+      const dots = kinds.map((k) => `<i style="background:${CAL_KIND[k].color}"></i>`).join('');
       // Clickeable si hay eventos previstos (agenda) O movimientos reales
       // cargados ese día — antes solo lo primero, así que un día con
       // gastos/ingresos pero sin gasto fijo/tarjeta no abría nada al tocarlo.
@@ -4631,14 +4638,12 @@
       if (clickable) cls.push('has');
       if (ds === today) cls.push('today');
       if (ds === ui.calSel) cls.push('sel');
-      // Gradiente de fondo según lo gastado ese día (relativo al día de más
-      // gasto del mes que se está viendo): a la selección no se le toca el
-      // fondo para que se siga viendo resaltada con su propio color.
+      // Fondo según lo gastado ese día, en 4 niveles de un mismo tono
+      // (relativo al día de más gasto del mes que se está viendo).
       const spend = daySpend.get(ds) || 0;
-      const heatStyle = (spend > 0 && maxDaySpend > 0 && ds !== ui.calSel)
-        ? ` style="background:color-mix(in srgb, var(--expense-series) ${10 + Math.round((spend / maxDaySpend) * 60)}%, transparent)"`
-        : '';
-      return `<div class="${cls.join(' ')}"${heatStyle} ${clickable ? `data-day="${ds}"` : ''}>
+      const level = spend > 0 && maxDaySpend > 0 ? Math.min(4, 1 + Math.floor((spend / maxDaySpend) * 4)) : 0;
+      if (level) cls.push(`heat${level}`);
+      return `<div class="${cls.join(' ')}" ${clickable ? `data-day="${ds}"` : ''}>
         <span class="cal-num">${d}</span>
         <span class="cal-dots">${dots}</span>
       </div>`;
@@ -4653,7 +4658,7 @@
     let agendaHTML = '';
     let lastDay = '';
     if (!agendaEvents.length) {
-      agendaHTML = '<div class="empty">No hay pagos ni ingresos previstos este mes. Cargá tus gastos fijos y tarjetas en “Planificar” y “Tarjetas”.</div>';
+      agendaHTML = '<div class="empty">No hay pagos ni ingresos previstos este mes. Cargá tus fijos en Más › Fijos y el cierre de tus tarjetas en Cuentas.</div>';
     } else {
       for (const ev of agendaEvents) {
         if (ev.date !== lastDay) {
@@ -4662,43 +4667,40 @@
           agendaHTML += `<div class="agenda-day">${esc(new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(dd))}</div>`;
         }
         const v = eventAmountDisp(ev);
+        const K = CAL_KIND[ev.kind];
         const amountTxt = ev.kind === 'card'
-          ? fmtDisp(v)
+          ? '− ' + fmtDisp(v)
           : (ev.kind === 'ingreso' ? '+ ' : '− ') + fmtMoney(ev.amount, ev.currency);
-        const amountCls = ev.kind === 'ingreso' ? 'amount-in' : '';
         agendaHTML += `<div class="agenda-item">
-          <div class="agenda-icon">${ev.icon}</div>
+          <span class="cic" style="--c:${K.color}">${spriteIcon(K.icon)}</span>
           <div class="agenda-body">
             <div class="agenda-name">${esc(ev.title)}</div>
             <div class="agenda-sub">${esc(ev.sub)}</div>
           </div>
-          <div class="agenda-amount ${amountCls}">${amountTxt}</div>
+          <div class="agenda-amount num ${ev.kind === 'ingreso' ? 'pos' : ''}">${amountTxt}</div>
         </div>`;
       }
     }
 
     el.innerHTML = `
-      <div class="card">
-        <h2 class="card-title"><span>Calendario</span></h2>
+      <section class="k-card cal-card">
         <div class="cal-grid">
-          ${dow.map((d) => `<div class="cal-dow">${d}</div>`).join('')}
+          ${dow.map((d) => `<div class="cal-dow">${d.slice(0, 2)}</div>`).join('')}
           ${cells.map(cellHTML).join('')}
         </div>
-        <div class="chart-legend" style="margin-top:12px">
-          <span><span class="key" style="background:var(--expense-series)"></span>Gasto fijo</span>
-          <span><span class="key" style="background:var(--income-series)"></span>Ingreso fijo</span>
-          <span><span class="key" style="background:var(--accent)"></span>Tarjeta</span>
+        <div class="cal-legend">
+          ${['gasto', 'ingreso', 'card'].map((k) => `<span><i style="background:${CAL_KIND[k].color}"></i>${CAL_KIND[k].label}</span>`).join('')}
+          ${maxDaySpend > 0 ? `<span class="cal-heat-key">Gasto del día <b class="heat1"></b><b class="heat2"></b><b class="heat3"></b><b class="heat4"></b></span>` : ''}
         </div>
-        ${maxDaySpend > 0 ? '<div class="hint" style="margin-top:6px">El fondo de cada día se pinta más oscuro cuanto más gastaste esa fecha.</div>' : ''}
-      </div>
+      </section>
 
-      <div class="card">
-        <h2 class="card-title">
-          <span>${ui.calSel ? 'Día seleccionado' : 'Agenda del mes'}</span>
-          ${ui.calSel ? '<button class="link-btn" data-calall>ver todo el mes</button>' : ''}
-        </h2>
+      <section class="k-card">
+        <div class="k-card-h">
+          <h2>${ui.calSel ? esc(new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(parseDate(ui.calSel))) : 'Lo que viene este mes'}</h2>
+          ${ui.calSel ? '<button type="button" class="link" data-calall>Todo el mes</button>' : ''}
+        </div>
         <div class="agenda">${agendaHTML}</div>
-      </div>`;
+      </section>`;
 
     $$('[data-day]', el).forEach((c) => c.addEventListener('click', () => {
       const ds = c.dataset.day;

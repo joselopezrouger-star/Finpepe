@@ -2509,3 +2509,41 @@ body[data-grp="mas"] .topbar-inner, body[data-grp="cuentas"] .topbar-inner { min
 /* El texto de ayuda de cada gráfico de Ahorros reserva dos líneas, así la
    tarjeta no cambia de alto al pasar de uno a otro. */
 #sav-chart-hint { min-height: 2.9em; }
+
+/* ---------- Calendario (rediseño) ----------
+   Días con el fondo en 4 niveles de un mismo tono según lo gastado, hoy en
+   un círculo verde, el día elegido con un anillo, y puntos de color por
+   lo previsto (fijos, ingresos, vencimientos de tarjeta). */
+.cal-card { padding-bottom: 14px; }
+.cal-card .cal-grid { gap: 4px; }
+.cal-card .cal-dow { color: var(--t3); font: 600 11px/1 var(--f-text); letter-spacing: .04em; padding-bottom: 6px; }
+.cal-card .cal-cell { border: 0; border-radius: 12px; color: var(--t1); font: 500 14px/1 var(--f-num); gap: 3px; justify-content: center; }
+.cal-card .cal-cell.has:hover { background: var(--s2); }
+.cal-card .cal-cell.heat1 { background: color-mix(in srgb, var(--c-comida) 14%, transparent); }
+.cal-card .cal-cell.heat2 { background: color-mix(in srgb, var(--c-comida) 26%, transparent); }
+.cal-card .cal-cell.heat3 { background: color-mix(in srgb, var(--c-comida) 40%, transparent); }
+.cal-card .cal-cell.heat4 { background: color-mix(in srgb, var(--c-comida) 56%, transparent); }
+.cal-card .cal-cell.today > .cal-num { background: var(--brand); color: var(--on-brand); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
+.cal-card .cal-cell.sel { box-shadow: inset 0 0 0 2px var(--t1); background-clip: padding-box; }
+.cal-card .cal-dots { margin-top: 0; height: 5px; gap: 3px; }
+.cal-card .cal-dots i { width: 5px; height: 5px; border-radius: 50%; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12px; color: var(--t2); align-items: center; }
+.cal-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.cal-heat-key { display: inline-flex; align-items: center; gap: 3px; }
+.cal-heat-key b { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+.cal-heat-key b:first-of-type { margin-left: 4px; }
+.cal-heat-key .heat1 { background: color-mix(in srgb, var(--c-comida) 14%, transparent); }
+.cal-heat-key .heat2 { background: color-mix(in srgb, var(--c-comida) 26%, transparent); }
+.cal-heat-key .heat3 { background: color-mix(in srgb, var(--c-comida) 40%, transparent); }
+.cal-heat-key .heat4 { background: color-mix(in srgb, var(--c-comida) 56%, transparent); }
+.k-card .k-card-h h2::first-letter { text-transform: uppercase; }
+.k-card .agenda { margin-top: 4px; gap: 0; }
+.k-card .agenda-day { font: 600 11px/1.2 var(--f-text); letter-spacing: .06em; text-transform: uppercase; color: var(--t3); margin: 14px 0 4px; }
+.k-card .agenda-day:first-child { margin-top: 4px; }
+.k-card .agenda-item { border: 0; border-radius: 0; background: transparent; padding: 8px 0; gap: 12px; }
+.k-card .agenda-item + .agenda-item { border-top: 1px solid var(--line); }
+.k-card .agenda-item .cic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+.k-card .agenda-name { font: 600 15px/1.25 var(--f-text); color: var(--t1); }
+.k-card .agenda-sub { font-size: 12.5px; color: var(--t2); }
+.k-card .agenda-amount { font-size: 15px; font-weight: 600; color: var(--t1); }
+.k-card .agenda-amount.pos { color: var(--brand-text); }
