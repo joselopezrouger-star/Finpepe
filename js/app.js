@@ -2505,17 +2505,10 @@
     // mes en curso, con el día de hoy incluido (el último día no divide por 0).
     const perDayLeft = isCurMonth ? balance / Math.max(1, daysLeft) : null;
 
-    // Variaciones de los tres números de abajo, solo en % (sin "MoM"). Con
-    // el mes en curso, contra el mismo día del mes anterior.
-    // Las dos puntas al mismo día: lo del mes actual que ya pasó (sin las
-    // cuotas y fijos que todavía no llegaron, que sí suman en el total de
-    // arriba) contra lo del mes anterior hasta ese mismo día.
-    const inPrevSameDay = inPrev.filter((t) => upToToday(paymentDateOf(t)));
-    const inMonthToDate = inMonth.filter((t) => upToToday(paymentDateOf(t)));
-    const incPrevCmp = sumDisp(inPrevSameDay.filter((t) => t.type === 'ingreso'));
-    const expPrevCmp = sumDisp(inPrevSameDay.filter((t) => t.type === 'gasto'));
-    const incCurCmp = sumDisp(inMonthToDate.filter((t) => t.type === 'ingreso'));
-    const expCurCmp = sumDisp(inMonthToDate.filter((t) => t.type === 'gasto'));
+    // Variaciones de los tres números de abajo, solo en % (sin "MoM"). La
+    // variación es la del número que se ve arriba (todo lo del mes,
+    // también las cuotas y fijos que ya sabés que vienen aunque no haya
+    // llegado el día) contra el total del mes anterior completo.
     const deltaHTML = (cur, prev, upIsGood) => {
       if (!(prev > 0)) return '<span class="dl">&nbsp;</span>';
       const diff = cur - prev;
@@ -2671,8 +2664,8 @@
             </div>
           </div>
           <div class="minis">
-            <div role="button" tabindex="0" data-mini="ingreso"><span class="lbl"><i class="dotic" style="--c:var(--brand)">${spriteIcon('in')}</i>Ingresos</span><span class="num val">${money(inc)}</span>${isCurMonth ? deltaHTML(incCurCmp, incPrevCmp, true) : deltaHTML(inc, incPrev, true)}</div>
-            <div role="button" tabindex="0" data-mini="gasto"><span class="lbl"><i class="dotic" style="--c:var(--neg)">${spriteIcon('in').replace('class="ic"', 'class="ic flip"')}</i>Gastos</span><span class="num val">${money(exp)}</span>${isCurMonth ? deltaHTML(expCurCmp, expPrevCmp, false) : deltaHTML(exp, expPrev, false)}</div>
+            <div role="button" tabindex="0" data-mini="ingreso"><span class="lbl"><i class="dotic" style="--c:var(--brand)">${spriteIcon('in')}</i>Ingresos</span><span class="num val">${money(inc)}</span>${deltaHTML(inc, incPrev, true)}</div>
+            <div role="button" tabindex="0" data-mini="gasto"><span class="lbl"><i class="dotic" style="--c:var(--neg)">${spriteIcon('in').replace('class="ic"', 'class="ic flip"')}</i>Gastos</span><span class="num val">${money(exp)}</span>${deltaHTML(exp, expPrev, false)}</div>
             <div role="button" tabindex="0" data-mini="ahorro"><span class="lbl"><i class="dotic" style="--c:var(--c-super)">${spriteIcon('dollar')}</i>Ahorros</span><span class="num val ${savingsMonth < 0 ? 'neg' : ''}">${money(savingsMonth)}</span>${savDeltaHTML}</div>
           </div>
         </div>
@@ -3281,8 +3274,8 @@
       const months = [];
       for (let i = 3; i >= 0; i--) months.push(addMonthsKey(mk, -i));
       const rows = months.map((m) => {
-        const cut = m === curMonth() ? todayDay : 99;
-        const list = txs.filter((t) => monthKeyOf(t.date) === m && Number(t.date.slice(8, 10)) <= cut);
+        // Todo lo cargado del mes (también lo que vence más adelante).
+        const list = txs.filter((t) => monthKeyOf(t.date) === m);
         return { label: monthShortLabel(m).toLowerCase(), inc: sumDisp(list.filter((t) => t.type === 'ingreso')), exp: sumDisp(list.filter((t) => t.type === 'gasto')) };
       });
       const first = rows.findIndex((r) => r.inc > 0 || r.exp > 0);
@@ -3357,14 +3350,18 @@
     /* ---------- Gastos / Ingresos ---------- */
     const isInc = kind === 'ingreso';
     const type = isInc ? 'ingreso' : 'gasto';
-    const breakdown = categoryBreakdown(inMonth.filter((t) => t.type === type)).filter((g) => g.total > 0);
+    // Todo lo del mes que ya está cargado, también las cuotas y fijos que
+    // vencen más adelante: es lo que se compara contra el mes anterior.
+    const monthKnown = txs.filter((t) => monthKeyOf(t.date) === mk);
+    const aheadTotal = isCurrent ? sumDisp(monthKnown.filter((t) => t.type === type && Number(t.date.slice(8, 10)) > todayDay)) : 0;
+    const breakdown = categoryBreakdown(monthKnown.filter((t) => t.type === type)).filter((g) => g.total > 0);
     // Acá la variación va contra el mes anterior COMPLETO.
     const prevBreakdown = categoryBreakdown(inPrevFull.filter((t) => t.type === type));
     const prevTotals = new Map(prevBreakdown.map((g) => [g.id, g.total]));
     const prevSubTotals = new Map(prevBreakdown.flatMap((g) => g.subs.map((sb) => [sb.id, sb.value])));
     const total = breakdown.reduce((a, g) => a + g.total, 0);
-    const incMonth = sumDisp(inMonth.filter((t) => t.type === 'ingreso'));
-    const expMonth = sumDisp(inMonth.filter((t) => t.type === 'gasto'));
+    const incMonth = sumDisp(monthKnown.filter((t) => t.type === 'ingreso'));
+    const expMonth = sumDisp(monthKnown.filter((t) => t.type === 'gasto'));
     const pctOf = (v) => (total > 0 ? Math.round((v / total) * 100) : 0);
     // Dona: hasta 5 categorías + "Otras".
     const DONUT_MAX = 5;
@@ -3451,7 +3448,7 @@
     // Por medio de pago (solo gastos), en grises: son cuentas, no categorías.
     const byMethod = new Map();
     if (!isInc) {
-      for (const t of inMonth) {
+      for (const t of monthKnown) {
         if (t.type !== 'gasto') continue;
         const v = txDispAmount(t);
         if (v == null) continue;
@@ -3480,7 +3477,7 @@
     ];
     const kindRows = isInc ? [] : KINDS.map((k) => ({
       ...k,
-      value: sumDisp(inMonth.filter((t) => t.type === 'gasto' && k.test(t))),
+      value: sumDisp(monthKnown.filter((t) => t.type === 'gasto' && k.test(t))),
       prev: sumDisp(inPrevFull.filter((t) => t.type === 'gasto' && k.test(t))),
     }));
     const kindTotal = kindRows.reduce((a, r) => a + r.value, 0);
@@ -3504,8 +3501,7 @@
     const evoId = evoOpt ? evoOpt.id : null;
     const evoMode = ['nom', 'gastos', 'ingresos'].includes(ui.catEvoMode) ? ui.catEvoMode : 'nom';
     const evoRows = evoOpt ? evoMonths.map((m) => {
-      const cut = m === curMonth() ? todayDay : 99;
-      const list = txs.filter((t) => monthKeyOf(t.date) === m && Number(t.date.slice(8, 10)) <= cut);
+      const list = txs.filter((t) => monthKeyOf(t.date) === m);
       const v = sumDisp(list.filter((t) => t.type === type && (evoOpt.sub ? t.categoryId === evoOpt.id : topCategoryOf(t.categoryId) === evoOpt.id)));
       let value = v;
       if (evoMode !== 'nom') {
@@ -3523,7 +3519,7 @@
         <div class="donut-text">
           <span class="ovl">${isInc ? 'Entró' : 'Gastado'} en ${esc(monthName(mk))}</span>
           <span class="num money donut-total">${esc(fmtPlain(total))}</span>
-          <span class="t2">${isCurrent ? `Hasta hoy, día ${todayDay}. ` : ''}${breakdown.length === 1 ? 'Una categoría' : `${breakdown.length} categorías`} con ${isInc ? 'ingresos' : 'gastos'}.</span>
+          <span class="t2">${breakdown.length === 1 ? 'Una categoría' : `${breakdown.length} categorías`} con ${isInc ? 'ingresos' : 'gastos'}.${aheadTotal >= 1 ? ` Incluye <span class="money">${esc(fmtPlain(aheadTotal))}</span> que ${isInc ? 'entran' : 'vencen'} más adelante.` : ''}</span>
         </div>
       </section>
 
@@ -3642,7 +3638,7 @@
     const rows = [];
     for (let i = 0; i < 12; i++) {
       const m = addMonthsKey(mk, -i);
-      const list = txs.filter((t) => monthKeyOf(t.date) === m && (m !== curMonth() || t.date <= todayStr()));
+      const list = txs.filter((t) => monthKeyOf(t.date) === m);
       const inc = sumDisp(list.filter((t) => t.type === 'ingreso'));
       const exp = sumDisp(list.filter((t) => t.type === 'gasto'));
       if (inc > 0 || exp > 0) rows.push({ m, inc, exp });
@@ -5378,7 +5374,7 @@
     const pts = rows.map((r, i) => [x(i), y(r.total)]);
     const sel = Math.max(0, rows.findIndex((r) => r.isCur));
     const colW = rows.length > 1 ? (x1 - x0) / (rows.length - 1) : 40;
-    const band = `<rect x="${(pts[sel][0] - Math.min(18, colW / 2)).toFixed(1)}" y="${yTop - 18}" width="${Math.min(36, colW).toFixed(1)}" height="${yBase - yTop + 34}" rx="8" style="fill:var(--t1);opacity:.06"/>`;
+    const band = `<rect x="${(pts[sel][0] - Math.min(16, colW / 2)).toFixed(1)}" y="${yTop - 16}" width="${Math.min(32, colW).toFixed(1)}" height="${yBase - yTop + 32}" rx="8" style="fill:var(--t1);opacity:.05"/>`;
     // Montos: el actual siempre; el resto, donde cambia el total y si no
     // queda pegado a otro rótulo.
     const show = new Set([sel]);
@@ -5389,15 +5385,20 @@
       placed.push(i);
       return true;
     });
-    const labels = labelIdx.map((i) => `<text x="${pts[i][0].toFixed(1)}" y="${(pts[i][1] - 11).toFixed(1)}" text-anchor="middle" class="g-lab g-halo"${i === sel ? ' style="fill:var(--t1);font-weight:700"' : ''}>${esc(chartMoney(rows[i].total))}</text>`).join('');
+    // Rótulos livianos (el del mes actual, apenas más marcado).
+    // En las puntas, alineados hacia adentro para que no se corten.
+    const anchorOf = (px) => (px < 50 ? 'start' : px > W - 50 ? 'end' : 'middle');
+    const labels = labelIdx.map((i) => `<text x="${(anchorOf(pts[i][0]) === 'start' ? pts[i][0] - 6 : anchorOf(pts[i][0]) === 'end' ? pts[i][0] + 6 : pts[i][0]).toFixed(1)}" y="${(pts[i][1] - 9).toFixed(1)}" text-anchor="${anchorOf(pts[i][0])}" class="g-halo"${i === sel ? ' style="fill:var(--t1);font-weight:600"' : ' style="fill:var(--t2)"'}>${esc(chartMoney(rows[i].total))}</text>`).join('');
     const every = Math.ceil(rows.length / 7);
     const months = rows.map((r, i) => (i === sel || (i - sel) % every === 0
       ? `<text x="${pts[i][0].toFixed(1)}" y="${H - 8}" text-anchor="middle"${i === sel ? ' class="g-sel"' : ''}>${esc(r.label)}</text>` : '')).join('');
     return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(`Cuotas por mes: ${rows.map((r) => `${r.label} ${hideAmounts ? '' : fmtPlain(r.total)}`).join(', ')}`)}">
       ${band}
       ${gridLines(ticks, y, 8, 312)}
-      ${pts.length > 1 ? `<path d="${G.lineaSuave(pts)}" fill="none" stroke-width="2.5" stroke-linecap="round" style="stroke:${color}"/>` : ''}
-      ${pts.map((p, i) => G.marcador(p[0], p[1], color, i === sel)).join('')}
+      ${pts.length > 1 ? `<path d="${G.lineaSuave(pts)}" fill="none" stroke-width="2" stroke-linecap="round" style="stroke:${color}"/>` : ''}
+      ${pts.map((p, i) => (i === sel
+        ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.6" stroke-width="2" style="fill:${color};stroke:var(--s1)"/>`
+        : `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" stroke-width="1.6" style="fill:var(--s1);stroke:${color}"/>`)).join('')}
       ${labels}${months}
     </svg>`;
   }
