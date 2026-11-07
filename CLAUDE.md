@@ -14,6 +14,6 @@ Referencia completa: `docs/rediseno/referencia.html` y capturas en `docs/redisen
 - **Pop-ups:** siempre como panel inferior (`.sheet`) con agarradera, cierre con la X o deslizando hacia abajo, y un solo botón primario.
 - **Destructivo:** borrar y editar detrás de un menú "⋯" o deslizando la fila. Al borrar, aviso con "Deshacer" (5 s) en vez de un diálogo de confirmación.
 - **Gráficos:** sin 3D. Evolución en el tiempo con líneas suaves y marcadores, usando una curva que no se pase de los datos (`lineaSuave` de `graficos.js`). Acumulados con escalones. Ejes de 11px, 3 a 5 líneas de grilla y el último punto destacado.
-- **Comparaciones:** contra el mismo día del mes anterior, no contra el mes completo.
+- **Comparaciones:** el mes actual cuenta todo lo que ya está cargado (también cuotas y fijos que vencen más adelante) y se compara contra el mes anterior completo. Solo el gráfico de gastos día a día compara contra el mismo día del mes anterior.
 - **Textos:** español rioplatense, de vos, cortos y concretos.
 - **Safe areas:** respetar `env(safe-area-inset-*)`; la app se usa como PWA en iPhone.
