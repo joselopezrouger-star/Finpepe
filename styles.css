@@ -1672,23 +1672,29 @@ table.data td.col-strong, table.data th.col-strong { font-weight: 700; }
 .insight-go { margin-left: auto; padding-left: 6px; color: var(--muted); font-weight: 700; align-self: center; }
 
 /* ---------- Ahorros ---------- */
-/* Bloque principal con el mismo degradé verde del encabezado de Inicio. */
+/* Bloque principal: tarjeta neutra como la de Inicio (sin degradé verde),
+   el total grande y dos recuadros con el mes. */
 .card.sav-hero {
-  background: linear-gradient(135deg, var(--brand), var(--brand-press));
-  border: 0; color: var(--on-brand);
-  display: grid; gap: 4px; padding: 16px 18px 14px;
+  background: var(--s1); border: 0; color: var(--t1); box-shadow: var(--card-shadow);
+  border-radius: 22px; display: grid; gap: 2px; padding: 18px 18px 16px;
 }
-.sav-hero-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.85; }
-.sav-hero-total { font: 800 32px/1.1 var(--font-heading); letter-spacing: -0.01em; }
-.sav-hero-conv { font-size: 13px; opacity: 0.85; }
-.sav-hero-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.sav-hero-stats > div { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--on-brand) 11%, transparent); min-width: 0; }
-.sav-hero-stats span { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 650; }
-.sav-hero-stats b { font: 700 15px var(--font-heading); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sav-mix { display: flex; height: 10px; margin-top: 12px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--on-brand) 16%, transparent); gap: 2px; }
+.sav-hero-label { font: 600 11px/1.2 var(--f-text); letter-spacing: 0.06em; text-transform: uppercase; color: var(--t2); }
+.sav-hero-total { font: 600 34px/1.1 var(--f-num); letter-spacing: -0.015em; color: var(--t1); font-variant-numeric: tabular-nums; }
+.sav-hero-conv { font-size: 13px; color: var(--t3); font-variant-numeric: tabular-nums; }
+.sav-hero-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.sav-hero-stats > div { display: grid; gap: 4px; padding: 10px 12px; border-radius: 14px; background: var(--s2); min-width: 0; }
+[data-theme="light"] .sav-hero-stats > div { background: var(--bg); }
+.sav-hero-stats span { font: 500 12.5px/1 var(--f-text); color: var(--t2); }
+.sav-hero-stats b { font: 600 16px/1.2 var(--f-num); color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.sav-hero-stats b.pos { color: var(--brand-text); }
+.sav-hero-stats b.neg { color: var(--neg); }
+.sav-mix { display: flex; height: 8px; margin-top: 14px; border-radius: 999px; overflow: hidden; background: var(--s2); gap: 2px; }
 .sav-mix > span { display: block; height: 100%; }
-.sav-mix-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 11.5px; opacity: 0.95; }
-.sav-mix-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--on-brand) 56%, transparent); }
+.sav-mix-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12px; color: var(--t2); }
+.sav-mix-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+/* Los tres gráficos (tasa, aportes, acumulado) ocupan siempre el mismo alto. */
+.sav-chart-box { aspect-ratio: 320 / 140; }
+.sav-chart-box:has(> .empty) { aspect-ratio: auto; }
 
 /* Lista de cuentas: una fila por cuenta, con su color, saldo y meta. */
 .sav-list { display: grid; gap: 8px; }
@@ -2482,3 +2488,24 @@ body[data-grp="mas"] .topbar-inner, body[data-grp="cuentas"] .topbar-inner { min
 .widget-steps li::marker { color: var(--t3); font-weight: 600; }
 .widget-copy-msg { min-height: 20px; margin: 12px 0 0; text-align: center; color: var(--brand-text); font-weight: 600; }
 .widget-copy-msg a { color: inherit; }
+
+/* Categorías › Gastos: fijos, cuotas y del día a día */
+.kind-lines { display: grid; margin-top: 10px; }
+.kind-line {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 52px;
+  padding: 6px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.kind-line + .kind-line { border-top: 1px solid var(--line); }
+.kind-line > i { width: 10px; height: 10px; border-radius: 50%; }
+.kind-main { display: grid; gap: 2px; min-width: 0; }
+.kind-main b { font: 600 15px/1.2 var(--f-text); }
+.kind-main span { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kind-amt { display: grid; justify-items: end; gap: 2px; }
+.kind-amt .num { font-size: 15px; font-weight: 600; }
+.kind-var { font: 600 11.5px/1 var(--f-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kind-var.bad { color: var(--neg); }
+.kind-var.good { color: var(--brand-text); }
+.kind-var.flat { color: var(--t3); }
+/* El texto de ayuda de cada gráfico de Ahorros reserva dos líneas, así la
+   tarjeta no cambia de alto al pasar de uno a otro. */
+#sav-chart-hint { min-height: 2.9em; }
