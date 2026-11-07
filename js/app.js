@@ -2366,6 +2366,9 @@
       const gastoCal = inMonthCal.filter((t) => t.type === 'gasto');
       const gastoPrevCal = inPrevCal.filter((t) => t.type === 'gasto');
       const gastoPrevSameDay = gastoPrevCal.filter((t) => upToToday(t.date));
+      // Para comparar contra el mismo día del mes anterior: solo lo que ya
+      // pasó este mes (sin cuotas ni fijos con fecha más adelante).
+      const gastoCalToDate = gastoCal.filter((t) => upToToday(t.date));
 
       if (balanceA < 0) {
         out.push({ tone: 'neg', severity: 6, icon: 'down', go: 'movimientos',
@@ -2412,7 +2415,7 @@
         }
         return m;
       };
-      const nowByCat = byCatA(gastoCal);
+      const nowByCat = byCatA(gastoCalToDate);
       const prevByCat = byCatA(gastoPrevSameDay);
       let worstCat = null;
       for (const [id, val] of nowByCat.entries()) {
@@ -2470,9 +2473,9 @@
       // Si no hay nada que avisar, una línea buena contra el mismo día del
       // mes anterior.
       const expPrevSameDayA = sumA(gastoPrevSameDay);
-      if (!out.some((x) => x.tone === 'neg' || x.tone === 'warn') && expPrevSameDayA > 0 && sumA(gastoCal) < expPrevSameDayA * 0.9) {
+      if (!out.some((x) => x.tone === 'neg' || x.tone === 'warn') && expPrevSameDayA > 0 && sumA(gastoCalToDate) < expPrevSameDayA * 0.9) {
         out.push({ tone: 'good', severity: 1.5, icon: 'check', go: 'categorias',
-          title: `Gastaste ${Math.round((1 - sumA(gastoCal) / expPrevSameDayA) * 100)}% menos que en ${prevName}`,
+          title: `Gastaste ${Math.round((1 - sumA(gastoCalToDate) / expPrevSameDayA) * 100)}% menos que en ${prevName}`,
           sub: `Al día ${todayDay} de cada mes` });
       }
       return out.sort((a, b) => b.severity - a.severity).slice(0, 3);
@@ -2504,9 +2507,15 @@
 
     // Variaciones de los tres números de abajo, solo en % (sin "MoM"). Con
     // el mes en curso, contra el mismo día del mes anterior.
+    // Las dos puntas al mismo día: lo del mes actual que ya pasó (sin las
+    // cuotas y fijos que todavía no llegaron, que sí suman en el total de
+    // arriba) contra lo del mes anterior hasta ese mismo día.
     const inPrevSameDay = inPrev.filter((t) => upToToday(paymentDateOf(t)));
+    const inMonthToDate = inMonth.filter((t) => upToToday(paymentDateOf(t)));
     const incPrevCmp = sumDisp(inPrevSameDay.filter((t) => t.type === 'ingreso'));
     const expPrevCmp = sumDisp(inPrevSameDay.filter((t) => t.type === 'gasto'));
+    const incCurCmp = sumDisp(inMonthToDate.filter((t) => t.type === 'ingreso'));
+    const expCurCmp = sumDisp(inMonthToDate.filter((t) => t.type === 'gasto'));
     const deltaHTML = (cur, prev, upIsGood) => {
       if (!(prev > 0)) return '<span class="dl">&nbsp;</span>';
       const diff = cur - prev;
@@ -2662,8 +2671,8 @@
             </div>
           </div>
           <div class="minis">
-            <div role="button" tabindex="0" data-mini="ingreso"><span class="lbl"><i class="dotic" style="--c:var(--brand)">${spriteIcon('in')}</i>Ingresos</span><span class="num val">${money(inc)}</span>${deltaHTML(inc, isCurMonth ? incPrevCmp : incPrev, true)}</div>
-            <div role="button" tabindex="0" data-mini="gasto"><span class="lbl"><i class="dotic" style="--c:var(--neg)">${spriteIcon('in').replace('class="ic"', 'class="ic flip"')}</i>Gastos</span><span class="num val">${money(exp)}</span>${deltaHTML(exp, isCurMonth ? expPrevCmp : expPrev, false)}</div>
+            <div role="button" tabindex="0" data-mini="ingreso"><span class="lbl"><i class="dotic" style="--c:var(--brand)">${spriteIcon('in')}</i>Ingresos</span><span class="num val">${money(inc)}</span>${isCurMonth ? deltaHTML(incCurCmp, incPrevCmp, true) : deltaHTML(inc, incPrev, true)}</div>
+            <div role="button" tabindex="0" data-mini="gasto"><span class="lbl"><i class="dotic" style="--c:var(--neg)">${spriteIcon('in').replace('class="ic"', 'class="ic flip"')}</i>Gastos</span><span class="num val">${money(exp)}</span>${isCurMonth ? deltaHTML(expCurCmp, expPrevCmp, false) : deltaHTML(exp, expPrev, false)}</div>
             <div role="button" tabindex="0" data-mini="ahorro"><span class="lbl"><i class="dotic" style="--c:var(--c-super)">${spriteIcon('dollar')}</i>Ahorros</span><span class="num val ${savingsMonth < 0 ? 'neg' : ''}">${money(savingsMonth)}</span>${savDeltaHTML}</div>
           </div>
         </div>
