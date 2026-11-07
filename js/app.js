@@ -5363,10 +5363,11 @@
   // donde cambia el total (y en el actual), sin pisarse.
   function installmentsChartSvg(rows) {
     const G = Charts.g;
-    const W = 320, H = 150, x0 = 22, x1 = 298, yTop = 34, yBase = 118;
+    // Arriba, una franja con hasta 3 filas de rótulos; abajo, el gráfico.
+    const W = 320, H = 190, x0 = 22, x1 = 298, yTop = 66, yBase = 154;
     const color = 'var(--c-auto)';
     const max = Math.max(1, ...rows.map((r) => r.total));
-    const { top, step } = niceScale(max * 1.1, 3);
+    const { top, step } = niceScale(max * 1.05, 3);
     const ticks = [];
     for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
     const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
@@ -5374,42 +5375,70 @@
     const pts = rows.map((r, i) => [x(i), y(r.total)]);
     const sel = Math.max(0, rows.findIndex((r) => r.isCur));
     const colW = rows.length > 1 ? (x1 - x0) / (rows.length - 1) : 40;
-    const band = `<rect x="${(pts[sel][0] - Math.min(16, colW / 2)).toFixed(1)}" y="${yTop - 16}" width="${Math.min(32, colW).toFixed(1)}" height="${yBase - yTop + 32}" rx="8" style="fill:var(--t1);opacity:.05"/>`;
-    // Montos solo en los meses que importan: el actual, el que viene, el
-    // más alto, el último y el primero. Cada rótulo prueba arriba del
-    // punto, más arriba o abajo, y va en el primer lugar donde no pisa a
-    // otro (si no entra en ninguno, ese mes queda sin rótulo).
-    const order = [sel, sel + 1, rows.reduce((m, r, i) => (r.total > rows[m].total ? i : m), 0), rows.length - 1, 0];
-    const anchorOf = (px) => (px < 50 ? 'start' : px > W - 50 ? 'end' : 'middle');
-    const boxes = [];
-    const labels = [];
-    for (const i of [...new Set(order)].filter((k) => k >= 0 && k < rows.length)) {
+    const band = `<rect x="${(pts[sel][0] - Math.min(16, colW / 2)).toFixed(1)}" y="6" width="${Math.min(32, colW).toFixed(1)}" height="${yBase - 6 + 14}" rx="8" style="fill:var(--t1);opacity:.05"/>`;
+    // Rótulos en el mes actual y en cada mes en que cambia el total, un
+    // poco arriba de su punto y unidos a él con una línea fina. Se ubican
+    // primero el mes actual y después los cambios más grandes; cada uno
+    // sube (o se corre apenas al costado) hasta un lugar donde no pisa la
+    // curva ni a otro rótulo, y su línea no cruza otra. Si no entra, se omite.
+    const delta = (i) => (i === 0 ? 0 : Math.abs(rows[i].total - rows[i - 1].total));
+    const want = [sel, ...rows.map((r, i) => i)
+      .filter((i) => i !== sel && (i === 0 || rows[i].total !== rows[i - 1].total))
+      .sort((a, b) => delta(b) - delta(a) || a - b)];
+    const boxes = [], leaders = [], out = [];
+    // ¿El segmento a–b pasa por el rectángulo? (muestreo: alcanza para esto)
+    const segHitsBox = (a, b, r) => {
+      for (let k = 0; k <= 12; k++) {
+        const t = k / 12, qx = a[0] + (b[0] - a[0]) * t, qy = a[1] + (b[1] - a[1]) * t;
+        if (qx > r.x0 && qx < r.x1 && qy > r.y0 && qy < r.y1) return true;
+      }
+      return false;
+    };
+    const segsCross = (p1, p2, p3, p4) => {
+      const d = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      return d(p1, p2, p3) * d(p1, p2, p4) < 0 && d(p3, p4, p1) * d(p3, p4, p2) < 0;
+    };
+    // La curva, como tramos rectos entre meses (alcanza para no pisarla).
+    const curve = pts.slice(1).map((p, k) => [pts[k], p]);
+    for (const i of want) {
       const txt = chartMoney(rows[i].total);
-      const w = txt.length * 6.2;
+      const w = txt.length * 6.1;
       const [px, py] = pts[i];
-      const anchor = anchorOf(px);
-      const tx = anchor === 'start' ? px - 6 : anchor === 'end' ? px + 6 : px;
-      const bx0 = anchor === 'start' ? tx : anchor === 'end' ? tx - w : tx - w / 2;
-      const spot = [py - 12, py - 26, py + 19].find((ty) => {
-        if (ty - 10 < 2 || ty > yBase + 8) return false;
-        const b = { x0: bx0 - 3, x1: bx0 + w + 3, y0: ty - 11, y1: ty + 3 };
-        return boxes.every((o) => b.x1 <= o.x0 || b.x0 >= o.x1 || b.y1 <= o.y0 || b.y0 >= o.y1);
-      });
-      if (spot == null) continue;
-      boxes.push({ x0: bx0 - 3, x1: bx0 + w + 3, y0: spot - 11, y1: spot + 3 });
-      labels.push(`<text x="${tx.toFixed(1)}" y="${spot.toFixed(1)}" text-anchor="${anchor}" class="g-halo"${i === sel ? ' style="fill:var(--t1);font-weight:600"' : ' style="fill:var(--t2)"'}>${esc(txt)}</text>`);
+      const from = [px, py - 5];
+      let done = false;
+      for (let ly = py - 18; ly >= 14 && !done; ly -= 10) {
+        for (const dx of [0, 0.5 * w, -0.5 * w, w, -w]) {
+          const cx = Math.min(W - 4 - w / 2, Math.max(4 + w / 2, px + dx));
+          const b = { x0: cx - w / 2 - 2, x1: cx + w / 2 + 2, y0: ly - 11, y1: ly + 3 };
+          const to = [Math.min(b.x1 - 6, Math.max(b.x0 + 6, px)), ly + 4];
+          const free = boxes.every((o) => b.x1 <= o.x0 || b.x0 >= o.x1 || b.y1 <= o.y0 || b.y0 >= o.y1)
+            && curve.every(([a, c]) => !segHitsBox(a, c, b))
+            && leaders.every((l) => !segHitsBox(l[0], l[1], b))
+            && boxes.every((o) => !segHitsBox(from, to, o))
+            && leaders.every((l) => !segsCross(l[0], l[1], from, to));
+          if (!free) continue;
+          boxes.push(b);
+          leaders.push([from, to]);
+          const cur = i === sel;
+          out.push(`<line x1="${from[0].toFixed(1)}" y1="${from[1].toFixed(1)}" x2="${to[0].toFixed(1)}" y2="${to[1].toFixed(1)}" stroke-width="1" style="stroke:${cur ? 'var(--t2)' : 'var(--t3)'};opacity:${cur ? 0.8 : 0.5}"/>`
+            + `<text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" style="fill:${cur ? 'var(--t1)' : 'var(--t2)'};font-weight:${cur ? 600 : 500}">${esc(txt)}</text>`);
+          done = true;
+          break;
+        }
+      }
     }
     const every = Math.ceil(rows.length / 7);
     const months = rows.map((r, i) => (i === sel || (i - sel) % every === 0
-      ? `<text x="${pts[i][0].toFixed(1)}" y="${H - 8}" text-anchor="middle"${i === sel ? ' class="g-sel"' : ''}>${esc(r.label)}</text>` : '')).join('');
+      ? `<text x="${pts[i][0].toFixed(1)}" y="${H - 6}" text-anchor="middle"${i === sel ? ' class="g-sel"' : ''}>${esc(r.label)}</text>` : '')).join('');
     return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(`Cuotas por mes: ${rows.map((r) => `${r.label} ${hideAmounts ? '' : fmtPlain(r.total)}`).join(', ')}`)}">
       ${band}
       ${gridLines(ticks, y, 8, 312)}
+      ${out.join('')}
       ${pts.length > 1 ? `<path d="${G.lineaSuave(pts)}" fill="none" stroke-width="2" stroke-linecap="round" style="stroke:${color}"/>` : ''}
       ${pts.map((p, i) => (i === sel
         ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.6" stroke-width="2" style="fill:${color};stroke:var(--s1)"/>`
         : `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" stroke-width="1.6" style="fill:var(--s1);stroke:${color}"/>`)).join('')}
-      ${labels.join('')}${months}
+      ${months}
     </svg>`;
   }
 
