@@ -4918,7 +4918,7 @@
       const top = Math.min(y0, y1), h = Math.max(1.5, Math.abs(y1 - y0));
       const fill = r.value < 0 ? 'var(--neg)' : 'var(--brand)';
       return `<rect x="${(cx(i) - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="4" style="fill:${fill};opacity:${i === last ? 1 : 0.5}"/>`
-        + (showLab(i) ? `<text x="${cx(i).toFixed(1)}" y="${(r.value < 0 ? y1 + 13 : y1 - 6).toFixed(1)}" text-anchor="middle" class="g-lab g-halo"${i === last ? ' style="fill:var(--t1);font-weight:700"' : ''}>${esc(chartMoney(r.value))}</text>` : '');
+        + (showLab(i) ? `<text x="${cx(i).toFixed(1)}" y="${(r.value < 0 ? y1 + 12 : y1 - 5).toFixed(1)}" text-anchor="middle" class="g-halo g-lab-sm"${i === last ? ' style="fill:var(--t1);font-weight:600"' : ''}>${esc(chartMoney(r.value))}</text>` : '');
     }).join('');
     const every = Math.ceil(n / 7);
     const months = rows.map((r, i) => ((last - i) % every === 0
@@ -5363,7 +5363,7 @@
   // donde cambia el total (y en el actual), sin pisarse.
   function installmentsChartSvg(rows) {
     const G = Charts.g;
-    const W = 320, H = 150, x0 = 22, x1 = 298, yTop = 28, yBase = 118;
+    const W = 320, H = 150, x0 = 22, x1 = 298, yTop = 34, yBase = 118;
     const color = 'var(--c-auto)';
     const max = Math.max(1, ...rows.map((r) => r.total));
     const { top, step } = niceScale(max * 1.1, 3);
@@ -5388,7 +5388,7 @@
     // Rótulos livianos (el del mes actual, apenas más marcado).
     // En las puntas, alineados hacia adentro para que no se corten.
     const anchorOf = (px) => (px < 50 ? 'start' : px > W - 50 ? 'end' : 'middle');
-    const labels = labelIdx.map((i) => `<text x="${(anchorOf(pts[i][0]) === 'start' ? pts[i][0] - 6 : anchorOf(pts[i][0]) === 'end' ? pts[i][0] + 6 : pts[i][0]).toFixed(1)}" y="${(pts[i][1] - 9).toFixed(1)}" text-anchor="${anchorOf(pts[i][0])}" class="g-halo"${i === sel ? ' style="fill:var(--t1);font-weight:600"' : ' style="fill:var(--t2)"'}>${esc(chartMoney(rows[i].total))}</text>`).join('');
+    const labels = labelIdx.map((i) => `<text x="${(anchorOf(pts[i][0]) === 'start' ? pts[i][0] - 6 : anchorOf(pts[i][0]) === 'end' ? pts[i][0] + 6 : pts[i][0]).toFixed(1)}" y="${(pts[i][1] - 15).toFixed(1)}" text-anchor="${anchorOf(pts[i][0])}" class="g-halo"${i === sel ? ' style="fill:var(--t1);font-weight:600"' : ' style="fill:var(--t2)"'}>${esc(chartMoney(rows[i].total))}</text>`).join('');
     const every = Math.ceil(rows.length / 7);
     const months = rows.map((r, i) => (i === sel || (i - sel) % every === 0
       ? `<text x="${pts[i][0].toFixed(1)}" y="${H - 8}" text-anchor="middle"${i === sel ? ' class="g-sel"' : ''}>${esc(r.label)}</text>` : '')).join('');
@@ -5555,6 +5555,17 @@
     const withIncome = rows.filter((r) => r.pctInc != null);
     const first = withIncome.findIndex((r) => r.cuotas > 0);
     const shown = first < 0 ? withIncome.slice(-1) : withIncome.slice(first);
+    // Los meses que vienen (hasta la última cuota cargada) van solo en la
+    // tabla: todavía no hay gastos ni ingresos para sacar el %.
+    let lastMo = cm;
+    for (const t of S().transactions) {
+      if (t.type === 'gasto' && t.installment && effectiveMonthOf(t) > lastMo) lastMo = effectiveMonthOf(t);
+    }
+    const future = [];
+    for (let mo = addMonthsKey(cm, 1), guard = 0; mo <= lastMo && guard < 60; mo = addMonthsKey(mo, 1), guard++) {
+      future.push({ mo, cuotas: sumDisp(S().transactions.filter((t) => t.type === 'gasto' && t.installment && effectiveMonthOf(t) === mo)), pctExp: null, pctInc: null, future: true });
+    }
+    const tableRows = shown.concat(future).reverse();
     const dlg = openDialog('Peso de las cuotas por mes', `
       <div class="chart-legend">
         <span><span class="key" style="background:var(--crit)"></span>% de tus gastos</span>
@@ -5563,8 +5574,8 @@
       <div id="chart-inst-share"></div>
       <div class="table-scroll inst-share-table"><table class="data">
         <thead><tr><th>Mes</th><th class="num">Cuotas</th><th class="num">% gastos</th><th class="num">% ingr.</th></tr></thead>
-        <tbody>${shown.slice().reverse().map((r) => `<tr>
-          <td>${esc(monthShortLabel(r.mo))}</td>
+        <tbody>${tableRows.map((r) => `<tr${r.future ? ' class="is-future"' : ''}>
+          <td>${esc(monthShortLabel(r.mo))}${r.future ? ' <small class="t3">próximo</small>' : ''}</td>
           <td class="num">${fmtDisp(r.cuotas)}</td>
           <td class="num">${r.pctExp == null ? '—' : r.pctExp + '%'}</td>
           <td class="num">${r.pctInc == null ? '—' : r.pctInc + '%'}</td>
