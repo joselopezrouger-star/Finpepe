@@ -5375,20 +5375,30 @@
     const sel = Math.max(0, rows.findIndex((r) => r.isCur));
     const colW = rows.length > 1 ? (x1 - x0) / (rows.length - 1) : 40;
     const band = `<rect x="${(pts[sel][0] - Math.min(16, colW / 2)).toFixed(1)}" y="${yTop - 16}" width="${Math.min(32, colW).toFixed(1)}" height="${yBase - yTop + 32}" rx="8" style="fill:var(--t1);opacity:.05"/>`;
-    // Montos: el actual siempre; el resto, donde cambia el total y si no
-    // queda pegado a otro rótulo.
-    const show = new Set([sel]);
-    rows.forEach((r, i) => { if (i === 0 || r.total !== rows[i - 1].total || i === rows.length - 1) show.add(i); });
-    const placed = [];
-    const labelIdx = [...show].sort((a, b) => (a === sel ? -1 : b === sel ? 1 : a - b)).filter((i) => {
-      if (placed.some((j) => Math.abs(pts[j][0] - pts[i][0]) < 52)) return false;
-      placed.push(i);
-      return true;
-    });
-    // Rótulos livianos (el del mes actual, apenas más marcado).
-    // En las puntas, alineados hacia adentro para que no se corten.
+    // Montos solo en los meses que importan: el actual, el que viene, el
+    // más alto, el último y el primero. Cada rótulo prueba arriba del
+    // punto, más arriba o abajo, y va en el primer lugar donde no pisa a
+    // otro (si no entra en ninguno, ese mes queda sin rótulo).
+    const order = [sel, sel + 1, rows.reduce((m, r, i) => (r.total > rows[m].total ? i : m), 0), rows.length - 1, 0];
     const anchorOf = (px) => (px < 50 ? 'start' : px > W - 50 ? 'end' : 'middle');
-    const labels = labelIdx.map((i) => `<text x="${(anchorOf(pts[i][0]) === 'start' ? pts[i][0] - 6 : anchorOf(pts[i][0]) === 'end' ? pts[i][0] + 6 : pts[i][0]).toFixed(1)}" y="${(pts[i][1] - 15).toFixed(1)}" text-anchor="${anchorOf(pts[i][0])}" class="g-halo"${i === sel ? ' style="fill:var(--t1);font-weight:600"' : ' style="fill:var(--t2)"'}>${esc(chartMoney(rows[i].total))}</text>`).join('');
+    const boxes = [];
+    const labels = [];
+    for (const i of [...new Set(order)].filter((k) => k >= 0 && k < rows.length)) {
+      const txt = chartMoney(rows[i].total);
+      const w = txt.length * 6.2;
+      const [px, py] = pts[i];
+      const anchor = anchorOf(px);
+      const tx = anchor === 'start' ? px - 6 : anchor === 'end' ? px + 6 : px;
+      const bx0 = anchor === 'start' ? tx : anchor === 'end' ? tx - w : tx - w / 2;
+      const spot = [py - 12, py - 26, py + 19].find((ty) => {
+        if (ty - 10 < 2 || ty > yBase + 8) return false;
+        const b = { x0: bx0 - 3, x1: bx0 + w + 3, y0: ty - 11, y1: ty + 3 };
+        return boxes.every((o) => b.x1 <= o.x0 || b.x0 >= o.x1 || b.y1 <= o.y0 || b.y0 >= o.y1);
+      });
+      if (spot == null) continue;
+      boxes.push({ x0: bx0 - 3, x1: bx0 + w + 3, y0: spot - 11, y1: spot + 3 });
+      labels.push(`<text x="${tx.toFixed(1)}" y="${spot.toFixed(1)}" text-anchor="${anchor}" class="g-halo"${i === sel ? ' style="fill:var(--t1);font-weight:600"' : ' style="fill:var(--t2)"'}>${esc(txt)}</text>`);
+    }
     const every = Math.ceil(rows.length / 7);
     const months = rows.map((r, i) => (i === sel || (i - sel) % every === 0
       ? `<text x="${pts[i][0].toFixed(1)}" y="${H - 8}" text-anchor="middle"${i === sel ? ' class="g-sel"' : ''}>${esc(r.label)}</text>` : '')).join('');
@@ -5399,7 +5409,7 @@
       ${pts.map((p, i) => (i === sel
         ? `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.6" stroke-width="2" style="fill:${color};stroke:var(--s1)"/>`
         : `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" stroke-width="1.6" style="fill:var(--s1);stroke:${color}"/>`)).join('')}
-      ${labels}${months}
+      ${labels.join('')}${months}
     </svg>`;
   }
 
@@ -5535,6 +5545,50 @@
   // que el bloque del mes actual y "Gastos" en Inicio). Arranca en el primer mes con alguna
   // cuota dentro del último año, para no llenar el gráfico de ceros, y
   // salta los meses sin ingresos.
+  // Peso de las cuotas por mes: dos líneas (% de los gastos y % de los
+  // ingresos), con el % de cada punto: la de arriba con el rótulo arriba y
+  // la de abajo, abajo, para que no se pisen entre ellas ni con los meses.
+  function installmentShareSvg(rows) {
+    const G = Charts.g;
+    const W = 320, H = 150, x0 = 24, x1 = 296, yTop = 28, yBase = 108;
+    const max = Math.max(5, ...rows.flatMap((r) => [r.pctExp || 0, r.pctInc || 0]));
+    const { top, step } = niceScale(max, 3);
+    const ticks = [];
+    for (let v = 0; v <= top + step / 2; v += step) ticks.push(v);
+    const x = rows.length > 1 ? G.escala([0, rows.length - 1], [x0, x1]) : () => (x0 + x1) / 2;
+    const y = G.escala([0, top], [yBase, yTop]);
+    const last = rows.length - 1;
+    const series = [
+      { key: 'pctExp', color: 'var(--c-comida)' },
+      { key: 'pctInc', color: 'var(--c-tel)' },
+    ];
+    const lines = series.map((sr) => {
+      const pts = rows.map((r, i) => (r[sr.key] == null ? null : [x(i), y(r[sr.key])])).filter(Boolean);
+      return pts.length > 1 ? `<path d="${G.lineaSuave(pts)}" fill="none" stroke-width="2" stroke-linecap="round" style="stroke:${sr.color}"/>` : '';
+    }).join('');
+    const marks = [];
+    rows.forEach((r, i) => {
+      const e = r.pctExp, n = r.pctInc;
+      series.forEach((sr) => {
+        const v = r[sr.key];
+        if (v == null) return;
+        const other = sr.key === 'pctExp' ? n : e;
+        // La que va arriba (o la de gastos si empatan) lleva el rótulo arriba.
+        const above = other == null || v > other || (v === other && sr.key === 'pctExp');
+        const px = x(i), py = y(v);
+        marks.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${i === last ? 3.6 : 2.6}" stroke-width="${i === last ? 2 : 1.6}" style="fill:${i === last ? sr.color : 'var(--s1)'};stroke:${i === last ? 'var(--s1)' : sr.color}"/>`);
+        marks.push(`<text x="${px.toFixed(1)}" y="${(above ? py - 9 : py + 17).toFixed(1)}" text-anchor="middle" class="g-halo" style="fill:${sr.color};font-weight:${i === last ? 700 : 600}">${v}%</text>`);
+      });
+    });
+    const every = Math.ceil(rows.length / 7);
+    const months = rows.map((r, i) => ((last - i) % every === 0
+      ? `<text x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle"${i === last ? ' class="g-sel"' : ''}>${esc(monthShortLabel(r.mo).toLowerCase())}</text>` : '')).join('');
+    return `<svg class="gchart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(`Peso de las cuotas: ${rows.map((r) => `${monthShortLabel(r.mo)} ${r.pctExp ?? '—'}% de los gastos y ${r.pctInc ?? '—'}% de los ingresos`).join('; ')}`)}">
+      ${gridLines(ticks, y, 8, 312)}
+      ${lines}${marks.join('')}${months}
+    </svg>`;
+  }
+
   function installmentShareHistoryDialog() {
     const cm = curMonth();
     const months = [];
@@ -5566,12 +5620,12 @@
       future.push({ mo, cuotas: sumDisp(S().transactions.filter((t) => t.type === 'gasto' && t.installment && effectiveMonthOf(t) === mo)), pctExp: null, pctInc: null, future: true });
     }
     const tableRows = shown.concat(future).reverse();
-    const dlg = openDialog('Peso de las cuotas por mes', `
-      <div class="chart-legend">
-        <span><span class="key" style="background:var(--crit)"></span>% de tus gastos</span>
-        <span><span class="key" style="background:var(--income)"></span>% de tus ingresos</span>
+    openDialog('Peso de las cuotas por mes', `
+      <div class="legend">
+        <span><i class="lg-line" style="border-color:var(--c-comida)"></i>% de tus gastos</span>
+        <span><i class="lg-line" style="border-color:var(--c-tel)"></i>% de tus ingresos</span>
       </div>
-      <div id="chart-inst-share"></div>
+      ${installmentShareSvg(shown)}
       <div class="table-scroll inst-share-table"><table class="data">
         <thead><tr><th>Mes</th><th class="num">Cuotas</th><th class="num">% gastos</th><th class="num">% ingr.</th></tr></thead>
         <tbody>${tableRows.map((r) => `<tr${r.future ? ' class="is-future"' : ''}>
@@ -5582,14 +5636,6 @@
         </tr>`).join('')}</tbody>
       </table></div>
     `, { submitLabel: 'Cerrar', viewOnly: true });
-    Charts.lines($('#chart-inst-share', dlg), shown.map((r) => monthShortLabel(r.mo)), [
-      { label: '% de tus gastos', color: 'var(--crit)', values: shown.map((r) => r.pctExp) },
-      { label: '% de tus ingresos', color: 'var(--income)', values: shown.map((r) => r.pctInc) },
-    ], {
-      smooth: true, pointLabels: true, pointLabelSize: 18, markerRadius: 4, topPad: 30,
-      fmtAxis: (v) => Math.round(v) + '%',
-      ariaLabel: 'Porcentaje de gastos e ingresos que se fue en cuotas, por mes',
-    });
   }
 
   // Cuántas veces cae un fijo en un mes: uno mensual, una vez; uno
