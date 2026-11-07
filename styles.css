@@ -2547,3 +2547,8 @@ body[data-grp="mas"] .topbar-inner, body[data-grp="cuentas"] .topbar-inner { min
 .k-card .agenda-sub { font-size: 12.5px; color: var(--t2); }
 .k-card .agenda-amount { font-size: 15px; font-weight: 600; color: var(--t1); }
 .k-card .agenda-amount.pos { color: var(--brand-text); }
+/* Rótulos de datos más chicos (en unidades del gráfico: en pantalla
+   quedan en ~11px porque el SVG se estira un poco). */
+.gchart .g-lab-sm { font-size: 10px; font-weight: 500; fill: var(--t2); }
+.inst-share-table tr.is-future td { color: var(--t2); }
+.inst-share-table tr.is-future small { font-size: 11px; }
