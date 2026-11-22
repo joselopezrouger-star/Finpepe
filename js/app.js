@@ -512,7 +512,7 @@
          viejas, si lo tiene. */
   function cardResumes(card) {
     const overrides = card.overrides || {};
-    return Object.keys(overrides).map((key) => {
+    const list = Object.keys(overrides).map((key) => {
       const ov = overrides[key];
       let close = ov.closeDateStr ? parseDate(ov.closeDateStr) : null;
       if (!close && ov.closingDay != null && /^\d{4}-\d{2}/.test(key)) {
@@ -524,8 +524,24 @@
         due = clampDate(close.getFullYear(), close.getMonth(), ov.dueDay);
         if (due <= close) due = clampDate(close.getFullYear(), close.getMonth() + 1, ov.dueDay);
       }
-      return { key, close, due, dueAssumed: !ov.dueDateStr };
+      return { key, close, due, dueAssumed: !ov.dueDateStr, order: Object.keys(overrides).indexOf(key) };
     }).filter(Boolean).sort((x, y) => x.close - y.close);
+    return dedupeResumes(list);
+  }
+  // Dos resúmenes con cierres a menos de 20 días son el mismo resumen
+  // cargado dos veces (ej. el cierre de noviembre corregido del 29 al 26):
+  // vale el último que se cargó. Si quedaran los dos, la tarjeta tendría
+  // dos cierres en el mes y una compra en cuotas pagaría dos cuotas juntas.
+  const SAME_RESUME_DAYS = 20;
+  function dedupeResumes(list) {
+    const out = list.slice();
+    for (let k = 1; k < out.length;) {
+      if ((out[k].close - out[k - 1].close) / DAY_MS < SAME_RESUME_DAYS) {
+        out.splice(out[k].order > out[k - 1].order ? k - 1 : k, 1);
+        k = Math.max(1, k - 1);
+      } else k++;
+    }
+    return out;
   }
   function cardDateCandidates(card, kind, y, m0) {
     const field = kind === 'closingDay' ? 'close' : 'due';
@@ -719,6 +735,20 @@
      cuota no queda en el resumen equivocado porque el banco cambió las
      fechas de cierre después de cargar la compra. */
   function realignCardInstallments() {
+    let changed = false;
+    // Borra los resúmenes repetidos (ver dedupeResumes) de los datos, así
+    // tampoco aparecen en la lista de Resúmenes.
+    for (const m of S().methods) {
+      if (m.kind !== 'credito' || !m.overrides) continue;
+      const keep = new Set(cardResumes(m).map((r) => r.key));
+      for (const key of Object.keys(m.overrides)) {
+        const ov = m.overrides[key];
+        if ((ov.closeDateStr || ov.closingDay != null) && !keep.has(key) && /^\d{4}-\d{2}/.test(key)) {
+          delete m.overrides[key];
+          changed = true;
+        }
+      }
+    }
     const groups = new Map();
     for (const t of S().transactions) {
       if (!t.groupId || !t.installment || t.type !== 'gasto') continue;
@@ -727,7 +757,6 @@
       if (!groups.has(t.groupId)) groups.set(t.groupId, []);
       groups.get(t.groupId).push(t);
     }
-    let changed = false;
     for (const txs of groups.values()) {
       const first = txs.find((t) => t.installment.k === 1);
       if (!first) continue;
@@ -3875,6 +3904,13 @@
         // Si cambió la fecha de cierre, mover la entrada a la clave nueva
         // en vez de dejar una copia vieja huérfana.
         if (row.real && row.key !== newKey) delete card.overrides[row.key];
+        // Un cierre a menos de 20 días de otro ya cargado es el mismo
+        // resumen corregido: el anterior se reemplaza (si no, la tarjeta
+        // quedaba con dos cierres en el mes y dos cuotas juntas).
+        for (const r of cardResumes(card)) {
+          if (r.key !== newKey && Math.abs(r.close - closeDate) / DAY_MS < SAME_RESUME_DAYS) delete card.overrides[r.key];
+        }
+        delete card.overrides[newKey];
         card.overrides[newKey] = {
           closingDay: closeDate.getDate(), closeDateStr: d.closeDate,
           ...(dueDate ? { dueDay: dueDate.getDate(), dueDateStr: d.dueDate } : {}),
