@@ -2391,10 +2391,9 @@
       // tarjeta), igual que Categorías y Presupuestos.
       const gastoCal = inMonthCal.filter((t) => t.type === 'gasto');
       const gastoPrevCal = inPrevCal.filter((t) => t.type === 'gasto');
-      const gastoPrevSameDay = gastoPrevCal.filter((t) => upToToday(t.date));
-      // Para comparar contra el mismo día del mes anterior: solo lo que ya
-      // pasó este mes (sin cuotas ni fijos con fecha más adelante).
-      const gastoCalToDate = gastoCal.filter((t) => upToToday(t.date));
+      // Las comparaciones van como en Categorías: todo lo cargado del mes
+      // (también cuotas y fijos que vencen más adelante) contra el mes
+      // anterior completo.
 
       if (balanceA < 0) {
         out.push({ tone: 'neg', severity: 6, icon: 'down', go: 'movimientos',
@@ -2441,8 +2440,8 @@
         }
         return m;
       };
-      const nowByCat = byCatA(gastoCalToDate);
-      const prevByCat = byCatA(gastoPrevSameDay);
+      const nowByCat = byCatA(gastoCal);
+      const prevByCat = byCatA(gastoPrevCal);
       let worstCat = null;
       for (const [id, val] of nowByCat.entries()) {
         const prevVal = prevByCat.get(id) || { a: 0, d: 0 };
@@ -2458,7 +2457,7 @@
       if (worstCat) {
         out.push({ tone: 'neg', severity: 3, icon: 'up', go: 'categorias', catId: worstCat.id,
           title: `${catName(worstCat.id)} subió ${Math.round(worstCat.pct * 100)}%`,
-          sub: `${fmtPlain(Math.max(0, worstCat.diffD))} más que al ${todayDay} de ${prevName}`, money: true });
+          sub: `${fmtPlain(Math.max(0, worstCat.diffD))} más que en ${prevName}`, money: true });
       }
 
       // Tasa de ahorro: siempre informa; avisa si bajó mucho.
@@ -2496,13 +2495,14 @@
         }
       }
 
-      // Si no hay nada que avisar, una línea buena contra el mismo día del
-      // mes anterior.
-      const expPrevSameDayA = sumA(gastoPrevSameDay);
-      if (!out.some((x) => x.tone === 'neg' || x.tone === 'warn') && expPrevSameDayA > 0 && sumA(gastoCalToDate) < expPrevSameDayA * 0.9) {
+      // Si no hay nada que avisar, una línea buena contra el mes anterior
+      // completo — solo con el mes ya cerrado: con el mes en curso todavía
+      // faltan gastos y "gastaste menos" sería engañoso.
+      const expPrevA = sumA(gastoPrevCal);
+      if (!isCurMonth && !out.some((x) => x.tone === 'neg' || x.tone === 'warn') && expPrevA > 0 && sumA(gastoCal) < expPrevA * 0.9) {
         out.push({ tone: 'good', severity: 1.5, icon: 'check', go: 'categorias',
-          title: `Gastaste ${Math.round((1 - sumA(gastoCalToDate) / expPrevSameDayA) * 100)}% menos que en ${prevName}`,
-          sub: `Al día ${todayDay} de cada mes` });
+          title: `Gastaste ${Math.round((1 - sumA(gastoCal) / expPrevA) * 100)}% menos que en ${prevName}`,
+          sub: 'Contra el mes anterior completo' });
       }
       return out.sort((a, b) => b.severity - a.severity).slice(0, 3);
     })();
