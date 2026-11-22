@@ -705,8 +705,10 @@
      después" (si un ciclo dura 7 semanas, como cuando el banco cambia la
      fecha de cierre, dos fechas mensuales caerían en el mismo resumen).
      Se mantiene la fecha mensual natural si ya cae en el resumen correcto;
-     si no, el mismo día del mes dentro de ese resumen (el más cercano a la
-     natural) y, si ningún día así entra, la fecha de cierre del resumen.
+     si no, la fecha de cierre de ese resumen. (Antes buscaba "el mismo día
+     del mes" dentro del resumen: con una compra del 29 y cierres el 26, la
+     cuota del resumen que cierra el 26/12 quedaba el 29/11 — en noviembre,
+     junto a la anterior, aunque se cobra en el resumen siguiente.)
      Sin resúmenes cargados (o con otro medio de pago): fecha mensual. */
   function installmentDate(methodId, purchase, k) {
     const natural = clampDate(purchase.getFullYear(), purchase.getMonth() + (k - 1), purchase.getDate());
@@ -722,12 +724,7 @@
       if (!close) return natural;
     }
     if (natural > prevClose && natural <= close) return natural;
-    let best = null;
-    for (let d = new Date(prevClose.getFullYear(), prevClose.getMonth(), 1); d <= close; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
-      const c = clampDate(d.getFullYear(), d.getMonth(), purchase.getDate());
-      if (c > prevClose && c <= close && (!best || Math.abs(c - natural) < Math.abs(best - natural))) best = c;
-    }
-    return best || close;
+    return close;
   }
   /* Reacomoda las cuotas ya cargadas de compras con tarjeta de crédito
      según los resúmenes actuales (ver installmentDate). Se corre al abrir
